@@ -64,6 +64,7 @@ translateParser = do
   delay <- read <$> many1 digit
   symbol ","
   contract <- contractParser
+  symbol ")"
   return $ Translate delay contract
 
 getTokenSymbol :: GenParser Char st TokenSymbol
@@ -82,7 +83,7 @@ symbol :: String -> GenParser Char st String
 symbol s = do
   spaces
   ret <- string s
-  return $ ret
+  return ret
 
 -- The end of line character is \n
 eol :: GenParser Char st Char
@@ -92,3 +93,5 @@ eol = char '\n'
 
 -- parse transferFunction "Error parse" "transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000)"
 -- parse scaleFunction "Error" "scale(10, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000))"
+-- parse contractParser "error" "translate(100, both(scale(101, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000)), scale(42, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000))))"
+-- parse contractParser "error" "translate(   100,          both( scale(  101, transfer( EUR,  0xffffffffffffffffffffffffffffffffffffffff ,  0x0000000000000000000000000000000000000000 ) ) , scale(42, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000  )  ) ) ) "
