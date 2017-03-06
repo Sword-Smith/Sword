@@ -20,12 +20,13 @@ type Address = String
 
 getTokenSymbol :: GenParser Char st TokenSymbol
 getTokenSymbol = do
-    ts <- satisfy upper
+    ts <- many1 upper
     return ts
 
 getAddress :: GenParser Char st Address
 getAddress = do
-    addr <- many1 $ satisfy (\c -> hexDigit )
+    prefix <- string "0x"
+    addr   <- many1 hexDigit
     return addr
 
 
