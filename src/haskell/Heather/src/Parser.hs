@@ -3,7 +3,6 @@
 -- file: Parser.hs
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Combinator as ParSecCom
-import Data.List as DL
 
 import Text.Parsec.String (Parser)
 -- import Data.Char as Char
@@ -27,7 +26,7 @@ getAddress :: GenParser Char st Address
 getAddress = do
     prefix <- string "0x"
     addr   <- ParSecCom.count 40 hexDigit
-    return addr
+    return $ prefix ++ addr
 
 transferFunction :: GenParser Char st Transfer
 transferFunction = do 
