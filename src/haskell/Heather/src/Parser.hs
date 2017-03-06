@@ -2,8 +2,8 @@
 
 -- file: Parser.hs
 import Text.ParserCombinators.Parsec
-import Control.Monad
-import Text.ParserCombinators.Parsec.Combinator
+import Text.ParserCombinators.Parsec.Combinator as ParSecCom
+import Data.List as DL
 
 import Text.Parsec.String (Parser)
 -- import Data.Char as Char
@@ -26,9 +26,8 @@ getTokenSymbol = do
 getAddress :: GenParser Char st Address
 getAddress = do
     prefix <- string "0x"
-    addr   <- many1 hexDigit
+    addr   <- ParSecCom.count 40 hexDigit
     return addr
-
 
 transferFunction :: GenParser Char st Transfer
 transferFunction = do 
