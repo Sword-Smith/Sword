@@ -3,12 +3,19 @@ module BahrParser where
 
 -- file: Parser.hs
 import BahrLanguageDefinition
+import IntermidateBahrLanguageDefinition
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Combinator as ParSecCom
 
 import Text.Parsec.String (Parser)
 import Data.Text as Text
 import Test.QuickCheck
+
+parse' :: String -> Contract
+parse' s =
+  case parse contractParser "error" s of
+    Left err -> undefined
+    Right ast -> ast
 
 -- read converts string to Int (if cast as such)
 -- <$> is an infix map operator
