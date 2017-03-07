@@ -1,7 +1,10 @@
 module EvmCompiler where
 
+import EvmLanguageDefinition
+import IntermediateBahrLanguageDefinition
+
 evmCompile :: IntermediateContract -> [EvmOpcode]
-evmCompile =
+evmCompile c =
   let
     contractHeader = getContractHeader
     executeHeader  = getExecuteHeader
@@ -11,5 +14,13 @@ evmCompile =
     contractHeader ++ executeHeader ++ executeBody ++ executeFooter
 
 getContractHeader :: [EvmOpcode]
-getContractHeader = [
-                    ]
+getContractHeader = [ PUSH1 0,
+                      CALLVALUE,
+                      ISZERO,
+                      PUSH1 8,
+                      JUMPI,
+                      THROW]
+
+getExecuteHeader = []
+getExecuteBody   = []
+getExecuteFooter = []

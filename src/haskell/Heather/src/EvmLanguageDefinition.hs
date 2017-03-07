@@ -1,5 +1,9 @@
 module EvmLanguageDefinition where
 
+import Data.Word
+
+type Word256 = (Word64, Word64, Word64, Word64)
+
 data EvmOpcode = STOP
                | ADD
                | MUL
@@ -21,9 +25,9 @@ data EvmOpcode = STOP
                | JUMPI
                | GAS
                | JUMPDEST
-               | PUSH1
-               | PUSH2
-               | PUSH32
+               | PUSH1 Word8
+               | PUSH2 Word16
+               | PUSH32 Word256
                | DUP1
                | DUP2
                | SWAP1
@@ -31,3 +35,4 @@ data EvmOpcode = STOP
                | CALL
                | RETURN
                | SUICIDE
+               | THROW
