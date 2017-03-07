@@ -3,7 +3,7 @@ module BahrParser where
 
 -- file: Parser.hs
 import BahrLanguageDefinition
-import IntermidateBahrLanguageDefinition
+import IntermediateCompiler
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Combinator as ParSecCom
 
