@@ -35,4 +35,4 @@ data EvmOpcode = STOP
                | CALL
                | RETURN
                | SUICIDE
-               | THROW
+               | THROW deriving Show
