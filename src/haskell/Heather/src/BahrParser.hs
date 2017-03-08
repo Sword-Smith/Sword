@@ -27,24 +27,35 @@ parse' s =
 -- ( try seems to fix the whitespace problem also )
 contractParser :: GenParser Char st Contract
 contractParser = do
-   contract <- try transferParser <|> try scaleParser <|> try bothParser <|> translateParser
-   return contract
+  spaces
+  contract <- contractParserH
+  return contract
 
-scaleParser :: GenParser Char st Contract
-scaleParser = do
-    symbol "scale"
-    char '('
-    spaces
-    factor <- read <$> many1 digit
-    symbol ","
-    contract <- contractParser
-    symbol ")"
-    return $ Scale factor contract
+contractParserH :: GenParser Char st Contract
+contractParserH = do
+    contract <- transferTranslateParser <|> scaleParser <|> bothParser
+    return contract
+
+transferTranslateParser :: GenParser Char st Contract
+transferTranslateParser = do
+  string "trans"
+  contract <- transferParser <|> translateParser
+  return contract
+
+translateParser :: GenParser Char st Contract
+translateParser = do
+  string "late"
+  symbol "("
+  delay <- getInt
+  symbol ","
+  contract <- contractParserH
+  symbol ")"
+  return $ Translate delay contract
 
 transferParser :: GenParser Char st Contract
 transferParser = do
-    symbol "transfer"
-    char '('
+    string "fer"
+    symbol "("
     ts <- getTokenSymbol
     symbol ","
     to <- getAddress
@@ -53,46 +64,51 @@ transferParser = do
     symbol ")"
     return $ Transfer ts to from
 
+scaleParser :: GenParser Char st Contract
+scaleParser = do
+    string "scale"
+    symbol "("
+    factor <- getInt
+    symbol ","
+    contract <- contractParserH
+    symbol ")"
+    return $ Scale factor contract
+
 bothParser :: GenParser Char st Contract
 bothParser = do
-  symbol "both"
-  char '('
-  contractA <- contractParser
+  string "both"
+  symbol "("
+  contractA <- contractParserH
   symbol ","
-  contractB <- contractParser
+  contractB <- contractParserH
   symbol ")"
   return $ Both contractA contractB
 
-translateParser :: GenParser Char st Contract
-translateParser = do
-  symbol "translate"
-  char '('
-  spaces
-  delay <- read <$> many1 digit
-  symbol ","
-  contract <- contractParser
-  symbol ")"
-  return $ Translate delay contract
-
 getTokenSymbol :: GenParser Char st TokenSymbol
 getTokenSymbol = do
-  spaces
   ts <- many1 upper
+  spaces
   return ts
 
 getAddress :: GenParser Char st Address
 getAddress = do
     prefix <- symbol "0x"
     addr   <- ParSecCom.count 40 hexDigit
+    spaces
     return $ prefix ++ addr
+
+getInt :: GenParser Char st Integer
+getInt = do
+  int <- read <$> many1 digit
+  spaces
+  return int
 
 symbol :: String -> GenParser Char st String
 symbol s = do
-  spaces
   ret <- string s
+  spaces
   return ret
 
--- The end of line character is \n
 eol :: GenParser Char st Char
 eol = char '\n'
 
@@ -101,4 +117,4 @@ eol = char '\n'
 -- parse transferFunction "Error parse" "transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000)"
 -- parse scaleFunction "Error" "scale(10, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000))"
 -- parse contractParser "error" "translate(100, both(scale(101, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000)), scale(42, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000))))"
--- parse contractParser "error" "translate(   100,          both( scale(  101, transfer( EUR,  0xffffffffffffffffffffffffffffffffffffffff ,  0x0000000000000000000000000000000000000000 ) ) , scale(42, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000  )  ) ) ) "
+-- parse' "translate(   100,          both( scale(  101, transfer( EUR,  0xffffffffffffffffffffffffffffffffffffffff ,  0x0000000000000000000000000000000000000000 ) ) , scale(42, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000  )  ) ) ) "
