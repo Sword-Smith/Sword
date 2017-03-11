@@ -22,7 +22,7 @@ asmToMachineCode :: [EvmOpcode] -> String
 asmToMachineCode opcodes = foldl (++) "" (map ppEvm opcodes)
 
 ppEvm :: EvmOpcode -> String
-ppEvm instruction = case instruction of 
+ppEvm instruction = case instruction of
     STOP      -> "00"
     CALLVALUE -> "34"
     ISZERO    -> "15"
@@ -51,7 +51,7 @@ replaceLabel label int insts =
       (JUMPDESTFROM l) -> if l==label then JUMPDEST else JUMPDESTFROM l
       otherInst -> otherInst
   in
-    map (replaceLabelH label int) insts 
+    map (replaceLabelH label int) insts
 
 linker :: [EvmOpcode] -> [EvmOpcode]
 linker insts =

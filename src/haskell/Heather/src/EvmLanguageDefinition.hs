@@ -25,8 +25,8 @@ data EvmOpcode = STOP
                | SSTORE
                | JUMPTO Label -- pseudo instruction: PUSH Addr(label); JUMP;
                | JUMPITO Label -- pseudo instruction: PUSH Addr(label); JUMPI;
-               | JUMPTOA Integer -- 
-               | JUMPITOA Integer -- 
+               | JUMPTOA Integer --
+               | JUMPITOA Integer --
                | JUMP -- Actual instruction
                | JUMPI
                | GAS
