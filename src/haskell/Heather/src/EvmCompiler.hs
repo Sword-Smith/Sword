@@ -5,8 +5,7 @@ import IntermediateBahrLanguageDefinition
 import BahrParser
 import IntermediateCompiler
 
-import Numeric (showHex)
-import Text.Bytedump
+import Text.Printf (printf)
 
 evmCompile :: IntermediateContract -> [EvmOpcode]
 evmCompile c =
@@ -26,8 +25,8 @@ ppEvm instruction = case instruction of
     STOP      -> "00"
     CALLVALUE -> "34"
     ISZERO    -> "15"
-    PUSH1 w8  -> "60" ++ (hexString w8)
-    PUSH4 w32 -> "63" ++ (showHex w32 "")
+    PUSH1 w8  -> "60" ++ printf "%02x" w8
+    PUSH4 w32 -> "63" ++ printf "%08x" w32
     THROW     -> "fe"
     JUMPDEST  -> "5b"
     JUMPI     -> "57"
@@ -46,9 +45,9 @@ replaceLabel :: Label -> Integer -> [EvmOpcode] -> [EvmOpcode]
 replaceLabel label int insts =
   let
     replaceLabelH label i inst = case inst of
-      (JUMPTO  l) -> if l==label then JUMPTOA  i else JUMPTO  l
-      (JUMPITO l) -> if l==label then JUMPITOA i else JUMPITO l
-      (JUMPDESTFROM l) -> if l==label then JUMPDEST else JUMPDESTFROM l
+      (JUMPTO  l) -> if l == label then JUMPTOA  i else JUMPTO  l
+      (JUMPITO l) -> if l == label then JUMPITOA i else JUMPITO l
+      (JUMPDESTFROM l) -> if l == label then JUMPDEST else JUMPDESTFROM l
       otherInst -> otherInst
   in
     map (replaceLabelH label int) insts
