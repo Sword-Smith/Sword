@@ -107,7 +107,7 @@ eol :: GenParser Char st Char
 eol = char '\n'
 
 -- TESTS!
-
+-- DEVFIX: We should also test that the parser fails if wrong format address is given
 unittest0 = TestCase $ assertEqual "Basic transfer" (parse' "transfer(EUR,0x1234567890123456789012345678901234567890,0x1234567890123456789012345678901234567890)") (Transfer {tokenSymbol_ = "EUR", to_ = "0x1234567890123456789012345678901234567890", from_ = "0x1234567890123456789012345678901234567890"})
 
 unittest1 = TestCase $ assertEqual "scale and transfer" (parse' "scale(123,transfer(EUR,0x1234567890123456789012345678901234567890,0x1234567890123456789012345678901234567890))") Scale {scaleFactor_ = 123, contract_ = Transfer {tokenSymbol_ = "EUR", to_ = "0x1234567890123456789012345678901234567890", from_ = "0x1234567890123456789012345678901234567890"}}
