@@ -2,7 +2,7 @@ module EvmLanguageDefinition where
 
 import Data.Word
 
-type Word256 = (Word64, Word64, Word64, Word64)
+type Word256 = (Word32, Word32, Word32, Word32, Word32, Word32, Word32, Word32)
 
 type Label = String
 
@@ -68,6 +68,7 @@ data EvmOpcode = STOP
                | JUMPDESTFROM Label
                | PUSH1 Word8
                | PUSH4 Word32
+               | PUSH32 Word256
                | DUP1
                | DUP2
                | SWAP1

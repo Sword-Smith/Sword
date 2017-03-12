@@ -85,6 +85,7 @@ ppEvm instruction = case instruction of
     JUMPDEST     -> "5b"
     PUSH1 w8     -> "60" ++ printf "%02x" w8
     PUSH4 w32    -> "63" ++ printf "%08x" w32
+    PUSH32 (w32_0, w32_1, w32_2, w32_3, w32_4, w32_5, w32_6, w32_7 ) -> "7f" ++ printf "%08x" w32_0 ++ printf "%08x" w32_1 ++ printf "%08x" w32_2 ++ printf "%08x" w32_3 ++ printf "%08x" w32_4 ++ printf "%08x" w32_5 ++ printf "%08x" w32_6 ++ printf "%08x" w32_7
     DUP1         -> "80"
     SWAP1        -> "90"
     LOG0         -> "a0"
@@ -100,6 +101,7 @@ ppEvm instruction = case instruction of
 getOpcodeSize :: EvmOpcode -> Integer
 getOpcodeSize (PUSH1  _)   = 2
 getOpcodeSize (PUSH4 _)    = 5
+getOpcodeSize (PUSH32 _)    = 33
 getOpcodeSize (JUMPITO _)  = 1 + 5 -- PUSH4 addr.; JUMPI
 getOpcodeSize (JUMPTO _)   = 1 + 5 -- PUSH4 addr.; JUMP
 getOpcodeSize (JUMPITOA _) = 1 + 5 -- PUSH4 addr.; JUMP
@@ -147,14 +149,25 @@ keccak256 fname =
     show $ keccak256H $ pack fname
 
 getContractHeader :: [EvmOpcode]
-getContractHeader =  [CALLVALUE,
-                      ISZERO,
-                      JUMPITO "no_val0",
-                      THROW,
-                      JUMPDESTFROM "no_val0",
-                      STOP]
+getContractHeader =
+  let
+    checkNoValue =  [CALLVALUE,
+                     ISZERO,
+                     JUMPITO "no_val0",
+                     THROW,
+                     JUMPDESTFROM "no_val0"]
+    switchStatement = [PUSH1 0,
+                       CALLDATALOAD,
+                       PUSH32 (0xffffffff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
+                       AND,
+                       PUSH32 $ (getFunctionSignature "execute()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
+                       EVM_EQ,
+                       JUMPITO "execute_method",
+                       THROW]
+  in
+    checkNoValue ++ switchStatement
 
-getExecuteHeader = []
+getExecuteHeader = [JUMPDESTFROM "execute_method"]
 getExecuteBody   = []
 getExecuteFooter = []
 
