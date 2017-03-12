@@ -6,6 +6,7 @@ import BahrParser
 import IntermediateCompiler
 
 import Text.Printf (printf)
+import Test.HUnit
 
 evmCompile :: IntermediateContract -> [EvmOpcode]
 evmCompile c =
@@ -81,3 +82,13 @@ getContractHeader =  [CALLVALUE,
 getExecuteHeader = []
 getExecuteBody   = []
 getExecuteFooter = []
+
+-- TESTS
+
+test_EvmOpCodePush1Hex = PUSH1 0x60 :: EvmOpcode
+test_EvmOpCodePush1Dec = PUSH1 60 :: EvmOpcode
+
+test_ppEvmWithHex = TestCase ( assertEqual "ppEvm with hex input" (ppEvm(test_EvmOpCodePush1Hex)) "6060" )
+test_ppEvmWithDec = TestCase ( assertEqual "ppEvm with dec input" (ppEvm(test_EvmOpCodePush1Dec)) "603c" )
+
+tests = TestList [TestLabel "test_ppEvmWithHex" test_ppEvmWithHex, TestLabel "test_ppEvmWithDec" test_ppEvmWithDec]
