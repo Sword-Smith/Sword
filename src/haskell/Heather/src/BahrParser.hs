@@ -19,14 +19,6 @@ parse' s =
     Left _ -> undefined
     Right ast -> ast
 
--- read converts string to Int (if cast as such)
--- <$> is an infix map operator
-
--- DEVFIX: There is a problem with whitespaces in the
--- use of these parser combinators
--- DEVFIX: The use of "try" risks making the parser very slow due
--- to lookback/lookahead operations. Can "try" be avoided?
--- ( try seems to fix the whitespace problem also )
 contractParser :: GenParser Char st Contract
 contractParser = do
   spaces
