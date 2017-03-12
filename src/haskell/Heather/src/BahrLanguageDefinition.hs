@@ -1,19 +1,19 @@
 module BahrLanguageDefinition where
 
-data Contract = Transfer { tokenSymbol :: TokenSymbol,
-                           to          :: Address,
-                           from        :: Address
+data Contract = Transfer { tokenSymbol_ :: TokenSymbol,
+                           to_          :: Address,
+                           from_        :: Address
                          }
-              | Scale { scaleFactor :: Integer,
-                        contract    :: Contract
+              | Scale { scaleFactor_ :: Integer,
+                        contract_    :: Contract
                       }
-              | Both { contractA :: Contract,
-                       contractB :: Contract
+              | Both { contractA_ :: Contract,
+                       contractB_ :: Contract
                      }
               | Translate {
-                  delay :: Integer,
-                  contract :: Contract
-                  } deriving Show
+                  delay_ :: Integer,
+                  contract_ :: Contract
+                  } deriving (Show, Eq)
 
 type TokenSymbol = String
 -- DEVFIX: Better choice for type is decided later.
