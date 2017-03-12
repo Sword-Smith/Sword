@@ -6,6 +6,7 @@ import BahrParser
 import IntermediateCompiler
 
 import Text.Printf (printf)
+
 import Test.HUnit
 
 evmCompile :: IntermediateContract -> [EvmOpcode]

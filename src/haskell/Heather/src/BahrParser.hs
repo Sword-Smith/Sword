@@ -10,7 +10,8 @@ import Text.ParserCombinators.Parsec.Combinator as ParSecCom
 
 import Text.Parsec.String (Parser)
 import Data.Text as Text
-import Test.QuickCheck
+
+import Test.HUnit
 
 parse' :: String -> Contract
 parse' s =
@@ -113,21 +114,15 @@ symbol s = do
 eol :: GenParser Char st Char
 eol = char '\n'
 
---  TESTS!
+-- TESTS!
 
-allTests :: Bool
-allTests = unittest0 && unittest1 && unittest2 && unittest3
+unittest0 = TestCase $ assertEqual "Basic transfer" (parse' "transfer(EUR,0x1234567890123456789012345678901234567890,0x1234567890123456789012345678901234567890)") (Transfer {tokenSymbol_ = "EUR", to_ = "0x1234567890123456789012345678901234567890", from_ = "0x1234567890123456789012345678901234567890"})
 
-unittest0 :: Bool
-unittest0 = parse' "transfer(EUR,0x1234567890123456789012345678901234567890,0x1234567890123456789012345678901234567890)" == Transfer {tokenSymbol_ = "EUR", to_ = "0x1234567890123456789012345678901234567890", from_ = "0x1234567890123456789012345678901234567890"}
-
-unittest1 :: Bool
-unittest1 = parse' "scale(123,transfer(EUR,0x1234567890123456789012345678901234567890,0x1234567890123456789012345678901234567890))" == Scale {scaleFactor_ = 123, contract_ = Transfer {tokenSymbol_ = "EUR", to_ = "0x1234567890123456789012345678901234567890", from_ = "0x1234567890123456789012345678901234567890"}}
+unittest1 = TestCase $ assertEqual "scale and transfer" (parse' "scale(123,transfer(EUR,0x1234567890123456789012345678901234567890,0x1234567890123456789012345678901234567890))") Scale {scaleFactor_ = 123, contract_ = Transfer {tokenSymbol_ = "EUR", to_ = "0x1234567890123456789012345678901234567890", from_ = "0x1234567890123456789012345678901234567890"}}
 
 -- whitespaces
-unittest2 :: Bool
-unittest2 = parse' "   transfer(   EUR   ,   0x1234567890123456789012345678901234567890  ,   0x1234567890123456789012345678901234567890   )   " == Transfer {tokenSymbol_ = "EUR", to_ = "0x1234567890123456789012345678901234567890", from_ = "0x1234567890123456789012345678901234567890"}
+unittest2 = TestCase $ assertEqual "transfer with whitespace" (parse' "   transfer(   EUR   ,   0x1234567890123456789012345678901234567890  ,   0x1234567890123456789012345678901234567890   )   ") Transfer {tokenSymbol_ = "EUR", to_ = "0x1234567890123456789012345678901234567890", from_ = "0x1234567890123456789012345678901234567890"}
 
+unittest3 = TestCase $ assertEqual "translate, both, scale, transfer, with ws" (parse' " translate( 100, both( scale( 101, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000)), scale(42, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000))))") Translate {delay_ = 100, contract_ = Both {contractA_ = Scale {scaleFactor_ = 101, contract_ = Transfer {tokenSymbol_ = "EUR", to_ = "0xffffffffffffffffffffffffffffffffffffffff", from_ = "0x0000000000000000000000000000000000000000"}}, contractB_ = Scale {scaleFactor_ = 42, contract_ = Transfer {tokenSymbol_ = "EUR", to_ = "0xffffffffffffffffffffffffffffffffffffffff", from_ = "0x0000000000000000000000000000000000000000"}}}}
 
-unittest3 :: Bool
-unittest3 = parse' " translate( 100, both( scale( 101, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000)), scale(42, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000))))" == Translate {delay_ = 100, contract_ = Both {contractA_ = Scale {scaleFactor_ = 101, contract_ = Transfer {tokenSymbol_ = "EUR", to_ = "0xffffffffffffffffffffffffffffffffffffffff", from_ = "0x0000000000000000000000000000000000000000"}}, contractB_ = Scale {scaleFactor_ = 42, contract_ = Transfer {tokenSymbol_ = "EUR", to_ = "0xffffffffffffffffffffffffffffffffffffffff", from_ = "0x0000000000000000000000000000000000000000"}}}}
+tests = TestList [TestLabel "Basic transfer" unittest0, TestLabel "scale and transfer" unittest1, TestLabel "transfer with ws" unittest2, TestLabel "translate, both, scale, transfer, with ws" unittest3 ]
