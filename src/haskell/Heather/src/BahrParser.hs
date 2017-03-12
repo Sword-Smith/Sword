@@ -115,7 +115,19 @@ eol = char '\n'
 
 --  TESTS!
 
--- parse transferFunction "Error parse" "transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000)"
--- parse scaleFunction "Error" "scale(10, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000))"
--- parse contractParser "error" "translate(100, both(scale(101, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000)), scale(42, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000))))"
--- parse' "translate(   100,          both( scale(  101, transfer( EUR,  0xffffffffffffffffffffffffffffffffffffffff ,  0x0000000000000000000000000000000000000000 ) ) , scale(42, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000  )  ) ) ) "
+allTests :: Bool
+allTests = unittest0 && unittest1 && unittest2 && unittest3
+
+unittest0 :: Bool
+unittest0 = parse' "transfer(EUR,0x1234567890123456789012345678901234567890,0x1234567890123456789012345678901234567890)" == Transfer {tokenSymbol_ = "EUR", to_ = "0x1234567890123456789012345678901234567890", from_ = "0x1234567890123456789012345678901234567890"}
+
+unittest1 :: Bool
+unittest1 = parse' "scale(123,transfer(EUR,0x1234567890123456789012345678901234567890,0x1234567890123456789012345678901234567890))" == Scale {scaleFactor_ = 123, contract_ = Transfer {tokenSymbol_ = "EUR", to_ = "0x1234567890123456789012345678901234567890", from_ = "0x1234567890123456789012345678901234567890"}}
+
+-- whitespaces
+unittest2 :: Bool
+unittest2 = parse' "   transfer(   EUR   ,   0x1234567890123456789012345678901234567890  ,   0x1234567890123456789012345678901234567890   )   " == Transfer {tokenSymbol_ = "EUR", to_ = "0x1234567890123456789012345678901234567890", from_ = "0x1234567890123456789012345678901234567890"}
+
+
+unittest3 :: Bool
+unittest3 = parse' " translate( 100, both( scale( 101, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000)), scale(42, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000))))" == Translate {delay_ = 100, contract_ = Both {contractA_ = Scale {scaleFactor_ = 101, contract_ = Transfer {tokenSymbol_ = "EUR", to_ = "0xffffffffffffffffffffffffffffffffffffffff", from_ = "0x0000000000000000000000000000000000000000"}}, contractB_ = Scale {scaleFactor_ = 42, contract_ = Transfer {tokenSymbol_ = "EUR", to_ = "0xffffffffffffffffffffffffffffffffffffffff", from_ = "0x0000000000000000000000000000000000000000"}}}}
