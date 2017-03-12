@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
 {-# LANGUAGE OverloadedStrings #-}
 module BahrParser where
 
@@ -14,7 +15,7 @@ import Test.QuickCheck
 parse' :: String -> Contract
 parse' s =
   case parse contractParser "error" s of
-    Left err -> undefined
+    Left _ -> undefined
     Right ast -> ast
 
 -- read converts string to Int (if cast as such)
