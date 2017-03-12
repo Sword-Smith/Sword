@@ -128,7 +128,7 @@ linker insts =
       _                  -> linkerH (inst_count + getOpcodeSize(inst)) insts_replaced insts
     linkerH _ insts_replaced [] = insts_replaced
   in
-    linkerH 1 insts insts
+    linkerH 0 insts insts
 
 eliminatePseudoInstructions :: [EvmOpcode] -> [EvmOpcode]
 eliminatePseudoInstructions (inst:insts) = case inst of
@@ -138,7 +138,7 @@ eliminatePseudoInstructions (inst:insts) = case inst of
 eliminatePseudoInstructions [] = []
 
 getFunctionSignature :: String -> Word32
-getFunctionSignature funDecl = read $ take 8 (keccak256 funDecl)
+getFunctionSignature funDecl = read $ "0x" ++ take 8 (keccak256 funDecl)
 
 keccak256 :: String -> String
 keccak256 fname =
@@ -151,16 +151,17 @@ keccak256 fname =
 getContractHeader :: [EvmOpcode]
 getContractHeader =
   let
-    checkNoValue =  [CALLVALUE,
-                     ISZERO,
-                     JUMPITO "no_val0",
-                     THROW,
-                     JUMPDESTFROM "no_val0"]
+    -- This does not allow for multiple calls.
+    checkNoValue    = [CALLVALUE,
+                       ISZERO,
+                       JUMPITO "no_val0",
+                       THROW,
+                       JUMPDESTFROM "no_val0"]
     switchStatement = [PUSH1 0,
                        CALLDATALOAD,
                        PUSH32 (0xffffffff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
                        AND,
-                       PUSH32 $ (getFunctionSignature "execute()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
+                       PUSH32 $ (getFunctionSignature "execute()" , 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
                        EVM_EQ,
                        JUMPITO "execute_method",
                        THROW]
