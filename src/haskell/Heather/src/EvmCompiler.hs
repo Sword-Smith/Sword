@@ -95,7 +95,7 @@ ppEvm instruction = case instruction of
 
 getOpcodeSize :: EvmOpcode -> Integer
 getOpcodeSize (PUSH1  _)   = 2
-getOpcodeSize (PUSH2  _)   = 3
+--getOpcodeSize (PUSH2  _)   = 3
 getOpcodeSize (PUSH4 _)    = 5
 getOpcodeSize (JUMPITO _)  = 1 + 5 -- PUSH4 addr.; JUMPI
 getOpcodeSize (JUMPTO _)   = 1 + 5 -- PUSH4 addr.; JUMP
