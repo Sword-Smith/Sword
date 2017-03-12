@@ -5,7 +5,11 @@ import IntermediateBahrLanguageDefinition
 import BahrParser
 import IntermediateCompiler
 
+import Data.ByteString (ByteString)
+import Data.ByteString.Char8(pack)
+import Data.Word
 import Text.Printf (printf)
+import Crypto.Hash
 
 import Test.HUnit
 
@@ -95,7 +99,6 @@ ppEvm instruction = case instruction of
 
 getOpcodeSize :: EvmOpcode -> Integer
 getOpcodeSize (PUSH1  _)   = 2
---getOpcodeSize (PUSH2  _)   = 3
 getOpcodeSize (PUSH4 _)    = 5
 getOpcodeSize (JUMPITO _)  = 1 + 5 -- PUSH4 addr.; JUMPI
 getOpcodeSize (JUMPTO _)   = 1 + 5 -- PUSH4 addr.; JUMP
@@ -131,6 +134,17 @@ eliminatePseudoInstructions (inst:insts) = case inst of
   (JUMPITOA i) -> (PUSH4 (fromInteger i)):JUMPI:eliminatePseudoInstructions(insts)
   inst         -> inst:eliminatePseudoInstructions(insts)
 eliminatePseudoInstructions [] = []
+
+getFunctionSignature :: String -> Word32
+getFunctionSignature funDecl = read $ take 8 (keccak256 funDecl)
+
+keccak256 :: String -> String
+keccak256 fname =
+  let
+    keccak256H :: ByteString -> Digest Keccak_256
+    keccak256H = hash
+  in
+    show $ keccak256H $ pack fname
 
 getContractHeader :: [EvmOpcode]
 getContractHeader =  [CALLVALUE,
