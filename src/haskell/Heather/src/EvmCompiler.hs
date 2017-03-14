@@ -97,6 +97,8 @@ ppEvm instruction = case instruction of
     SUICIDE      -> "ff"
     THROW        -> "fe"
 
+getSizeOfOpcodeList :: [EvmOpcode] -> Integer
+getSizeOfOpcodeList xs = foldl (+) 0 (map getOpcodeSize xs)
 
 getOpcodeSize :: EvmOpcode -> Integer
 getOpcodeSize (PUSH1  _)   = 2
