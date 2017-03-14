@@ -1,6 +1,6 @@
 module BahrLanguageDefinition where
 
-data Contract = Transfer { tokenSymbol_ :: TokenSymbol,
+data Contract = Transfer { tokenAddress_ :: Address,
                            to_          :: Address,
                            from_        :: Address
                          }
