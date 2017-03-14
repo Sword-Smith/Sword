@@ -17,47 +17,66 @@ import Test.HUnit
 evmCompile :: IntermediateContract -> [EvmOpcode]
 evmCompile c =
   let
+    constructor    = getConstructor c
     contractHeader = getContractHeader
     executeHeader  = getExecuteHeader
     executeBody    = getExecuteBody
     executeFooter  = getExecuteFooter
   in
-    contractHeader ++ executeHeader ++ executeBody ++ executeFooter
+    constructor ++ contractHeader ++ executeHeader ++ executeBody ++ executeFooter
 
 address2w256 :: Address -> Word256
 address2w256 ('0':'x':addr) =
-  undefined
+  let
+    address2w256H (h0:h1:h2:h3:h4:h5:h6:h7:h8:h9:h10:h11:h12:h13:h14:h15:h16:h17:h18:h19:h20:h21:h22:h23:h24:h25:h26:h27:h28:h29:h30:h31:h32:h33:h34:h35:h36:h37:h38:h39:[]) = (0x0, 0x0, 0x0, read [h0,h1,h2,h3,h4,h5,h6,h7], read [h8,h9,h10,h11,h12,h13,h14,h15], read [h16,h17,h18,h19,h20,h21,h22,h23], read [h24,h25,h26,h27,h28,h29,h30,h31], read [h32,h33,h34,h35,h36,h37,h38,h39])
+    address2w256H _ = undefined
+  in
+    address2w256H addr
+address2w256 _ = undefined
 
+integer2w256 :: Integer -> Word256
+integer2w256 i =
+  let
+    w32r = 2^32
+  in
+    (fromInteger (i `quot` w32r^7 ), fromInteger (i `quot` w32r^6 ), fromInteger (i `quot` w32r^5 ), fromInteger (i `quot` w32r^4 ), fromInteger (i `quot` w32r^3 ), fromInteger (i `quot` w32r^2 ), fromInteger (i `quot` w32r^1 ), fromInteger (i `quot` w32r^0 ) )
 
+-- Once the values have been placed in storage, the CODECOPY opcode should
+-- probably be called.
+getConstructor :: IntermediateContract -> [EvmOpcode]
+getConstructor c = getCheckNoValue ++ placeValsInStorage c
+
+-- ATM all values are know at compile time and placed in storage on contract
+-- initialization. This should be changed.
 placeValsInStorage :: IntermediateContract -> [EvmOpcode]
-placeValsInStorage IntermediateContract tcs =
+placeValsInStorage (IntermediateContract tcs) =
   let
     placeValsInStorageH :: [TransferCall] -> [EvmOpcode]
     placeValsInStorageH []       = []
-    placeValsInStorageH (tc:tcs) =
+    placeValsInStorageH (tc:tcs') =
       let
         placeValsInStorageHH :: Integer -> TransferCall -> [EvmOpcode]
-        placeValsInStorageHH i (TransferCall tcall) =
+        placeValsInStorageHH i tcall =
           let
             offset = i * 32 * 5 -- A word is 32 bytes, 5 args per TransferCall
           in
-            [ PUSH32 fromInteger (_amount tcall),
-              PUSH4 offset, -- format this argument
+            [ PUSH32 $ integer2w256 (_amount tcall),
+              PUSH4 $ fromInteger offset, -- format this argument
               SSTORE,
-              PUSH32 fromInteger (_delay tcall),
-              PUSH4 $ offset + 32,
+              PUSH32 $ integer2w256 (_delay tcall),
+              PUSH4 $ fromInteger offset + 32,
               SSTORE,
-              PUSH32 address2w256 (_tokenAddress tcall),
-              PUSH4 $ offset + 32*2,
+              PUSH32 $ address2w256 (_tokenAddress tcall),
+              PUSH4 $ fromInteger offset + 32*2,
               SSTORE,
-              PUSH32 address2w256 (_to tcall),
-              PUSH4 $ offset + 32*3,
+              PUSH32 $ address2w256 (_to tcall),
+              PUSH4 $ fromInteger offset + 32*3,
               SSTORE,
-              PUSH32 address2w256 (_from tcall),
-              PUSH4 $ offset + 32*4,
+              PUSH32 $ address2w256 (_from tcall),
+              PUSH4 $ fromInteger offset + 32*4,
               SSTORE ]
       in
-        placeValsInStorageHH 0 tc : placeValsInStorageH tcs
+        placeValsInStorageHH 0 tc ++ placeValsInStorageH tcs'
   in
     placeValsInStorageH tcs
 
