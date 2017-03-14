@@ -1,8 +1,9 @@
 module EvmCompiler where
 
+import BahrLanguageDefinition
+import BahrParser
 import EvmLanguageDefinition
 import IntermediateBahrLanguageDefinition
-import BahrParser
 import IntermediateCompiler
 
 import Data.ByteString (ByteString)
@@ -22,6 +23,43 @@ evmCompile c =
     executeFooter  = getExecuteFooter
   in
     contractHeader ++ executeHeader ++ executeBody ++ executeFooter
+
+address2w256 :: Address -> Word256
+address2w256 ('0':'x':addr) =
+  undefined
+
+
+placeValsInStorage :: IntermediateContract -> [EvmOpcode]
+placeValsInStorage IntermediateContract tcs =
+  let
+    placeValsInStorageH :: [TransferCall] -> [EvmOpcode]
+    placeValsInStorageH []       = []
+    placeValsInStorageH (tc:tcs) =
+      let
+        placeValsInStorageHH :: Integer -> TransferCall -> [EvmOpcode]
+        placeValsInStorageHH i (TransferCall tcall) =
+          let
+            offset = i * 32 * 5 -- A word is 32 bytes, 5 args per TransferCall
+          in
+            [ PUSH32 fromInteger (_amount tcall),
+              PUSH4 offset, -- format this argument
+              SSTORE,
+              PUSH32 fromInteger (_delay tcall),
+              PUSH4 $ offset + 32,
+              SSTORE,
+              PUSH32 address2w256 (_tokenAddress tcall),
+              PUSH4 $ offset + 32*2,
+              SSTORE,
+              PUSH32 address2w256 (_to tcall),
+              PUSH4 $ offset + 32*3,
+              SSTORE,
+              PUSH32 address2w256 (_from tcall),
+              PUSH4 $ offset + 32*4,
+              SSTORE ]
+      in
+        placeValsInStorageHH 0 tc : placeValsInStorageH tcs
+  in
+    placeValsInStorageH tcs
 
 asmToMachineCode :: [EvmOpcode] -> String
 asmToMachineCode opcodes = foldl (++) "" (map ppEvm opcodes)
@@ -154,11 +192,6 @@ getContractHeader :: [EvmOpcode]
 getContractHeader =
   let
     -- This does not allow for multiple calls.
-    checkNoValue    = [CALLVALUE,
-                       ISZERO,
-                       JUMPITO "no_val0",
-                       THROW,
-                       JUMPDESTFROM "no_val0"]
     switchStatement = [PUSH1 0,
                        CALLDATALOAD,
                        PUSH32 (0xffffffff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
@@ -168,11 +201,34 @@ getContractHeader =
                        JUMPITO "execute_method",
                        THROW]
   in
-    checkNoValue ++ switchStatement
+    getCheckNoValue ++ switchStatement
+
+-- Used in both contract header and in constructor
+getCheckNoValue :: [EvmOpcode]
+getCheckNoValue = [CALLVALUE,
+                   ISZERO,
+                   JUMPITO "no_val0",
+                   THROW,
+                   JUMPDESTFROM "no_val0"]
+
 
 getExecuteHeader = [JUMPDESTFROM "execute_method"]
 getExecuteBody   = []
 getExecuteFooter = []
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 -- TESTS
 
