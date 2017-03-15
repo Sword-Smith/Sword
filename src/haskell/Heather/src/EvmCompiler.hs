@@ -19,11 +19,13 @@ evmCompile c =
   let
     constructor    = getConstructor c
     contractHeader = getContractHeader
-    executeHeader  = getExecuteHeader
-    executeBody    = getExecuteBody
-    executeFooter  = getExecuteFooter
+    execute        = getExecuteHeader
+    codecopy       = getCodeCopy constructor (contractHeader ++ execute)
   in
-    constructor ++ contractHeader ++ executeHeader ++ executeBody ++ executeFooter
+    constructor ++ codecopy ++ contractHeader ++ execute
+
+getCodeCopy :: [EvmOpcode] -> [EvmOpcode] -> [EvmOpcode]
+getCodeCopy con exe = [PUSH4 $ fromInteger (getSizeOfOpcodeList exe), PUSH4 $ fromInteger (getSizeOfOpcodeList con + 13), PUSH1 0, CODECOPY] -- 13 is the length of itself, right now we are just saving in mem0
 
 address2w256 :: Address -> Word256
 address2w256 ('0':'x':addr) =
