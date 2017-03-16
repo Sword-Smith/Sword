@@ -15,7 +15,7 @@ import Crypto.Hash
 import Test.HUnit
 
 intermediateToOpcodes :: IntermediateContract -> String
-intermediateToOpcodes = asmToMachineCode . eliminatePseudoInstructions . linker . evmCompile
+intermediateToOpcodes = asmToMachineCode . eliminatePseudoInstructions . evmCompile
 
 evmCompile :: IntermediateContract -> [EvmOpcode]
 evmCompile c =
@@ -25,7 +25,8 @@ evmCompile c =
     execute        = getExecuteHeader
     codecopy       = getCodeCopy constructor (contractHeader ++ execute)
   in
-    constructor ++ codecopy ++ contractHeader ++ execute
+    -- The addresses of the constructor run are different from runs when SC is on BC
+    linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute)
 
 getCodeCopy :: [EvmOpcode] -> [EvmOpcode] -> [EvmOpcode]
 getCodeCopy con exe = [PUSH4 $ fromInteger (getSizeOfOpcodeList exe),
