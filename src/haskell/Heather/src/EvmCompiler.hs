@@ -259,6 +259,8 @@ getExecuteHH transferCounter =
     storeMethodsArgsToMem =
       let
         storeFunctionSignature = [PUSH4 $ getFunctionSignature "transferFrom(address,address,uint256)",
+                                  PUSH32 (0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
+                                  MUL,
                                   PUSH1 0x0,
                                   MSTORE]
         storeFromAddressArg    = [PUSH4 $ 0x80 + 0xa0 * (fromInteger transferCounter),
