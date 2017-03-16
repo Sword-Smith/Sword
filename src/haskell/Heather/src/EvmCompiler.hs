@@ -17,12 +17,16 @@ import Test.HUnit
 intermediateToOpcodes :: IntermediateContract -> String
 intermediateToOpcodes = asmToMachineCode . eliminatePseudoInstructions . evmCompile
 
+getNumberOfTransferCalls :: IntermediateContract -> Integer
+getNumberOfTransferCalls (IntermediateContract (ic:ics)) = 1+(getNumberOfTransferCalls (IntermediateContract ics))
+getNumberOfTransferCalls (IntermediateContract []) = 0
+
 evmCompile :: IntermediateContract -> [EvmOpcode]
 evmCompile c =
   let
     constructor    = getConstructor c
     contractHeader = getContractHeader
-    execute        = getExecuteHeader
+    execute        = getExecute (getNumberOfTransferCalls c)
     codecopy       = getCodeCopy constructor (contractHeader ++ execute)
   in
     -- The addresses of the constructor run are different from runs when SC is on BC
@@ -243,10 +247,89 @@ getCheckNoValue target = [CALLVALUE,
                    THROW,
                    JUMPDESTFROM target]
 
+getExecute :: Integer -> [EvmOpcode]
+getExecute numOfTcs = (JUMPDESTFROM "execute_method"):(getExecuteH 0 numOfTcs) ++ [STOP]
 
-getExecuteHeader = [JUMPDESTFROM "execute_method"]
-getExecuteBody   = []
-getExecuteFooter = []
+getExecuteH :: Integer -> Integer -> [EvmOpcode]
+getExecuteH i numOfTcs = if i == numOfTcs then [] else (getExecuteHH i) ++ (getExecuteH (i+1) numOfTcs)
+
+getExecuteHH :: Integer -> [EvmOpcode]
+getExecuteHH transferCounter =
+  let
+    storeMethodsArgsToMem =
+      let
+        storeFunctionSignature = [PUSH4 $ getFunctionSignature "transferFrom(address,address,uint256)",
+                                  PUSH1 0x0,
+                                  MSTORE]
+        storeFromAddressArg    = [PUSH4 $ 0x80 + 0xa0 * (fromInteger transferCounter),
+                                  SLOAD,
+                                  PUSH1 0x4,
+                                  MSTORE]
+        storeToAddressArg      = [PUSH4 $ 0x60 + 0xa0 * (fromInteger transferCounter),
+                                  SLOAD,
+                                  PUSH1 0x24,
+                                  MSTORE]
+        storeAmountArg         = [PUSH4 $ 0xa0 * (fromInteger transferCounter),
+                                  SLOAD,
+                                  PUSH1 0x44,
+                                  MSTORE]
+      in
+        storeFunctionSignature ++
+        storeFromAddressArg ++
+        storeToAddressArg ++
+        storeAmountArg
+
+    pushOutSize      = [PUSH1 0x1]
+    pushOutOffset    = [PUSH1 0x0]
+
+    -- The arguments with which we are calling transferFrom need to be stored in memory
+    pushInSize       = [PUSH1 $ fromInteger $ 4 + 3*32 ] -- four bytes for f_sig, 3*32 for (from, to, value)
+    pushInOffset     = [PUSH1 0x0]
+    pushValue        = [PUSH1 0x0]
+
+    -- 0xa0 is total size of args for one transferCall
+    pushTokenAddress = [PUSH4 (0x40 + 0xa0 * (fromInteger transferCounter)),
+                        SLOAD]
+
+  -- 0x32 is magic value from Solidity compiler
+    pushGasAmount    = [PUSH1 0x32,
+                        GAS,
+                        SUB]
+
+    -- DEVFIX: CHECK RETURN VALUE!!1
+    call             = [CALL]
+  in
+    storeMethodsArgsToMem ++
+    pushOutSize ++
+    pushOutOffset ++
+    pushInSize ++
+    pushInOffset ++
+    pushValue ++
+    pushTokenAddress ++
+    pushGasAmount ++
+    call
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
