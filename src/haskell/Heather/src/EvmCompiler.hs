@@ -14,6 +14,9 @@ import Crypto.Hash
 
 import Test.HUnit
 
+intermediateToOpcodes :: IntermediateContract -> String
+intermediateToOpcodes = asmToMachineCode . eliminatePseudoInstructions . linker . evmCompile
+
 evmCompile :: IntermediateContract -> [EvmOpcode]
 evmCompile c =
   let
@@ -25,12 +28,19 @@ evmCompile c =
     constructor ++ codecopy ++ contractHeader ++ execute
 
 getCodeCopy :: [EvmOpcode] -> [EvmOpcode] -> [EvmOpcode]
-getCodeCopy con exe = [PUSH4 $ fromInteger (getSizeOfOpcodeList exe), PUSH4 $ fromInteger (getSizeOfOpcodeList con + 13), PUSH1 0, CODECOPY] -- 13 is the length of itself, right now we are just saving in mem0
+getCodeCopy con exe = [PUSH4 $ fromInteger (getSizeOfOpcodeList exe),
+                       PUSH4 $ fromInteger (getSizeOfOpcodeList con + 22),
+                       PUSH1 0,
+                       CODECOPY,
+                       PUSH4 $ fromInteger (getSizeOfOpcodeList exe),
+                       PUSH1 0,
+                       RETURN,
+                       STOP] -- 22 is the length of itself, right now we are just saving in mem0
 
 address2w256 :: Address -> Word256
 address2w256 ('0':'x':addr) =
   let
-    address2w256H (h0:h1:h2:h3:h4:h5:h6:h7:h8:h9:h10:h11:h12:h13:h14:h15:h16:h17:h18:h19:h20:h21:h22:h23:h24:h25:h26:h27:h28:h29:h30:h31:h32:h33:h34:h35:h36:h37:h38:h39:[]) = (0x0, 0x0, 0x0, read [h0,h1,h2,h3,h4,h5,h6,h7], read [h8,h9,h10,h11,h12,h13,h14,h15], read [h16,h17,h18,h19,h20,h21,h22,h23], read [h24,h25,h26,h27,h28,h29,h30,h31], read [h32,h33,h34,h35,h36,h37,h38,h39])
+    address2w256H (h0:h1:h2:h3:h4:h5:h6:h7:h8:h9:h10:h11:h12:h13:h14:h15:h16:h17:h18:h19:h20:h21:h22:h23:h24:h25:h26:h27:h28:h29:h30:h31:h32:h33:h34:h35:h36:h37:h38:h39:[]) = (0x0, 0x0, 0x0, read ("0x" ++ [h0,h1,h2,h3,h4,h5,h6,h7]), read ("0x" ++ [h8,h9,h10,h11,h12,h13,h14,h15]), read ("0x" ++ [h16,h17,h18,h19,h20,h21,h22,h23]), read ("0x" ++ [h24,h25,h26,h27,h28,h29,h30,h31]), read ("0x" ++ [h32,h33,h34,h35,h36,h37,h38,h39]))
     address2w256H _ = undefined
   in
     address2w256H addr
@@ -46,7 +56,7 @@ integer2w256 i =
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
 getConstructor :: IntermediateContract -> [EvmOpcode]
-getConstructor c = getCheckNoValue ++ placeValsInStorage c
+getConstructor c = (getCheckNoValue "Constructor_Header" ) ++ placeValsInStorage c
 
 -- ATM all values are know at compile time and placed in storage on contract
 -- initialization. This should be changed.
@@ -162,7 +172,7 @@ getSizeOfOpcodeList xs = foldl (+) 0 (map getOpcodeSize xs)
 getOpcodeSize :: EvmOpcode -> Integer
 getOpcodeSize (PUSH1  _)   = 2
 getOpcodeSize (PUSH4 _)    = 5
-getOpcodeSize (PUSH32 _)    = 33
+getOpcodeSize (PUSH32 _)   = 33
 getOpcodeSize (JUMPITO _)  = 1 + 5 -- PUSH4 addr.; JUMPI
 getOpcodeSize (JUMPTO _)   = 1 + 5 -- PUSH4 addr.; JUMP
 getOpcodeSize (JUMPITOA _) = 1 + 5 -- PUSH4 addr.; JUMP
@@ -185,7 +195,7 @@ linker insts =
   let
     linkerH :: Integer -> [EvmOpcode] -> [EvmOpcode] -> [EvmOpcode]
     linkerH inst_count insts_replaced (inst:insts) = case inst of
-      JUMPDESTFROM label -> linkerH (inst_count+1) (replaceLabel label inst_count insts_replaced) insts
+      JUMPDESTFROM label -> linkerH (inst_count + 1) (replaceLabel label inst_count insts_replaced) insts
       _                  -> linkerH (inst_count + getOpcodeSize(inst)) insts_replaced insts
     linkerH _ insts_replaced [] = insts_replaced
   in
@@ -222,15 +232,15 @@ getContractHeader =
                        JUMPITO "execute_method",
                        THROW]
   in
-    getCheckNoValue ++ switchStatement
+    (getCheckNoValue "Contract_Header") ++ switchStatement
 
 -- Used in both contract header and in constructor
-getCheckNoValue :: [EvmOpcode]
-getCheckNoValue = [CALLVALUE,
+getCheckNoValue :: String -> [EvmOpcode]
+getCheckNoValue target = [CALLVALUE,
                    ISZERO,
-                   JUMPITO "no_val0",
+                   JUMPITO target,
                    THROW,
-                   JUMPDESTFROM "no_val0"]
+                   JUMPDESTFROM target]
 
 
 getExecuteHeader = [JUMPDESTFROM "execute_method"]
