@@ -188,8 +188,8 @@ replaceLabel :: Label -> Integer -> [EvmOpcode] -> [EvmOpcode]
 replaceLabel label int insts =
   let
     replaceLabelH label i inst = case inst of
-      (JUMPTO  l) -> if l == label then JUMPTOA  i else JUMPTO  l
-      (JUMPITO l) -> if l == label then JUMPITOA i else JUMPITO l
+      (JUMPTO  l)      -> if l == label then JUMPTOA  i else JUMPTO  l
+      (JUMPITO l)      -> if l == label then JUMPITOA i else JUMPITO l
       (JUMPDESTFROM l) -> if l == label then JUMPDEST else JUMPDESTFROM l
       otherInst -> otherInst
   in
