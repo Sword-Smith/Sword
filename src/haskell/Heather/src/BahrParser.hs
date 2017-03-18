@@ -19,6 +19,9 @@ parse' s =
     Left _ -> undefined
     Right ast -> ast
 
+parseWrap :: String -> Either ParseError Contract
+parseWrap s = parse contractParser "Parse error: " s
+
 contractParser :: GenParser Char st Contract
 contractParser = do
   spaces
