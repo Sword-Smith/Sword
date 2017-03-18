@@ -1,17 +1,52 @@
+{-# LANGUAGE OverloadedStrings, DeriveGeneric, DeriveAnyClass #-}
 module Main where
 
-import System.Environment
-import System.Directory
 import EvmCompiler as EVMC
 import IntermediateCompiler as IMC
 import BahrParser as BP
+
+import Data.Aeson (encode,ToJSON)
+import Data.Aeson.Text (encodeToLazyText)
+--import qualified Data.Text.Lazy.IO as I (writeFile)
+import qualified Data.ByteString.Lazy as BS
 import Data.List.Split
+import GHC.Generics
+import System.Directory
+import System.Environment
+
+
+data Person =
+  Person { firstName  :: String
+         , lastName   :: String
+         , age        :: Integer
+         , likesPizza :: Bool
+           } deriving (Show,Generic,ToJSON)
+
+p1 :: Person
+p1 = Person "Thorkil" "Vaerge" 30 True
+
+-- data AbiInputDefinition = AbiInputDefinition {
+--   name :: String
+--                                              }
+
+-- data AbiConstructorDefinition = AbiConstructorDefinition {
+--   inputs :: [AbiInputDefinition],
+--   payable :: Bool
+--   } deriving (Show)
+
+-- data AbiFunctionDefinition = AbiFunctionDefinition {
+--       name :: String
+--     , age  :: Integer
+--     } deriving (Generic, Show)
+
+writeAbiDef = BS.writeFile "test0.json" (encode p1)
 
 main :: IO ()
 main = do
   files <- getArgs
   case files of
     f:[] -> do
+      writeAbiDef
       cdirp <- getCurrentDirectory
       let cdir = last (splitOn "/" cdirp)
       if cdir /= "eth2017diku"
