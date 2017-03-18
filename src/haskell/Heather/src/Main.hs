@@ -5,48 +5,91 @@ import EvmCompiler as EVMC
 import IntermediateCompiler as IMC
 import BahrParser as BP
 
-import Data.Aeson (encode,ToJSON)
-import Data.Aeson.Text (encodeToLazyText)
+import Control.Applicative
+import Data.Aeson
+import Data.Aeson.Text
+import Data.Array
 --import qualified Data.Text.Lazy.IO as I (writeFile)
 import qualified Data.ByteString.Lazy as BS
 import Data.List.Split
+import GHC.Exts
 import GHC.Generics
 import System.Directory
 import System.Environment
 
+data AbiVarDefinition = AbiVarDefinition {
+    name_ :: String
+  , type_ :: String
+  } deriving (Show)
 
-data Person =
-  Person { firstName  :: String
-         , lastName   :: String
-         , age        :: Integer
-         , likesPizza :: Bool
-           } deriving (Show,Generic,ToJSON)
+instance ToJSON AbiVarDefinition where
+  toJSON (AbiVarDefinition n t) =
+    object ["name" .= n, "type" .= t]
 
-p1 :: Person
-p1 = Person "Thorkil" "Vaerge" 30 True
+data AbiConstructorDefinition = AbiConstructorDefinition {
+    payable__ :: Bool
+  , type__    :: String
+  , inputs__  :: [AbiVarDefinition]
+  } deriving (Show)
 
--- data AbiInputDefinition = AbiInputDefinition {
---   name :: String
---                                              }
+instance ToJSON AbiConstructorDefinition where
+  toJSON (AbiConstructorDefinition p t is) =
+    object ["payable" .= p, "type" .= t, "inputs" .= toJSON is]
 
--- data AbiConstructorDefinition = AbiConstructorDefinition {
---   inputs :: [AbiInputDefinition],
---   payable :: Bool
---   } deriving (Show)
+data AbiFunctionDefinition = AbiFunctionDefinition {
+      _name     :: String
+    , _type     :: String
+    , _payable  :: Bool
+    , _outputs  :: [AbiVarDefinition]
+    , _inputs   :: [AbiVarDefinition]
+    , _constant :: Bool
+    } deriving (Generic, Show)
 
--- data AbiFunctionDefinition = AbiFunctionDefinition {
---       name :: String
---     , age  :: Integer
---     } deriving (Generic, Show)
+instance ToJSON AbiFunctionDefinition where
+  toJSON (AbiFunctionDefinition n t p os is c) =
+    object ["name"     .= n,
+            "type"     .= t,
+            "payable"  .= p,
+            "inputs"   .= toJSON is,
+            "outputs"  .= toJSON os,
+            "constant" .= c]
 
-writeAbiDef = BS.writeFile "test0.json" (encode p1)
+data AbiDefinition = AbiDefinition {
+    constuctor :: Maybe AbiConstructorDefinition
+  , functions  :: [AbiFunctionDefinition]
+  } deriving (Show)
+
+-- The JSON type of this should be [abiConstructor, abiFucntions]
+instance ToJSON AbiDefinition where
+  toJSON (AbiDefinition constructor functions) =
+    case constructor of
+      Nothing -> toJSONList functions
+      -- DEVFIX: THIS NEEDS TO HAVE THE CONSTRUCTOR ADDED!!!
+      --Just c  -> toJSON $ ( [(toJSON c), (toJSONList functions)])
+      Just c -> toJSON $ toJSONList functions
+
+-- What kind of type should this take as argument?
+-- DEVQ: Perhaps this should be calculated in EvmCompile?
+getAbiDefinition :: AbiDefinition
+getAbiDefinition =
+  let
+    constructor = Just $ AbiConstructorDefinition False "constructor" []
+    execute     = AbiFunctionDefinition "execute" "function" False [] [] False
+  in
+    AbiDefinition constructor [execute]
+
+-- This function writes an ABI definition of the contract.
+writeAbiDef :: String -> IO()
+writeAbiDef fBase = do
+  let abi = getAbiDefinition
+  putStrLn "Writing to"
+  BS.writeFile ("out/" ++ fBase ++ ".bahr:" ++ fBase ++ ".abi") (encode abi)
 
 main :: IO ()
 main = do
   files <- getArgs
   case files of
     f:[] -> do
-      writeAbiDef
       cdirp <- getCurrentDirectory
       let cdir = last (splitOn "/" cdirp)
       if cdir /= "eth2017diku"
@@ -65,5 +108,6 @@ main = do
           -- Do we need checks after the parser is successful?
           Right ast -> do
             putStrLn ("Writing to file " ++ binPath)
+            writeAbiDef fBase
             writeFile binPath (intermediateToOpcodes $ intermediateCompile ast)
     _            -> putStrLn "Usage: Main <source file name.bahr>"
