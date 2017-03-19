@@ -110,4 +110,4 @@ main = do
             putStrLn ("Writing to file " ++ binPath)
             writeAbiDef fBase
             writeFile binPath (intermediateToOpcodes $ intermediateCompile ast)
-    _            -> putStrLn "Usage: Main <source file name.bahr>"
+    _    -> putStrLn "Usage: Main <source file name.bahr>"
