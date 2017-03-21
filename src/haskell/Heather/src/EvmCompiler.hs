@@ -298,8 +298,13 @@ getExecuteHH transferCounter =
                         GAS,
                         SUB]
 
-    -- DEVFIX: CHECK RETURN VALUE!!1
     call             = [CALL]
+
+    checkReturnValue = [ PUSH1 0x1,
+                         EVM_EQ,
+                         JUMPITO ("ret_val" ++ (show transferCounter)),
+                         THROW,
+                         JUMPDESTFROM ("ret_val" ++ (show transferCounter)) ]
   in
     storeMethodsArgsToMem ++
     pushOutSize ++
@@ -309,7 +314,8 @@ getExecuteHH transferCounter =
     pushValue ++
     pushTokenAddress ++
     pushGasAmount ++
-    call
+    call ++
+    checkReturnValue
 
 
 
