@@ -61,7 +61,12 @@ integer2w256 i =
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
 getConstructor :: IntermediateContract -> [EvmOpcode]
-getConstructor c = (getCheckNoValue "Constructor_Header" ) ++ placeValsInStorage c
+getConstructor c = (getCheckNoValue "Constructor_Header" ) ++  ++ placeValsInStorage c
+
+saveTimestampToStorage :: [EvmOpcode]
+saveTimestampToStorage =  [TIMESTAMP,
+                           PUSH1 0x0,
+                           SSTORE]
 
 -- ATM all values are know at compile time and placed in storage on contract
 -- initialization. This should be changed.
@@ -75,7 +80,9 @@ placeValsInStorage (IntermediateContract tcs) =
         placeValsInStorageHH :: Integer -> TransferCall -> [EvmOpcode]
         placeValsInStorageHH i tcall =
           let
-            offset = i * 32 * 5 -- A word is 32 bytes, 5 args per TransferCall
+            -- A word is 32 bytes, 5 args per TransferCall,
+            -- the 32 is because the first storage is used for timestamp.
+            offset = i * 32 * 5 + 32
           in
             [ PUSH32 $ integer2w256 (_amount tcall),
               PUSH4 $ fromInteger offset, -- format this argument
