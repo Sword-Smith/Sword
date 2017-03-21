@@ -18,7 +18,7 @@ intermediateToOpcodes :: IntermediateContract -> String
 intermediateToOpcodes = asmToMachineCode . eliminatePseudoInstructions . evmCompile
 
 getNumberOfTransferCalls :: IntermediateContract -> Integer
-getNumberOfTransferCalls (IntermediateContract (ic:ics)) = 1+(getNumberOfTransferCalls (IntermediateContract ics))
+getNumberOfTransferCalls (IntermediateContract (ic:ics)) = 1 + (getNumberOfTransferCalls (IntermediateContract ics))
 getNumberOfTransferCalls (IntermediateContract []) = 0
 
 evmCompile :: IntermediateContract -> [EvmOpcode]
@@ -68,9 +68,9 @@ getConstructor c = (getCheckNoValue "Constructor_Header" ) ++ placeValsInStorage
 placeValsInStorage :: IntermediateContract -> [EvmOpcode]
 placeValsInStorage (IntermediateContract tcs) =
   let
-    placeValsInStorageH :: [TransferCall] -> [EvmOpcode]
-    placeValsInStorageH []       = []
-    placeValsInStorageH (tc:tcs') =
+    placeValsInStorageH :: Integer -> [TransferCall] -> [EvmOpcode]
+    placeValsInStorageH _ []        = []
+    placeValsInStorageH i (tc:tcs') =
       let
         placeValsInStorageHH :: Integer -> TransferCall -> [EvmOpcode]
         placeValsInStorageHH i tcall =
@@ -84,18 +84,18 @@ placeValsInStorage (IntermediateContract tcs) =
               PUSH4 $ fromInteger offset + 32,
               SSTORE,
               PUSH32 $ address2w256 (_tokenAddress tcall),
-              PUSH4 $ fromInteger offset + 32*2,
+              PUSH4 $ fromInteger offset + 32 * 2,
               SSTORE,
               PUSH32 $ address2w256 (_to tcall),
-              PUSH4 $ fromInteger offset + 32*3,
+              PUSH4 $ fromInteger offset + 32 * 3,
               SSTORE,
               PUSH32 $ address2w256 (_from tcall),
-              PUSH4 $ fromInteger offset + 32*4,
+              PUSH4 $ fromInteger offset + 32 * 4,
               SSTORE ]
       in
-        placeValsInStorageHH 0 tc ++ placeValsInStorageH tcs'
+        placeValsInStorageHH i tc ++ placeValsInStorageH (i + 1) tcs'
   in
-    placeValsInStorageH tcs
+    placeValsInStorageH 0 tcs
 
 asmToMachineCode :: [EvmOpcode] -> String
 asmToMachineCode opcodes = foldl (++) "" (map ppEvm opcodes)
@@ -242,16 +242,16 @@ getContractHeader =
 -- Used in both contract header and in constructor
 getCheckNoValue :: String -> [EvmOpcode]
 getCheckNoValue target = [CALLVALUE,
-                   ISZERO,
-                   JUMPITO target,
-                   THROW,
-                   JUMPDESTFROM target]
+                          ISZERO,
+                          JUMPITO target,
+                          THROW,
+                          JUMPDESTFROM target]
 
 getExecute :: Integer -> [EvmOpcode]
 getExecute numOfTcs = (JUMPDESTFROM "execute_method"):(getExecuteH 0 numOfTcs) ++ [STOP]
 
 getExecuteH :: Integer -> Integer -> [EvmOpcode]
-getExecuteH i numOfTcs = if i == numOfTcs then [] else (getExecuteHH i) ++ (getExecuteH (i+1) numOfTcs)
+getExecuteH i numOfTcs = if i == numOfTcs then [] else (getExecuteHH i) ++ (getExecuteH (i + 1) numOfTcs)
 
 getExecuteHH :: Integer -> [EvmOpcode]
 getExecuteHH transferCounter =
@@ -285,7 +285,7 @@ getExecuteHH transferCounter =
     pushOutOffset    = [PUSH1 0x0]
 
     -- The arguments with which we are calling transferFrom need to be stored in memory
-    pushInSize       = [PUSH1 $ fromInteger $ 4 + 3*32 ] -- four bytes for f_sig, 3*32 for (from, to, value)
+    pushInSize       = [PUSH1 $ fromInteger $ 4 + 3 * 32 ] -- four bytes for f_sig, 3*32 for (from, to, value)
     pushInOffset     = [PUSH1 0x0]
     pushValue        = [PUSH1 0x0]
 
