@@ -320,7 +320,7 @@ getExecuteHH tc transferCounter =
     pushValue        = [PUSH1 0x0]
 
     -- 0xa0 is total size of args for one transferCall
-    pushTokenAddress = [PUSH4 (0x40 + 0xa0 * (fromInteger transferCounter)),
+    pushTokenAddress = [PUSH4 (0x20 + 0x40 + 0xa0 * (fromInteger transferCounter)),
                         SLOAD]
 
   -- 0x32 is magic value from Solidity compiler
