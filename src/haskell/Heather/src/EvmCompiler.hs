@@ -14,6 +14,23 @@ import Crypto.Hash
 
 import Test.HUnit
 
+data StorageType = CreationTimestamp
+                 | Executed -- Add Integer here if more than 256 tcall's should be poss.
+                 | Amount Integer
+                 | Delay Integer
+                 | TokenAddress Integer
+                 | ToAddress Integer
+                 | FromAddress Integer
+
+getStorageAddress :: StorageType -> Word32
+getStorageAddress CreationTimestamp      = 0x0
+getStorageAddress Executed               = 0x20
+getStorageAddress (Amount tcCount)       = 0x40 + 0xa0 * (fromInteger tcCount)
+getStorageAddress (Delay tcCount)        = 0x60 + 0xa0 * (fromInteger tcCount)
+getStorageAddress (TokenAddress tcCount) = 0x80 + 0xa0 * (fromInteger tcCount)
+getStorageAddress (ToAddress tcCount)    = 0xa0 + 0xa0 * (fromInteger tcCount)
+getStorageAddress (FromAddress tcCount)  = 0xc0 + 0xa0 * (fromInteger tcCount)
+
 intermediateToOpcodes :: IntermediateContract -> String
 intermediateToOpcodes = asmToMachineCode . eliminatePseudoInstructions . evmCompile
 
@@ -67,7 +84,7 @@ getConstructor c = (getCheckNoValue "Constructor_Header" ) ++
 
 saveTimestampToStorage :: [EvmOpcode]
 saveTimestampToStorage =  [TIMESTAMP,
-                           PUSH1 0x0,
+                           PUSH4 $ getStorageAddress CreationTimestamp,
                            SSTORE]
 
 -- ATM all values are know at compile time and placed in storage on contract
@@ -81,25 +98,20 @@ placeValsInStorage (IntermediateContract tcs) =
       let
         placeValsInStorageHH :: Integer -> TransferCall -> [EvmOpcode]
         placeValsInStorageHH i tcall =
-          let
-            -- A word is 32 bytes, 5 args per TransferCall,
-            -- the 32 is because the first storage is used for timestamp.
-            offset = i * 32 * 5 + 32
-          in
             [ PUSH32 $ integer2w256 (_amount tcall),
-              PUSH4 $ fromInteger offset, -- format this argument
+              PUSH4 $ getStorageAddress $ Amount i,
               SSTORE,
               PUSH32 $ integer2w256 (_delay tcall),
-              PUSH4 $ fromInteger offset + 32,
+              PUSH4 $ getStorageAddress $ Delay i,
               SSTORE,
               PUSH32 $ address2w256 (_tokenAddress tcall),
-              PUSH4 $ fromInteger offset + 32 * 2,
+              PUSH4 $ getStorageAddress $ TokenAddress i,
               SSTORE,
               PUSH32 $ address2w256 (_to tcall),
-              PUSH4 $ fromInteger offset + 32 * 3,
+              PUSH4 $ getStorageAddress $ ToAddress i,
               SSTORE,
               PUSH32 $ address2w256 (_from tcall),
-              PUSH4 $ fromInteger offset + 32 * 4,
+              PUSH4 $ getStorageAddress $ FromAddress i,
               SSTORE ]
       in
         placeValsInStorageHH i tc ++ placeValsInStorageH (i + 1) tcs'
@@ -273,16 +285,25 @@ getExecuteHH tc transferCounter =
       let
         -- here we probably need to hardcode the time that a contract should be executed.
         -- DEVNOTE: That needs to be changed if time should be an expression
-        checkIfTimeHasPassed = [ PUSH1 0x0,
+        checkIfTimeHasPassed = [ PUSH4 $ getStorageAddress CreationTimestamp,
                                  SLOAD,
                                  TIMESTAMP,
                                  SUB,
                                  -- This could also be read from storage
                                  PUSH32 $ integer2w256 $ _delay tc,
-                                 EVM_LT ]
+                                 EVM_LT,
+                                 ISZERO,
+                                 JUMPITO $ "function_end" ++ (show (transferCounter))
+                               ]
+        checkIfFunctionHasBeenExecuted = [ PUSH4 $ getStorageAddress Executed,
+                                           SLOAD,
+                                           PUSH32 (0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
+                                           AND,
+                                           -- DEVFIX: THIS IS NOT CORRECT
+                                           JUMPITO $ "function_end" ++ (show (transferCounter))
+                                         ]
       in
-        checkIfTimeHasPassed ++
-        [ISZERO, JUMPITO $ "function_end" ++ (show (transferCounter))]
+        checkIfTimeHasPassed ++ checkIfFunctionHasBeenExecuted
 
     storeMethodsArgsToMem =
       let
@@ -294,15 +315,15 @@ getExecuteHH tc transferCounter =
         -- 0x20 is for timestamp, 0x80 is place for address in storage, 0xa0 is size of data
         -- associated with one function call
         -- DEVFIX: create function to return address in storage
-        storeFromAddressArg    = [PUSH4 $ 0x20 + 0x80 + 0xa0 * (fromInteger transferCounter),
+        storeFromAddressArg    = [PUSH4 $ getStorageAddress $ FromAddress transferCounter,
                                   SLOAD,
                                   PUSH1 0x4,
                                   MSTORE]
-        storeToAddressArg      = [PUSH4 $ 0x20 + 0x60 + 0xa0 * (fromInteger transferCounter),
+        storeToAddressArg      = [PUSH4 $ getStorageAddress $ ToAddress transferCounter,
                                   SLOAD,
                                   PUSH1 0x24,
                                   MSTORE]
-        storeAmountArg         = [PUSH4 $ 0x20 + 0xa0 * (fromInteger transferCounter),
+        storeAmountArg         = [PUSH4 $ getStorageAddress $ Amount transferCounter,
                                   SLOAD,
                                   PUSH1 0x44,
                                   MSTORE]
@@ -321,7 +342,7 @@ getExecuteHH tc transferCounter =
     pushValue        = [PUSH1 0x0]
 
     -- 0xa0 is total size of args for one transferCall
-    pushTokenAddress = [PUSH4 (0x20 + 0x40 + 0xa0 * (fromInteger transferCounter)),
+    pushTokenAddress = [PUSH4 $ getStorageAddress $ TokenAddress transferCounter,
                         SLOAD]
 
   -- 0x32 is magic value from Solidity compiler
@@ -334,8 +355,9 @@ getExecuteHH tc transferCounter =
     checkReturnValue = [ PUSH1 0x1,
                          EVM_EQ,
                          JUMPITO ("ret_val" ++ (show transferCounter)),
-                         THROW,
+                         THROW, -- Is it correct to throw here??
                          JUMPDESTFROM ("ret_val" ++ (show transferCounter)) ]
+    -- setTransferCallIsExecuted = [  ]
     functionEndLabel = [JUMPDESTFROM $ "function_end" ++ (show transferCounter)]
   in
     checkIfCallShouldBeMade ++
