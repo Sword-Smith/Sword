@@ -26,7 +26,7 @@ evmCompile c =
   let
     constructor    = getConstructor c
     contractHeader = getContractHeader
-    execute        = getExecute (getNumberOfTransferCalls c)
+    execute        = getExecute c
     codecopy       = getCodeCopy constructor (contractHeader ++ execute)
   in
     -- The addresses of the constructor run are different from runs when SC is on BC
@@ -61,7 +61,9 @@ integer2w256 i =
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
 getConstructor :: IntermediateContract -> [EvmOpcode]
-getConstructor c = (getCheckNoValue "Constructor_Header" ) ++  ++ placeValsInStorage c
+getConstructor c = (getCheckNoValue "Constructor_Header" ) ++
+                   saveTimestampToStorage ++
+                   placeValsInStorage c
 
 saveTimestampToStorage :: [EvmOpcode]
 saveTimestampToStorage =  [TIMESTAMP,
@@ -254,15 +256,33 @@ getCheckNoValue target = [CALLVALUE,
                           THROW,
                           JUMPDESTFROM target]
 
-getExecute :: Integer -> [EvmOpcode]
-getExecute numOfTcs = (JUMPDESTFROM "execute_method"):(getExecuteH 0 numOfTcs) ++ [STOP]
+-- getExecute now needs to take an intermediate contract as argument
+getExecute :: IntermediateContract -> [EvmOpcode]
+getExecute (IntermediateContract tcs) = (JUMPDESTFROM "execute_method") :
+                                        (getExecuteH tcs 0) ++
+                                        [STOP]
 
-getExecuteH :: Integer -> Integer -> [EvmOpcode]
-getExecuteH i numOfTcs = if i == numOfTcs then [] else (getExecuteHH i) ++ (getExecuteH (i + 1) numOfTcs)
+getExecuteH :: [TransferCall] -> Integer -> [EvmOpcode]
+getExecuteH (tc:tcs) i = (getExecuteHH tc i) ++ (getExecuteH tcs (i + 1))
+getExecuteH [] _ = []
 
-getExecuteHH :: Integer -> [EvmOpcode]
-getExecuteHH transferCounter =
+getExecuteHH :: TransferCall -> Integer -> [EvmOpcode]
+getExecuteHH tc transferCounter =
   let
+    checkIfCallShouldBeMade =
+      let
+        -- here we probably need to hardcode the time that a contract should be executed.
+        -- DEVNOTE: That needs to be changed if time should be an expression
+        checkIfTimeHasPassed = [ PUSH1 0x0,
+                                 SLOAD,
+                                 TIMESTAMP,
+                                 SUB,
+                                 PUSH32 $ integer2w256 $ _delay tc,
+                                 EVM_LT ]
+      in
+        checkIfTimeHasPassed ++
+        [ISZERO, JUMPITO $ "function_end" ++ (show (transferCounter))]
+
     storeMethodsArgsToMem =
       let
         storeFunctionSignature = [PUSH4 $ getFunctionSignature "transferFrom(address,address,uint256)",
@@ -270,15 +290,18 @@ getExecuteHH transferCounter =
                                   MUL,
                                   PUSH1 0x0,
                                   MSTORE]
-        storeFromAddressArg    = [PUSH4 $ 0x80 + 0xa0 * (fromInteger transferCounter),
+        -- 0x20 is for timestamp, 0x80 is place for address in storage, 0xa0 is size of data
+        -- associated with one function call
+        -- DEVFIX: create function to return address in storage
+        storeFromAddressArg    = [PUSH4 $ 0x20 + 0x80 + 0xa0 * (fromInteger transferCounter),
                                   SLOAD,
                                   PUSH1 0x4,
                                   MSTORE]
-        storeToAddressArg      = [PUSH4 $ 0x60 + 0xa0 * (fromInteger transferCounter),
+        storeToAddressArg      = [PUSH4 $ 0x20 + 0x60 + 0xa0 * (fromInteger transferCounter),
                                   SLOAD,
                                   PUSH1 0x24,
                                   MSTORE]
-        storeAmountArg         = [PUSH4 $ 0xa0 * (fromInteger transferCounter),
+        storeAmountArg         = [PUSH4 $ 0x20 + 0xa0 * (fromInteger transferCounter),
                                   SLOAD,
                                   PUSH1 0x44,
                                   MSTORE]
@@ -312,7 +335,9 @@ getExecuteHH transferCounter =
                          JUMPITO ("ret_val" ++ (show transferCounter)),
                          THROW,
                          JUMPDESTFROM ("ret_val" ++ (show transferCounter)) ]
+    functionEndLabel = [JUMPDESTFROM $ "function_end" ++ (show transferCounter)]
   in
+    checkIfCallShouldBeMade ++
     storeMethodsArgsToMem ++
     pushOutSize ++
     pushOutOffset ++
@@ -322,7 +347,8 @@ getExecuteHH transferCounter =
     pushTokenAddress ++
     pushGasAmount ++
     call ++
-    checkReturnValue
+    checkReturnValue ++
+    functionEndLabel
 
 
 
