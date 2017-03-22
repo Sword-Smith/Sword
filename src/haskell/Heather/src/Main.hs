@@ -83,7 +83,7 @@ writeAbiDef :: String -> IO()
 writeAbiDef fBase = do
   let abi = getAbiDefinition
   let fn  = "out/" ++ fBase ++ ".bahr:" ++ fBase ++ ".abi"
-  putStrLn "Writing to" ++ fn
+  putStrLn $ "Writing to" ++ fn
   BS.writeFile fn (encode abi)
 
 main :: IO ()
