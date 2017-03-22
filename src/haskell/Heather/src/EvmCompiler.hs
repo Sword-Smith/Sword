@@ -25,9 +25,9 @@ evmCompile :: IntermediateContract -> [EvmOpcode]
 evmCompile c =
   let
     constructor    = getConstructor c
+    codecopy       = getCodeCopy constructor (contractHeader ++ execute)
     contractHeader = getContractHeader
     execute        = getExecute c
-    codecopy       = getCodeCopy constructor (contractHeader ++ execute)
   in
     -- The addresses of the constructor run are different from runs when SC is on BC
     linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute)
@@ -277,6 +277,7 @@ getExecuteHH tc transferCounter =
                                  SLOAD,
                                  TIMESTAMP,
                                  SUB,
+                                 -- This could also be read from storage
                                  PUSH32 $ integer2w256 $ _delay tc,
                                  EVM_LT ]
       in
