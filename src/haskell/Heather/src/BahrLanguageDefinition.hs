@@ -1,8 +1,8 @@
 module BahrLanguageDefinition where
 
 data Contract = Transfer { tokenAddress_ :: Address,
-                           to_          :: Address,
-                           from_        :: Address
+                           from_         :: Address,
+                           to_           :: Address
                          }
               | Scale { scaleFactor_ :: Integer,
                         contract_    :: Contract
