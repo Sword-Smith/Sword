@@ -14,8 +14,10 @@ import Crypto.Hash
 
 import Test.HUnit
 
+-- ATM, "Executed" does not have an integer. If it should be able to handle more
+-- than 256 tcalls, it must take an integer also.
 data StorageType = CreationTimestamp
-                 | Executed -- Add Integer here if more than 256 tcall's should be poss.
+                 | Executed
                  | Amount Integer
                  | Delay Integer
                  | TokenAddress Integer
@@ -30,34 +32,6 @@ getStorageAddress (Delay tcCount)        = 0x60 + 0xa0 * (fromInteger tcCount)
 getStorageAddress (TokenAddress tcCount) = 0x80 + 0xa0 * (fromInteger tcCount)
 getStorageAddress (ToAddress tcCount)    = 0xa0 + 0xa0 * (fromInteger tcCount)
 getStorageAddress (FromAddress tcCount)  = 0xc0 + 0xa0 * (fromInteger tcCount)
-
-intermediateToOpcodes :: IntermediateContract -> String
-intermediateToOpcodes = asmToMachineCode . eliminatePseudoInstructions . evmCompile
-
-getNumberOfTransferCalls :: IntermediateContract -> Integer
-getNumberOfTransferCalls (IntermediateContract (ic:ics)) = 1 + (getNumberOfTransferCalls (IntermediateContract ics))
-getNumberOfTransferCalls (IntermediateContract []) = 0
-
-evmCompile :: IntermediateContract -> [EvmOpcode]
-evmCompile c =
-  let
-    constructor    = getConstructor c
-    codecopy       = getCodeCopy constructor (contractHeader ++ execute)
-    contractHeader = getContractHeader
-    execute        = getExecute c
-  in
-    -- The addresses of the constructor run are different from runs when SC is on BC
-    linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute)
-
-getCodeCopy :: [EvmOpcode] -> [EvmOpcode] -> [EvmOpcode]
-getCodeCopy con exe = [PUSH4 $ fromInteger (getSizeOfOpcodeList exe),
-                       PUSH4 $ fromInteger (getSizeOfOpcodeList con + 22),
-                       PUSH1 0,
-                       CODECOPY,
-                       PUSH4 $ fromInteger (getSizeOfOpcodeList exe),
-                       PUSH1 0,
-                       RETURN,
-                       STOP] -- 22 is the length of itself, right now we are just saving in mem0
 
 address2w256 :: Address -> Word256
 address2w256 ('0':'x':addr) =
@@ -74,49 +48,6 @@ integer2w256 i =
     w32r = 2^32
   in
     (fromInteger (i `quot` w32r^7 ), fromInteger (i `quot` w32r^6 ), fromInteger (i `quot` w32r^5 ), fromInteger (i `quot` w32r^4 ), fromInteger (i `quot` w32r^3 ), fromInteger (i `quot` w32r^2 ), fromInteger (i `quot` w32r^1 ), fromInteger (i `quot` w32r^0 ) )
-
--- Once the values have been placed in storage, the CODECOPY opcode should
--- probably be called.
-getConstructor :: IntermediateContract -> [EvmOpcode]
-getConstructor c = (getCheckNoValue "Constructor_Header" ) ++
-                   saveTimestampToStorage ++
-                   placeValsInStorage c
-
-saveTimestampToStorage :: [EvmOpcode]
-saveTimestampToStorage =  [TIMESTAMP,
-                           PUSH4 $ getStorageAddress CreationTimestamp,
-                           SSTORE]
-
--- ATM all values are know at compile time and placed in storage on contract
--- initialization. This should be changed.
-placeValsInStorage :: IntermediateContract -> [EvmOpcode]
-placeValsInStorage (IntermediateContract tcs) =
-  let
-    placeValsInStorageH :: Integer -> [TransferCall] -> [EvmOpcode]
-    placeValsInStorageH _ []        = []
-    placeValsInStorageH i (tc:tcs') =
-      let
-        placeValsInStorageHH :: Integer -> TransferCall -> [EvmOpcode]
-        placeValsInStorageHH i tcall =
-            [ PUSH32 $ integer2w256 (_amount tcall),
-              PUSH4 $ getStorageAddress $ Amount i,
-              SSTORE,
-              PUSH32 $ integer2w256 (_delay tcall),
-              PUSH4 $ getStorageAddress $ Delay i,
-              SSTORE,
-              PUSH32 $ address2w256 (_tokenAddress tcall),
-              PUSH4 $ getStorageAddress $ TokenAddress i,
-              SSTORE,
-              PUSH32 $ address2w256 (_to tcall),
-              PUSH4 $ getStorageAddress $ ToAddress i,
-              SSTORE,
-              PUSH32 $ address2w256 (_from tcall),
-              PUSH4 $ getStorageAddress $ FromAddress i,
-              SSTORE ]
-      in
-        placeValsInStorageHH i tc ++ placeValsInStorageH (i + 1) tcs'
-  in
-    placeValsInStorageH 0 tcs
 
 asmToMachineCode :: [EvmOpcode] -> String
 asmToMachineCode opcodes = foldl (++) "" (map ppEvm opcodes)
@@ -245,6 +176,87 @@ keccak256 fname =
   in
     show $ keccak256H $ pack fname
 
+
+-- This is the main method of this module
+intermediateToOpcodes :: IntermediateContract -> String
+intermediateToOpcodes = asmToMachineCode . eliminatePseudoInstructions . evmCompile
+
+-- Given an IntermediateContract, returns the EvmOpcodes representing the binary
+evmCompile :: IntermediateContract -> [EvmOpcode]
+evmCompile c =
+  let
+    constructor    = getConstructor c
+    codecopy       = getCodeCopy constructor (contractHeader ++ execute)
+    contractHeader = getContractHeader
+    execute        = getExecute c
+  in
+    -- The addresses of the constructor run are different from runs when DC is on BC
+    linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute)
+
+-- Once the values have been placed in storage, the CODECOPY opcode should
+-- probably be called.
+getConstructor :: IntermediateContract -> [EvmOpcode]
+getConstructor c = (getCheckNoValue "Constructor_Header" ) ++
+                   saveTimestampToStorage ++
+                   placeValsInStorage c
+
+-- Checks that no value is sent when executing contract method
+-- Used in both contract header and in constructor
+getCheckNoValue :: String -> [EvmOpcode]
+getCheckNoValue target = [CALLVALUE,
+                          ISZERO,
+                          JUMPITO target,
+                          THROW,
+                          JUMPDESTFROM target]
+
+-- Stores timestamp of creation of contract in storage
+saveTimestampToStorage :: [EvmOpcode]
+saveTimestampToStorage =  [TIMESTAMP,
+                           PUSH4 $ getStorageAddress CreationTimestamp,
+                           SSTORE]
+
+-- ATM all values are known at compile time and placed in storage on contract
+-- initialization. This should be changed.
+placeValsInStorage :: IntermediateContract -> [EvmOpcode]
+placeValsInStorage (IntermediateContract tcs) =
+  let
+    placeValsInStorageH :: Integer -> [TransferCall] -> [EvmOpcode]
+    placeValsInStorageH _ []        = []
+    placeValsInStorageH i (tc:tcs') =
+      let
+        placeValsInStorageHH :: Integer -> TransferCall -> [EvmOpcode]
+        placeValsInStorageHH i tcall =
+            [ PUSH32 $ integer2w256 (_amount tcall),
+              PUSH4 $ getStorageAddress $ Amount i,
+              SSTORE,
+              PUSH32 $ integer2w256 (_delay tcall),
+              PUSH4 $ getStorageAddress $ Delay i,
+              SSTORE,
+              PUSH32 $ address2w256 (_tokenAddress tcall),
+              PUSH4 $ getStorageAddress $ TokenAddress i,
+              SSTORE,
+              PUSH32 $ address2w256 (_to tcall),
+              PUSH4 $ getStorageAddress $ ToAddress i,
+              SSTORE,
+              PUSH32 $ address2w256 (_from tcall),
+              PUSH4 $ getStorageAddress $ FromAddress i,
+              SSTORE ]
+      in
+        placeValsInStorageHH i tc ++ placeValsInStorageH (i + 1) tcs'
+  in
+    placeValsInStorageH 0 tcs
+
+-- Returns the code needed to transfer code from *init* to I_b in the EVM
+getCodeCopy :: [EvmOpcode] -> [EvmOpcode] -> [EvmOpcode]
+getCodeCopy con exe = [PUSH4 $ fromInteger (getSizeOfOpcodeList exe),
+                       PUSH4 $ fromInteger (getSizeOfOpcodeList con + 22),
+                       PUSH1 0,
+                       CODECOPY,
+                       PUSH4 $ fromInteger (getSizeOfOpcodeList exe),
+                       PUSH1 0,
+                       RETURN,
+                       STOP] -- 22 is the length of itself, right now we are just saving in mem0
+
 getContractHeader :: [EvmOpcode]
 getContractHeader =
   let
@@ -260,15 +272,7 @@ getContractHeader =
   in
     (getCheckNoValue "Contract_Header") ++ switchStatement
 
--- Used in both contract header and in constructor
-getCheckNoValue :: String -> [EvmOpcode]
-getCheckNoValue target = [CALLVALUE,
-                          ISZERO,
-                          JUMPITO target,
-                          THROW,
-                          JUMPDESTFROM target]
-
--- getExecute now needs to take an intermediate contract as argument
+-- Returns the code for executing all TCs in this IntermediateContract
 getExecute :: IntermediateContract -> [EvmOpcode]
 getExecute (IntermediateContract tcs) = (JUMPDESTFROM "execute_method") :
                                         (getExecuteH tcs 0) ++
