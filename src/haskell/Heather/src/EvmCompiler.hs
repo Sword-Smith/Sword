@@ -176,10 +176,18 @@ keccak256 fname =
   in
     show $ keccak256H $ pack fname
 
-
--- This is the main method of this module
+-- Main method for this module. Returns binary.
+-- Check that there are not more than 2^8 transfercalls
+-- Wrapper for intermediateToOpcodesH
 intermediateToOpcodes :: IntermediateContract -> String
-intermediateToOpcodes = asmToMachineCode . eliminatePseudoInstructions . evmCompile
+intermediateToOpcodes (IntermediateContract tcs) =
+  let
+    intermediateToOpcodesH :: IntermediateContract -> String
+    intermediateToOpcodesH = asmToMachineCode . eliminatePseudoInstructions . evmCompile
+  in
+    if length(tcs) > 256
+    then undefined
+    else intermediateToOpcodesH (IntermediateContract tcs)
 
 -- Given an IntermediateContract, returns the EvmOpcodes representing the binary
 evmCompile :: IntermediateContract -> [EvmOpcode]
