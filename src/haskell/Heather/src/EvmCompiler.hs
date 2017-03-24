@@ -289,11 +289,19 @@ getContractHeader =
   in
     (getCheckNoValue "Contract_Header") ++ switchStatement
 
--- Returns the code for executing all TCs in this IntermediateContract
+-- Returns the code for executing all tcalls in this IntermediateContract
 getExecute :: IntermediateContract -> [EvmOpcode]
-getExecute (IntermediateContract tcs) = (JUMPDESTFROM "execute_method") :
-                                        (getExecuteH tcs 0) ++
-                                        [STOP]
+getExecute (IntermediateContract tcs) =
+  let
+    suicide = [ JUMPDESTFROM "suicide",
+                -- insert code to put owner address on stack elem 0
+                SUICIDE,
+                STOP ]
+  in
+    (JUMPDESTFROM "execute_method") :
+    (getExecuteH tcs 0) ++
+    suicide ++
+    [STOP]
 
 getExecuteH :: [TransferCall] -> Integer -> [EvmOpcode]
 getExecuteH (tc:tcs) i = (getExecuteHH tc i) ++ (getExecuteH tcs (i + 1))
@@ -316,7 +324,7 @@ getExecuteHH tc transferCounter =
                                  ISZERO,
                                  JUMPITO $ "function_end" ++ (show (transferCounter))
                                ]
-        -- Skip TC if function has been executed already
+        -- Skip tcall if function has been executed already
         -- This only works for less than 2^8 transfer calls
         checkIfTCHasBeenExecuted = [ PUSH4 $ getStorageAddress Executed,
                                      SLOAD,
@@ -381,20 +389,20 @@ getExecuteHH tc transferCounter =
                          JUMPITO ("ret_val" ++ (show transferCounter)),
                          THROW, -- Is it correct to throw here??
                          JUMPDESTFROM ("ret_val" ++ (show transferCounter)) ]
-    -- Flip correct bit from one to zero
+    -- Flip correct bit from one to zero and call suicide if all tcalls compl.
     updateExecutedWord = [ PUSH4 $ getStorageAddress Executed,
                            SLOAD,
                            PUSH1 $ fromInteger transferCounter,
                            PUSH1 0x2,
                            EXP,
                            XOR,
-                           --DUP1,
-                           --ISZERO,
-                           --JUMPITO "suicide",
+                           DUP1,
+                           ISZERO,
+                           JUMPITO "suicide",
                            PUSH4 $ getStorageAddress Executed,
                            SSTORE ]
     -- setTransferCallIsExecuted = [  ]
-    functionEndLabel = [JUMPDESTFROM $ "function_end" ++ (show transferCounter)]
+    functionEndLabel = [JUMPDESTFROM  $ "function_end" ++ (show transferCounter)]
   in
     checkIfCallShouldBeMade ++
     storeMethodsArgsToMem ++
