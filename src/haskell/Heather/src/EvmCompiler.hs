@@ -204,9 +204,11 @@ evmCompile c =
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
 getConstructor :: IntermediateContract -> [EvmOpcode]
-getConstructor c = (getCheckNoValue "Constructor_Header" ) ++
-                   saveTimestampToStorage ++
-                   placeValsInStorage c
+getConstructor (IntermediateContract tcs) =
+  (getCheckNoValue "Constructor_Header" ) ++
+  saveTimestampToStorage ++
+  setExecutedWord tcs ++
+  placeValsInStorage (IntermediateContract tcs)
 
 -- Checks that no value is sent when executing contract method
 -- Used in both contract header and in constructor
@@ -222,6 +224,13 @@ saveTimestampToStorage :: [EvmOpcode]
 saveTimestampToStorage =  [TIMESTAMP,
                            PUSH4 $ getStorageAddress CreationTimestamp,
                            SSTORE]
+
+-- Given a number of transfercalls, set executed word in storage
+setExecutedWord :: [TransferCall] -> [EvmOpcode]
+setExecutedWord []  = undefined
+setExecutedWord tcs = [ PUSH32 $ integer2w256 $ 2^length(tcs) - 1,
+                        PUSH4 $ getStorageAddress Executed,
+                        SSTORE ]
 
 -- ATM all values are known at compile time and placed in storage on contract
 -- initialization. This should be changed.
@@ -307,15 +316,18 @@ getExecuteHH tc transferCounter =
                                  ISZERO,
                                  JUMPITO $ "function_end" ++ (show (transferCounter))
                                ]
-        checkIfFunctionHasBeenExecuted = [ PUSH4 $ getStorageAddress Executed,
-                                           SLOAD,
-                                           PUSH32 (0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
-                                           AND,
-                                           -- DEVFIX: THIS IS NOT CORRECT
-                                           JUMPITO $ "function_end" ++ (show (transferCounter))
-                                         ]
+        -- Skip TC if function has been executed already
+        -- This only works for less than 2^8 transfer calls
+        checkIfTCHasBeenExecuted = [ PUSH4 $ getStorageAddress Executed,
+                                     SLOAD,
+                                     PUSH1 $ fromInteger transferCounter,
+                                     PUSH1 0x2,
+                                     EXP,
+                                     AND,
+                                     ISZERO,
+                                     JUMPITO $ "function_end" ++ (show (transferCounter)) ]
       in
-        checkIfTimeHasPassed ++ checkIfFunctionHasBeenExecuted
+        checkIfTimeHasPassed ++ checkIfTCHasBeenExecuted
 
     storeMethodsArgsToMem =
       let
@@ -369,6 +381,18 @@ getExecuteHH tc transferCounter =
                          JUMPITO ("ret_val" ++ (show transferCounter)),
                          THROW, -- Is it correct to throw here??
                          JUMPDESTFROM ("ret_val" ++ (show transferCounter)) ]
+    -- Flip correct bit from one to zero
+    updateExecutedWord = [ PUSH4 $ getStorageAddress Executed,
+                           SLOAD,
+                           PUSH1 $ fromInteger transferCounter,
+                           PUSH1 0x2,
+                           EXP,
+                           XOR,
+                           --DUP1,
+                           --ISZERO,
+                           --JUMPITO "suicide",
+                           PUSH4 $ getStorageAddress Executed,
+                           SSTORE ]
     -- setTransferCallIsExecuted = [  ]
     functionEndLabel = [JUMPDESTFROM $ "function_end" ++ (show transferCounter)]
   in
@@ -383,6 +407,7 @@ getExecuteHH tc transferCounter =
     pushGasAmount ++
     call ++
     checkReturnValue ++
+    updateExecutedWord ++
     functionEndLabel
 
 
