@@ -294,14 +294,15 @@ getExecute :: IntermediateContract -> [EvmOpcode]
 getExecute (IntermediateContract tcs) =
   let
     suicide = [ JUMPDESTFROM "suicide",
-                -- insert code to put owner address on stack elem 0
+                CALLER,
                 SUICIDE,
                 STOP ]
   in
     (JUMPDESTFROM "execute_method") :
     (getExecuteH tcs 0) ++
-    suicide ++
-    [STOP]
+    -- Prevent suicide from running after each call
+    [STOP] ++
+    suicide
 
 getExecuteH :: [TransferCall] -> Integer -> [EvmOpcode]
 getExecuteH (tc:tcs) i = (getExecuteHH tc i) ++ (getExecuteH tcs (i + 1))
@@ -322,9 +323,9 @@ getExecuteHH tc transferCounter =
                                  PUSH32 $ integer2w256 $ _delay tc,
                                  EVM_LT,
                                  ISZERO,
-                                 JUMPITO $ "function_end" ++ (show (transferCounter))
+                                 JUMPITO $ "method_end" ++ (show (transferCounter))
                                ]
-        -- Skip tcall if function has been executed already
+        -- Skip tcall if method has been executed already
         -- This only works for less than 2^8 transfer calls
         checkIfTCHasBeenExecuted = [ PUSH4 $ getStorageAddress Executed,
                                      SLOAD,
@@ -333,7 +334,7 @@ getExecuteHH tc transferCounter =
                                      EXP,
                                      AND,
                                      ISZERO,
-                                     JUMPITO $ "function_end" ++ (show (transferCounter)) ]
+                                     JUMPITO $ "method_end" ++ (show (transferCounter)) ]
       in
         checkIfTimeHasPassed ++ checkIfTCHasBeenExecuted
 
@@ -402,7 +403,7 @@ getExecuteHH tc transferCounter =
                            PUSH4 $ getStorageAddress Executed,
                            SSTORE ]
     -- setTransferCallIsExecuted = [  ]
-    functionEndLabel = [JUMPDESTFROM  $ "function_end" ++ (show transferCounter)]
+    functionEndLabel = [JUMPDESTFROM  $ "method_end" ++ (show transferCounter)]
   in
     checkIfCallShouldBeMade ++
     storeMethodsArgsToMem ++
