@@ -282,17 +282,35 @@ getContractHeader =
                        CALLDATALOAD,
                        PUSH32 (0xffffffff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
                        AND,
+                       DUP1,
                        PUSH32 $ (getFunctionSignature "execute()" , 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
                        EVM_EQ,
                        JUMPITO "execute_method",
+                       DUP1,
+                       PUSH32 $ (getFunctionSignature "cancel()" , 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
+                       JUMPITO "cancel_method",
                        THROW]
   in
     (getCheckNoValue "Contract_Header") ++ switchStatement
+
+-- How should this be made.
+-- We prob. need to go through all transfercalls.
+-- Each transfer call will have a from address and a token address.
+-- We need to check that allowance returns the correct number.
+-- What is the correct number? It is the maximum value that a tcall can transfer.
+-- How do we determine the maximum number that a tcall should be able to transfer?
+-- It must be known at compile time, otherwise our infrastructure of locking
+-- balances (through approve) will not work.
+getCancel :: IntermediateContract -> [EvmOpcode]
+getCancel (IntermediateContract tcs) =
+  [ JUMPDESTFROM "cancel" ]
+  
 
 -- Returns the code for executing all tcalls in this IntermediateContract
 getExecute :: IntermediateContract -> [EvmOpcode]
 getExecute (IntermediateContract tcs) =
   let
+    -- DEVFIX: suicide must also call releaseApproval
     suicide = [ JUMPDESTFROM "suicide",
                 CALLER,
                 SUICIDE,
