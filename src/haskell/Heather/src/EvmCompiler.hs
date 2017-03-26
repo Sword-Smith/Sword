@@ -122,6 +122,7 @@ ppEvm instruction = case instruction of
     DELEGATECALL -> "f4"
     SELFDESTRUCT -> "ff"
     THROW        -> "fe"
+    i            -> show i -- DEVFIX: MAKE DEBUGGING "GREAT" AGAIN
 
 getSizeOfOpcodeList :: [EvmOpcode] -> Integer
 getSizeOfOpcodeList xs = foldl (+) 0 (map getOpcodeSize xs)
@@ -198,9 +199,10 @@ evmCompile c =
     contractHeader = getContractHeader
     execute        = getExecute c
     selfdestruct   = getSelfdestruct
+    cancel         = getCancel c
   in
     -- The addresses of the constructor run are different from runs when DC is on BC
-    linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute ++ selfdestruct)
+    linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute ++ selfdestruct ++ cancel)
 
 
 -- Once the values have been placed in storage, the CODECOPY opcode should
@@ -305,7 +307,7 @@ getContractHeader =
 -- balances (through approve) will not work.
 getCancel :: IntermediateContract -> [EvmOpcode]
 getCancel (IntermediateContract tcs) =
-  [ JUMPDESTFROM "cancel" ]
+  [ JUMPDESTFROM "cancel_method" ]
   
 
 -- Returns the code for executing all tcalls in this IntermediateContract
