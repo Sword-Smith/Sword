@@ -197,9 +197,11 @@ evmCompile c =
     codecopy       = getCodeCopy constructor (contractHeader ++ execute)
     contractHeader = getContractHeader
     execute        = getExecute c
+    selfdestruct   = getSelfdestruct
   in
     -- The addresses of the constructor run are different from runs when DC is on BC
-    linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute)
+    linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute ++ selfdestruct)
+
 
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
@@ -309,18 +311,10 @@ getCancel (IntermediateContract tcs) =
 -- Returns the code for executing all tcalls in this IntermediateContract
 getExecute :: IntermediateContract -> [EvmOpcode]
 getExecute (IntermediateContract tcs) =
-  let
-    -- DEVFIX: suicide must also call releaseApproval
-    suicide = [ JUMPDESTFROM "suicide",
-                CALLER,
-                SELFDESTRUCT,
-                STOP ]
-  in
     (JUMPDESTFROM "execute_method") :
     (getExecuteH tcs 0) ++
     -- Prevent suicide from running after each call
-    [STOP] ++
-    suicide
+    [STOP]
 
 getExecuteH :: [TransferCall] -> Integer -> [EvmOpcode]
 getExecuteH (tc:tcs) i = (getExecuteHH tc i) ++ (getExecuteH tcs (i + 1))
@@ -417,7 +411,7 @@ getExecuteHH tc transferCounter =
                            XOR,
                            DUP1,
                            ISZERO,
-                           JUMPITO "suicide",
+                           JUMPITO "selfdestruct",
                            PUSH4 $ getStorageAddress Executed,
                            SSTORE ]
     -- setTransferCallIsExecuted = [  ]
@@ -437,7 +431,11 @@ getExecuteHH tc transferCounter =
     updateExecutedWord ++
     functionEndLabel
 
-
+getSelfdestruct :: [EvmOpcode]
+getSelfdestruct = [ JUMPDESTFROM "selfdestruct",
+                    CALLER,
+                    SELFDESTRUCT,
+                    STOP ]
 
 
 
