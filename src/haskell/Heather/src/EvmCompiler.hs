@@ -120,7 +120,7 @@ ppEvm instruction = case instruction of
     CALLCODE     -> "f2"
     RETURN       -> "f3"
     DELEGATECALL -> "f4"
-    SUICIDE      -> "ff"
+    SELFDESTRUCT -> "ff"
     THROW        -> "fe"
 
 getSizeOfOpcodeList :: [EvmOpcode] -> Integer
@@ -313,7 +313,7 @@ getExecute (IntermediateContract tcs) =
     -- DEVFIX: suicide must also call releaseApproval
     suicide = [ JUMPDESTFROM "suicide",
                 CALLER,
-                SUICIDE,
+                SELFDESTRUCT,
                 STOP ]
   in
     (JUMPDESTFROM "execute_method") :
