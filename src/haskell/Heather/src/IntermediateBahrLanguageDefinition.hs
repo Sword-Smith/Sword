@@ -7,6 +7,6 @@ data IntermediateContract = IntermediateContract [TransferCall] deriving (Show, 
 data TransferCall = TransferCall { _amount       :: Integer,
                                    _delay        :: Integer,
                                    _tokenAddress :: Address,
-                                   _to           :: Address,
-                                   _from         :: Address
+                                   _from         :: Address,
+                                   _to           :: Address
 } deriving (Show, Eq)
