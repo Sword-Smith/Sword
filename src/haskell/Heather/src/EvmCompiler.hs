@@ -120,7 +120,7 @@ ppEvm instruction = case instruction of
     CALLCODE     -> "f2"
     RETURN       -> "f3"
     DELEGATECALL -> "f4"
-    SUICIDE      -> "ff"
+    SELFDESTRUCT -> "ff"
     THROW        -> "fe"
 
 getSizeOfOpcodeList :: [EvmOpcode] -> Integer
@@ -293,16 +293,16 @@ getContractHeader =
 getExecute :: IntermediateContract -> [EvmOpcode]
 getExecute (IntermediateContract tcs) =
   let
-    suicide = [ JUMPDESTFROM "suicide",
-                CALLER,
-                SUICIDE,
-                STOP ]
+    selfdestruct = [ JUMPDESTFROM "selfdestruct",
+                     CALLER,
+                     SELFDESTRUCT,
+                     STOP ]
   in
     (JUMPDESTFROM "execute_method") :
     (getExecuteH tcs 0) ++
-    -- Prevent suicide from running after each call
+    -- Prevent selfdestruct from running after each call
     [STOP] ++
-    suicide
+    selfdestruct
 
 getExecuteH :: [TransferCall] -> Integer -> [EvmOpcode]
 getExecuteH (tc:tcs) i = (getExecuteHH tc i) ++ (getExecuteH tcs (i + 1))
@@ -390,7 +390,7 @@ getExecuteHH tc transferCounter =
                          JUMPITO ("ret_val" ++ (show transferCounter)),
                          THROW, -- Is it correct to throw here??
                          JUMPDESTFROM ("ret_val" ++ (show transferCounter)) ]
-    -- Flip correct bit from one to zero and call suicide if all tcalls compl.
+    -- Flip correct bit from one to zero and call selfdestruct if all tcalls compl.
     updateExecutedWord = [ PUSH4 $ getStorageAddress Executed,
                            SLOAD,
                            PUSH1 $ fromInteger transferCounter,
@@ -399,7 +399,7 @@ getExecuteHH tc transferCounter =
                            XOR,
                            DUP1,
                            ISZERO,
-                           JUMPITO "suicide",
+                           JUMPITO "selfdestruct",
                            PUSH4 $ getStorageAddress Executed,
                            SSTORE ]
     -- setTransferCallIsExecuted = [  ]
