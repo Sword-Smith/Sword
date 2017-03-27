@@ -79,5 +79,5 @@ data EvmOpcode = STOP
                | CALLCODE
                | RETURN
                | DELEGATECALL
-               | SELFDESTRUCT
+               | SUICIDE
                | THROW deriving (Eq, Show)

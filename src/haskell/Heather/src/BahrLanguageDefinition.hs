@@ -11,16 +11,10 @@ data Contract = Transfer { tokenAddress_ :: Address,
                        contractB_ :: Contract
                      }
               | Translate {
-                  delay_ :: Time,
+                  delay_ :: Integer,
                   contract_ :: Contract
                   } deriving (Show, Eq)
 
 type TokenSymbol = String
 -- DEVFIX: Better choice for type is decided later.
 type Address = String
-
-data Time  = Now
-           | Minutes Integer
-           | Hours Integer
-           | Days Integer
-           | Weeks Integer deriving (Show, Eq)

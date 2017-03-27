@@ -5,9 +5,14 @@ import EvmCompiler as EVMC
 import IntermediateCompiler as IMC
 import BahrParser as BP
 
+import Control.Applicative
 import Data.Aeson
+import Data.Aeson.Text
+import Data.Array
+--import qualified Data.Text.Lazy.IO as I (writeFile)
 import qualified Data.ByteString.Lazy as BS
 import Data.List.Split
+import GHC.Exts
 import GHC.Generics
 import System.Directory
 import System.Environment
@@ -70,9 +75,8 @@ getAbiDefinition =
   let
     constructor = Just $ AbiConstructorDefinition False "constructor" []
     execute     = AbiFunctionDefinition "execute" "function" False [] [] False
-    cancel      = AbiFunctionDefinition "cancel" "function" False  [] [] False
   in
-    AbiDefinition constructor [execute, cancel]
+    AbiDefinition constructor [execute]
 
 -- This function writes an ABI definition of the contract.
 writeAbiDef :: String -> IO()

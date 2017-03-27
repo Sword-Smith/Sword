@@ -120,9 +120,8 @@ ppEvm instruction = case instruction of
     CALLCODE     -> "f2"
     RETURN       -> "f3"
     DELEGATECALL -> "f4"
-    SELFDESTRUCT -> "ff"
+    SUICIDE      -> "ff"
     THROW        -> "fe"
-    i            -> show i -- DEVFIX: MAKE DEBUGGING "GREAT" AGAIN
 
 getSizeOfOpcodeList :: [EvmOpcode] -> Integer
 getSizeOfOpcodeList xs = foldl (+) 0 (map getOpcodeSize xs)
@@ -198,12 +197,9 @@ evmCompile c =
     codecopy       = getCodeCopy constructor (contractHeader ++ execute)
     contractHeader = getContractHeader
     execute        = getExecute c
-    selfdestruct   = getSelfdestruct
-    cancel         = getCancel c
   in
     -- The addresses of the constructor run are different from runs when DC is on BC
-    linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute ++ selfdestruct ++ cancel)
-
+    linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute)
 
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
@@ -286,37 +282,27 @@ getContractHeader =
                        CALLDATALOAD,
                        PUSH32 (0xffffffff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
                        AND,
-                       DUP1,
                        PUSH32 $ (getFunctionSignature "execute()" , 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
                        EVM_EQ,
                        JUMPITO "execute_method",
-                       DUP1,
-                       PUSH32 $ (getFunctionSignature "cancel()" , 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
-                       JUMPITO "cancel_method",
                        THROW]
   in
     (getCheckNoValue "Contract_Header") ++ switchStatement
 
--- How should this be made.
--- We prob. need to go through all transfercalls.
--- Each transfer call will have a from address and a token address.
--- We need to check that allowance returns the correct number.
--- What is the correct number? It is the maximum value that a tcall can transfer.
--- How do we determine the maximum number that a tcall should be able to transfer?
--- It must be known at compile time, otherwise our infrastructure of locking
--- balances (through approve) will not work.
-getCancel :: IntermediateContract -> [EvmOpcode]
-getCancel (IntermediateContract tcs) =
-  [ JUMPDESTFROM "cancel_method" ]
-  
-
 -- Returns the code for executing all tcalls in this IntermediateContract
 getExecute :: IntermediateContract -> [EvmOpcode]
 getExecute (IntermediateContract tcs) =
+  let
+    suicide = [ JUMPDESTFROM "suicide",
+                CALLER,
+                SUICIDE,
+                STOP ]
+  in
     (JUMPDESTFROM "execute_method") :
     (getExecuteH tcs 0) ++
     -- Prevent suicide from running after each call
-    [STOP]
+    [STOP] ++
+    suicide
 
 getExecuteH :: [TransferCall] -> Integer -> [EvmOpcode]
 getExecuteH (tc:tcs) i = (getExecuteHH tc i) ++ (getExecuteH tcs (i + 1))
@@ -413,7 +399,7 @@ getExecuteHH tc transferCounter =
                            XOR,
                            DUP1,
                            ISZERO,
-                           JUMPITO "selfdestruct",
+                           JUMPITO "suicide",
                            PUSH4 $ getStorageAddress Executed,
                            SSTORE ]
     -- setTransferCallIsExecuted = [  ]
@@ -433,11 +419,7 @@ getExecuteHH tc transferCounter =
     updateExecutedWord ++
     functionEndLabel
 
-getSelfdestruct :: [EvmOpcode]
-getSelfdestruct = [ JUMPDESTFROM "selfdestruct",
-                    CALLER,
-                    SELFDESTRUCT,
-                    STOP ]
+
 
 
 
