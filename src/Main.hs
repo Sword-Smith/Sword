@@ -5,17 +5,14 @@ import EvmCompiler as EVMC
 import IntermediateCompiler as IMC
 import BahrParser as BP
 
-import Control.Applicative
 import Data.Aeson
-import Data.Aeson.Text
-import Data.Array
 --import qualified Data.Text.Lazy.IO as I (writeFile)
 import qualified Data.ByteString.Lazy as BS
 import Data.List.Split
-import GHC.Exts
 import GHC.Generics
 import System.Directory
 import System.Environment
+import System.Exit
 
 data AbiVarDefinition = AbiVarDefinition {
     name_ :: String
@@ -79,36 +76,63 @@ getAbiDefinition =
     AbiDefinition constructor [execute]
 
 -- This function writes an ABI definition of the contract.
-writeAbiDef :: String -> IO()
-writeAbiDef fBase = do
+writeAbiDef :: String -> String -> IO()
+writeAbiDef outdir bn = do
   let abi = getAbiDefinition
-  let fn  = "out/" ++ fBase ++ ".bahr:" ++ fBase ++ ".abi"
-  putStrLn $ "Writing to" ++ fn
+  let fn  = outdir ++ "/" ++ bn ++ ".abi"
+  putStrLn $ "Writing to " ++ fn
   BS.writeFile fn (encode abi)
 
+-- (outdir, bn)
+args2fileInfo :: [String] -> (String, String)
+args2fileInfo (fp:[]) =
+  let
+    fPath = head (splitOn ".bahr" fp)
+    bn    = last (splitOn "/" fPath)
+  in
+    ("", bn)
+args2fileInfo ["-o", outdir, fp] =
+  let
+    fPath = head (splitOn ".bahr" fp)
+    bn    = last (splitOn "/" fPath)
+  in
+    (outdir, bn)
+args2fileInfo _ = ("", "")
+
+-- We would like to call 'Main -o "$outdir" <file>'
 main :: IO ()
 main = do
   files <- getArgs
-  case files of
-    f:[] -> do
-      cdirp <- getCurrentDirectory
-      let cdir = last (splitOn "/" cdirp)
-      if cdir /= "eth2017diku"
-        then do putStrLn "Main must be run from root dir of its repo"
-        else do
-        putStrLn ("Reading from file " ++ f)
-        let fPath   = head (splitOn ".bahr" f)
-        let fBase   = last (splitOn "/" fPath)
-        -- binPath should prob. be dep. on if testing is running or not
-        let binPath = "out/" ++ fBase ++ ".bin"
-        source <- readFile f
-        let parseRes = BP.parseWrap source
-        case parseRes of
-          Left err  -> putStrLn ("Parse error! " ++ (show err))
-          -- DEVFIX: The error handling could probably be better here
-          -- Do we need checks after the parser is successful?
-          Right ast -> do
-            putStrLn ("Writing to file " ++ binPath)
-            writeAbiDef fBase
-            writeFile binPath (intermediateToOpcodes $ intermediateCompile ast)
-    _    -> putStrLn "Usage: Main <source file name.bahr>"
+  let (outdir, bn) = args2fileInfo files
+  case bn of
+    "" -> do
+      putStrLn "Usage: Main [-o outdir] <file name>"
+      exitFailure
+    _ -> do
+      case outdir of
+        "" -> do
+          writeDir <- getCurrentDirectory
+          let binPath = writeDir ++ "/" ++ bn ++ ".bin"
+          source <- readFile $ bn ++ ".bahr"
+          let parseRes = BP.parseWrap source
+          case parseRes of
+            Left err  -> putStrLn ("Parse error! " ++ (show err))
+            -- DEVFIX: The error handling could probably be better here
+            -- Do we need checks after the parser is successful?
+            Right ast -> do
+              putStrLn ("Writing to file " ++ binPath)
+              writeAbiDef writeDir bn
+              writeFile binPath (intermediateToOpcodes $ intermediateCompile ast)
+        _ -> do
+          let binPath = outdir ++ "/" ++ bn ++ ".bin"
+          source <- readFile $ bn ++ ".bahr"
+          let parseRes = BP.parseWrap source
+          case parseRes of
+            Left err  -> putStrLn ("Parse error! " ++ (show err))
+            -- DEVFIX: The error handling could probably be better here
+            -- Do we need checks after the parser is successful?
+            Right ast -> do
+              putStrLn ("Writing to file " ++ binPath)
+              writeAbiDef outdir bn
+              writeFile binPath (intermediateToOpcodes $ intermediateCompile ast)
+
