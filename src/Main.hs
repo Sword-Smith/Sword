@@ -83,27 +83,27 @@ writeAbiDef outdir bn = do
   putStrLn $ "Writing to " ++ fn
   BS.writeFile fn (encode abi)
 
--- (outdir, bn)
-args2fileInfo :: [String] -> (String, String)
+-- (outdir, bn, fp)
+args2fileInfo :: [String] -> (String, String, String)
 args2fileInfo (fp:[]) =
   let
     fPath = head (splitOn ".bahr" fp)
     bn    = last (splitOn "/" fPath)
   in
-    ("", bn)
+    ("", bn, fp)
 args2fileInfo ["-o", outdir, fp] =
   let
     fPath = head (splitOn ".bahr" fp)
     bn    = last (splitOn "/" fPath)
   in
-    (outdir, bn)
-args2fileInfo _ = ("", "")
+    (outdir, bn, fp)
+args2fileInfo _ = ("", "", "")
 
 -- We would like to call 'Main -o "$outdir" <file>'
 main :: IO ()
 main = do
   files <- getArgs
-  let (outdir, bn) = args2fileInfo files
+  let (outdir, bn, fp) = args2fileInfo files
   case bn of
     "" -> do
       putStrLn "Usage: Main [-o outdir] <file name>"
@@ -113,7 +113,7 @@ main = do
         "" -> do
           writeDir <- getCurrentDirectory
           let binPath = writeDir ++ "/" ++ bn ++ ".bin"
-          source <- readFile $ bn ++ ".bahr"
+          source <- readFile fp
           let parseRes = BP.parseWrap source
           case parseRes of
             Left err  -> putStrLn ("Parse error! " ++ (show err))
@@ -125,7 +125,7 @@ main = do
               writeFile binPath (intermediateToOpcodes $ intermediateCompile ast)
         _ -> do
           let binPath = outdir ++ "/" ++ bn ++ ".bin"
-          source <- readFile $ bn ++ ".bahr"
+          source <- readFile fp
           let parseRes = BP.parseWrap source
           case parseRes of
             Left err  -> putStrLn ("Parse error! " ++ (show err))
