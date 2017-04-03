@@ -17,6 +17,7 @@ import Test.HUnit
 
 -- [(token, owner/from address) => amount]
 type CancelMap = Map.Map (Address,Address) Integer
+type CancelMapElement = ((Address,Address), Integer)
 
 -- ATM, "Executed" does not have an integer. If it should be able to handle more
 -- than 256 tcalls, it must take an integer also.
@@ -201,10 +202,10 @@ evmCompile c =
     codecopy       = getCodeCopy constructor (contractHeader ++ execute)
     contractHeader = getContractHeader
     execute        = getExecute c -- also contains selfdestruct when contract is fully executed
-    --cancel         = getCancel c
+    cancel         = getCancel c
   in
     -- The addresses of the constructor run are different from runs when DC is on BC
-    linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute)
+    linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute ++ cancel)
 
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
@@ -425,7 +426,9 @@ getExecuteHH tc transferCounter =
     functionEndLabel
 
 
---getCancel :: IntermediateContract -> [EvmOpcode]
+getCancel :: IntermediateContract -> [EvmOpcode]
+getCancel = concatMap cancelMapElementToAllowanceCall . Map.assocs . intermediateContract2CancelMap
+
 intermediateContract2CancelMap :: IntermediateContract -> CancelMap
 intermediateContract2CancelMap (IntermediateContract tcalls) =
   let
@@ -438,6 +441,54 @@ intermediateContract2CancelMap (IntermediateContract tcalls) =
       Nothing  -> Map.insert (_tokenAddress tcall, _from tcall) (_amount tcall) cm
   in
   intermediateContract2CancelMapH Map.empty tcalls
+
+-- DEVFIX: Poss. optimization: the token address can be read from storage, does not
+-- have to be stored as EVM
+cancelMapElementToAllowanceCall :: CancelMapElement -> [EvmOpcode]
+cancelMapElementToAllowanceCall ((tokenAddress,ownerAddress),amount) =
+  let
+    storeMethodArgsToMem =
+      let
+        storeFunctionSignature = [ PUSH4 $ getFunctionSignature "allowance(address,address)",
+                                   PUSH32 (0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
+                                   MUL,
+                                   PUSH1 0x0,
+                                   MSTORE ]
+        storeOwnerAddress      = [ PUSH32 $ address2w256 ownerAddress,
+                                   PUSH1 0x4,
+                                   MSTORE]
+        storeSpenderAddress    = [ ADDRESS,
+                                   PUSH1 0x24,
+                                   MSTORE ]
+      in
+        storeFunctionSignature ++ storeOwnerAddress ++ storeSpenderAddress
+    pushOutSize      = [PUSH1 0x20]
+    pushOutOffset    = [PUSH1 0x0] -- assumes memory is empty/existing data not used after this call
+    pushInSize       = [PUSH1 0x44]
+    pushInOffset     = [PUSH1 0x0] -- DEVFIX: Add args to memory
+    pushValue        = [PUSH1 0x0]
+    pushTokenAddress = [PUSH32 $ address2w256 tokenAddress]
+    pushGasAmount    = [PUSH1 0x32,
+                        GAS,
+                        SUB]
+    call             = [CALL]
+    -- Check exit code!
+    checkReturnValue = [PUSH1 0x0,
+                        MLOAD,
+                        PUSH32 $ integer2w256 amount,
+                        EVM_GT,
+                        JUMPITO "selfdestruct"] -- Maybe this is wrong, since release does not happen
+  in
+    storeMethodArgsToMem ++
+    pushOutSize ++
+    pushOutOffset ++
+    pushInSize ++
+    pushInOffset ++
+    pushValue ++
+    pushTokenAddress ++
+    pushGasAmount ++
+    call ++
+    checkReturnValue
 
 cancelMap2Evm :: CancelMap -> [EvmOpcode]
 cancelMap2Evm cm = undefined
