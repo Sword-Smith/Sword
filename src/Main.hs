@@ -72,8 +72,9 @@ getAbiDefinition =
   let
     constructor = Just $ AbiConstructorDefinition False "constructor" []
     execute     = AbiFunctionDefinition "execute" "function" False [] [] False
+    cancel      = AbiFunctionDefinition "cancel" "function" False [] [] False
   in
-    AbiDefinition constructor [execute]
+    AbiDefinition constructor [execute, cancel]
 
 -- This function writes an ABI definition of the contract.
 writeAbiDef :: String -> String -> IO()

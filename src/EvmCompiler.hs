@@ -288,9 +288,13 @@ getContractHeader =
                        CALLDATALOAD,
                        PUSH32 (0xffffffff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
                        AND,
+                       DUP1,
                        PUSH32 $ (getFunctionSignature "execute()" , 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
                        EVM_EQ,
                        JUMPITO "execute_method",
+                       PUSH32 $ (getFunctionSignature "cancel()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
+                       EVM_EQ,
+                       JUMPITO "cancel_method",
                        THROW]
   in
     (getCheckNoValue "Contract_Header") ++ switchStatement
@@ -425,9 +429,11 @@ getExecuteHH tc transferCounter =
     updateExecutedWord ++
     functionEndLabel
 
-
 getCancel :: IntermediateContract -> [EvmOpcode]
-getCancel = concatMap cancelMapElementToAllowanceCall . Map.assocs . intermediateContract2CancelMap
+getCancel ic = [JUMPDESTFROM "cancel_method"] ++ getCancelH ic
+
+getCancelH :: IntermediateContract -> [EvmOpcode]
+getCancelH = concatMap cancelMapElementToAllowanceCall . Map.assocs . intermediateContract2CancelMap
 
 intermediateContract2CancelMap :: IntermediateContract -> CancelMap
 intermediateContract2CancelMap (IntermediateContract tcalls) =
@@ -489,10 +495,6 @@ cancelMapElementToAllowanceCall ((tokenAddress,ownerAddress),amount) =
     pushGasAmount ++
     call ++
     checkReturnValue
-
-cancelMap2Evm :: CancelMap -> [EvmOpcode]
-cancelMap2Evm cm = undefined
-
 
 
 
