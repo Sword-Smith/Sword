@@ -8,11 +8,15 @@ import IntermediateCompiler
 
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8(pack)
+import qualified Data.Map.Strict as Map
 import Data.Word
 import Text.Printf (printf)
 import Crypto.Hash
 
 import Test.HUnit
+
+-- [(token, owner/from address) => amount]
+type CancelMap = Map.Map (Address,Address) Integer
 
 -- ATM, "Executed" does not have an integer. If it should be able to handle more
 -- than 256 tcalls, it must take an integer also.
@@ -196,7 +200,8 @@ evmCompile c =
     constructor    = getConstructor c
     codecopy       = getCodeCopy constructor (contractHeader ++ execute)
     contractHeader = getContractHeader
-    execute        = getExecute c
+    execute        = getExecute c -- also contains selfdestruct when contract is fully executed
+    --cancel         = getCancel c
   in
     -- The addresses of the constructor run are different from runs when DC is on BC
     linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute)
@@ -420,16 +425,22 @@ getExecuteHH tc transferCounter =
     functionEndLabel
 
 
+--getCancel :: IntermediateContract -> [EvmOpcode]
+intermediateContract2CancelMap :: IntermediateContract -> CancelMap
+intermediateContract2CancelMap (IntermediateContract tcalls) =
+  let
+    intermediateContract2CancelMapH :: CancelMap -> [TransferCall] -> CancelMap
+    intermediateContract2CancelMapH cm (tcall:tcalls) = intermediateContract2CancelMapH (intermediateContract2CancelMapHH tcall cm) tcalls
+    intermediateContract2CancelMapH cm [] = cm
+    intermediateContract2CancelMapHH :: TransferCall -> CancelMap -> CancelMap
+    intermediateContract2CancelMapHH tcall cm = case (Map.lookup (_tokenAddress tcall, _from tcall) cm) of
+      (Just _) -> Map.adjust (_amount tcall +) (_tokenAddress tcall, _from tcall) cm
+      Nothing  -> Map.insert (_tokenAddress tcall, _from tcall) (_amount tcall) cm
+  in
+  intermediateContract2CancelMapH Map.empty tcalls
 
-
-
-
-
-
-
-
-
-
+cancelMap2Evm :: CancelMap -> [EvmOpcode]
+cancelMap2Evm cm = undefined
 
 
 
