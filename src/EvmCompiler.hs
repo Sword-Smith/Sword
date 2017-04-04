@@ -249,7 +249,7 @@ placeValsInStorage (IntermediateContract tcs) =
       let
         placeValsInStorageHH :: Integer -> TransferCall -> [EvmOpcode]
         placeValsInStorageHH i tcall =
-            [ PUSH32 $ integer2w256 (_amount tcall),
+            [ PUSH32 $ integer2w256 (_maxAmount tcall),
               PUSH4 $ getStorageAddress $ Amount i,
               SSTORE,
               PUSH32 $ integer2w256 (_delay tcall),
@@ -443,15 +443,15 @@ intermediateContract2CancelMap (IntermediateContract tcalls) =
     intermediateContract2CancelMapH cm [] = cm
     intermediateContract2CancelMapHH :: TransferCall -> CancelMap -> CancelMap
     intermediateContract2CancelMapHH tcall cm = case (Map.lookup (_tokenAddress tcall, _from tcall) cm) of
-      (Just _) -> Map.adjust (_amount tcall +) (_tokenAddress tcall, _from tcall) cm
-      Nothing  -> Map.insert (_tokenAddress tcall, _from tcall) (_amount tcall) cm
+      (Just _) -> Map.adjust (_maxAmount tcall +) (_tokenAddress tcall, _from tcall) cm
+      Nothing  -> Map.insert (_tokenAddress tcall, _from tcall) (_maxAmount tcall) cm
   in
   intermediateContract2CancelMapH Map.empty tcalls
 
 -- DEVFIX: Poss. optimization: the token address can be read from storage, does not
 -- have to be stored as EVM
 cancelMapElementToAllowanceCall :: CancelMapElement -> [EvmOpcode]
-cancelMapElementToAllowanceCall ((tokenAddress,ownerAddress),amount) =
+cancelMapElementToAllowanceCall ((tokenAddress,ownerAddress),maxAmount) =
   let
     storeMethodArgsToMem =
       let
@@ -481,7 +481,7 @@ cancelMapElementToAllowanceCall ((tokenAddress,ownerAddress),amount) =
     -- Check exit code!
     checkReturnValue = [PUSH1 0x0,
                         MLOAD,
-                        PUSH32 $ integer2w256 amount,
+                        PUSH32 $ integer2w256 maxAmount,
                         EVM_GT,
                         JUMPITO "selfdestruct"] -- Maybe this is wrong, since release does not happen
   in

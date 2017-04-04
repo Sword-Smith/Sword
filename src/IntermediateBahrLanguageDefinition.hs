@@ -4,7 +4,7 @@ import BahrLanguageDefinition
 
 data IntermediateContract = IntermediateContract [TransferCall] deriving (Show, Eq)
 
-data TransferCall = TransferCall { _amount       :: Integer,
+data TransferCall = TransferCall { _maxAmount    :: Integer,
                                    _delay        :: Integer,
                                    _tokenAddress :: Address,
                                    _from         :: Address,
