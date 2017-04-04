@@ -199,7 +199,7 @@ evmCompile :: IntermediateContract -> [EvmOpcode]
 evmCompile c =
   let
     constructor    = getConstructor c
-    codecopy       = getCodeCopy constructor (contractHeader ++ execute)
+    codecopy       = getCodeCopy constructor (contractHeader ++ execute ++ cancel)
     contractHeader = getContractHeader
     execute        = getExecute c -- also contains selfdestruct when contract is fully executed
     cancel         = getCancel c
