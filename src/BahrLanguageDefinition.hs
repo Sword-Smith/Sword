@@ -4,7 +4,8 @@ data Contract = Transfer { tokenAddress_ :: Address,
                            from_         :: Address,
                            to_           :: Address
                          }
-              | Scale { scaleFactor_ :: Integer,
+              | Scale { maxFactor_   :: Integer,
+                        scaleFactor_ :: Expression,
                         contract_    :: Contract
                       }
               | Both { contractA_ :: Contract,
@@ -15,6 +16,8 @@ data Contract = Transfer { tokenAddress_ :: Address,
                   contract_ :: Contract
                   } deriving (Show, Eq)
 
+-- DEVFIX: The value of time units should be natural numbers, not integers
+-- Cf. Benjamin Egelund et al.
 data Time = Now
           | Seconds Integer
           | Minutes Integer
@@ -22,6 +25,10 @@ data Time = Now
           | Days Integer
           | Weeks Integer deriving (Show, Eq)
 
+data Expression = Lit Literal deriving (Show, Eq)
+
+data Literal = IntVal Integer
+             | BoolVal Bool deriving (Show, Eq)
 
 type TokenSymbol = String
 -- DEVFIX: Better choice for type is decided later.

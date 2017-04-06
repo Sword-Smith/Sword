@@ -5,8 +5,8 @@ import BahrLanguageDefinition
 
 import Test.HUnit
 
-scale :: Integer -> TransferCall -> TransferCall
-scale factor transferCall = transferCall { _maxAmount = _maxAmount transferCall * factor }
+scale :: Integer -> Expression -> TransferCall -> TransferCall
+scale maxFactor factorExp transferCall = transferCall { _maxAmount = _maxAmount transferCall * maxFactor, _amount = IMultExp (_amount transferCall) (intermediateCompileExp factorExp) }
 
 translate :: Integer -> TransferCall -> TransferCall
 translate seconds transferCall = transferCall { _delay = _delay transferCall + seconds }
@@ -14,9 +14,13 @@ translate seconds transferCall = transferCall { _delay = _delay transferCall + s
 intermediateCompile :: Contract -> IntermediateContract
 intermediateCompile = IntermediateContract . getTransferCalls
 
+intermediateCompileExp :: Expression -> IntermediateExpression
+intermediateCompileExp (Lit (IntVal i))  = ILitExp $ IIntVal i
+intermediateCompileExp (Lit (BoolVal b)) = ILitExp $ IBoolVal b
+
 getTransferCalls :: Contract -> [TransferCall]
-getTransferCalls (Transfer sym from to) = [TransferCall 1 0 sym from to]
-getTransferCalls (Scale factor contract ) = map (scale factor) (getTransferCalls contract)
+getTransferCalls (Transfer sym from to) = [TransferCall 1 (ILitExp (IIntVal 1)) 0 sym from to]
+getTransferCalls (Scale maxFactor factorExp contract ) = map (scale maxFactor factorExp) (getTransferCalls contract)
 getTransferCalls (Both contractA contractB) = getTransferCalls contractA ++ getTransferCalls contractB
 getTransferCalls (Translate time contract ) = map (translate (time2Seconds time)) (getTransferCalls contract)
 

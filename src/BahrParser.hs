@@ -65,11 +65,13 @@ scaleParser :: GenParser Char st Contract
 scaleParser = do
     string "scale"
     symbol "("
-    factor <- getInt
+    maxFactor <- getInt
+    symbol ","
+    factorExp <- getExpression
     symbol ","
     contract <- contractParserH
     symbol ")"
-    return $ Scale factor contract
+    return $ Scale maxFactor factorExp contract
 
 bothParser :: GenParser Char st Contract
 bothParser = do
@@ -81,7 +83,30 @@ bothParser = do
   symbol ")"
   return $ Both contractA contractB
 
+-- Handle expressions
+getExpression :: GenParser Char st Expression
+getExpression = do
+  e <- getBoolean <|> getIntegerExpression
+  return $ Lit e
 
+getBoolean :: GenParser Char st Literal
+getBoolean = getTrue <|> getFalse
+
+getTrue :: GenParser Char st Literal
+getTrue = do
+  symbol "true"
+  return $ BoolVal True
+getFalse :: GenParser Char st Literal
+getFalse = do
+  symbol "false"
+  return $ BoolVal False
+
+getIntegerExpression :: GenParser Char st Literal
+getIntegerExpression = do
+  int <- getInt
+  return $ IntVal int
+
+-- Handle time
 getTime :: GenParser Char st Time
 getTime = do
   time <- getNow <|> getSeconds0 <|> getSeconds1 <|> getMinutes <|> getHours <|> getDays <|> getWeeks

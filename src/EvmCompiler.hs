@@ -23,7 +23,7 @@ type CancelMapElement = ((Address,Address), Integer)
 -- than 256 tcalls, it must take an integer also.
 data StorageType = CreationTimestamp
                  | Executed
-                 | Amount Integer
+                 | MaxAmount Integer
                  | Delay Integer
                  | TokenAddress Integer
                  | ToAddress Integer
@@ -32,7 +32,7 @@ data StorageType = CreationTimestamp
 getStorageAddress :: StorageType -> Word32
 getStorageAddress CreationTimestamp      = 0x0
 getStorageAddress Executed               = 0x20
-getStorageAddress (Amount tcCount)       = 0x40 + 0xa0 * (fromInteger tcCount)
+getStorageAddress (MaxAmount tcCount)    = 0x40 + 0xa0 * (fromInteger tcCount)
 getStorageAddress (Delay tcCount)        = 0x60 + 0xa0 * (fromInteger tcCount)
 getStorageAddress (TokenAddress tcCount) = 0x80 + 0xa0 * (fromInteger tcCount)
 getStorageAddress (ToAddress tcCount)    = 0xa0 + 0xa0 * (fromInteger tcCount)
@@ -118,6 +118,7 @@ ppEvm instruction = case instruction of
     PUSH4 w32    -> "63" ++ printf "%08x" w32
     PUSH32 (w32_0, w32_1, w32_2, w32_3, w32_4, w32_5, w32_6, w32_7 ) -> "7f" ++ printf "%08x" w32_0 ++ printf "%08x" w32_1 ++ printf "%08x" w32_2 ++ printf "%08x" w32_3 ++ printf "%08x" w32_4 ++ printf "%08x" w32_5 ++ printf "%08x" w32_6 ++ printf "%08x" w32_7
     DUP1         -> "80"
+    DUP2         -> "81"
     SWAP1        -> "90"
     LOG0         -> "a0"
     CREATE       -> "f0"
@@ -250,7 +251,7 @@ placeValsInStorage (IntermediateContract tcs) =
         placeValsInStorageHH :: Integer -> TransferCall -> [EvmOpcode]
         placeValsInStorageHH i tcall =
             [ PUSH32 $ integer2w256 (_maxAmount tcall),
-              PUSH4 $ getStorageAddress $ Amount i,
+              PUSH4 $ getStorageAddress $ MaxAmount i,
               SSTORE,
               PUSH32 $ integer2w256 (_delay tcall),
               PUSH4 $ getStorageAddress $ Delay i,
@@ -318,6 +319,18 @@ getExecuteH :: [TransferCall] -> Integer -> [EvmOpcode]
 getExecuteH (tc:tcs) i = (getExecuteHH tc i) ++ (getExecuteH tcs (i + 1))
 getExecuteH [] _ = []
 
+-- Return code that places the result of an intermediateExp in mu_s[0]
+compileIntermediateExpression :: IntermediateExpression -> [EvmOpcode]
+compileIntermediateExpression (ILitExp ilit) = compileIntermediateLiteral ilit
+compileIntermediateExpression (IMultExp ilit1 ilit2) =
+  compileIntermediateExpression ilit1 ++
+  compileIntermediateExpression ilit2 ++
+  [MUL]
+
+compileIntermediateLiteral :: ILiteral -> [EvmOpcode]
+compileIntermediateLiteral (IIntVal int) = [PUSH32 $ integer2w256 int]
+compileIntermediateLiteral _ = undefined -- false is 0x0, true is 0x1
+
 getExecuteHH :: TransferCall -> Integer -> [EvmOpcode]
 getExecuteHH tc transferCounter =
   let
@@ -366,10 +379,20 @@ getExecuteHH tc transferCounter =
                                   SLOAD,
                                   PUSH1 0x24,
                                   MSTORE]
-        storeAmountArg         = [PUSH4 $ getStorageAddress $ Amount transferCounter,
-                                  SLOAD,
-                                  PUSH1 0x44,
-                                  MSTORE]
+        -- Should take an IntermediateExpression and calculate the correct opcode
+        -- The smallest of maxAmount and exp should be stored in mem
+        storeAmountArg            = (compileIntermediateExpression ( _amount tc)) ++
+                                    [ PUSH4 $ getStorageAddress $ MaxAmount transferCounter,
+                                      SLOAD,
+                                      DUP2,
+                                      DUP2,
+                                      EVM_GT,
+                                      JUMPITO $ "use_exp_res" ++ (show transferCounter),
+                                      SWAP1,
+                                      JUMPDESTFROM $ "use_exp_res" ++ (show transferCounter),
+                                      POP,
+                                      PUSH1 0x44,
+                                      MSTORE ]
       in
         storeFunctionSignature ++
         storeFromAddressArg ++
@@ -495,7 +518,6 @@ cancelMapElementToAllowanceCall ((tokenAddress,ownerAddress),maxAmount) =
     pushGasAmount ++
     call ++
     checkReturnValue
-
 
 
 
