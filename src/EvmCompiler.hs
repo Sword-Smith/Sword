@@ -319,6 +319,7 @@ getExecuteH :: [TransferCall] -> Integer -> [EvmOpcode]
 getExecuteH (tc:tcs) i = (getExecuteHH tc i) ++ (getExecuteH tcs (i + 1))
 getExecuteH [] _ = []
 
+-- THIS IS THE ONLY PLACE IN THE COMPILER WHERE EXPRESSION ARE HANDLED
 -- Return code that places the result of an intermediateExp in mu_s[0]
 compileIntermediateExpression :: IntermediateExpression -> [EvmOpcode]
 compileIntermediateExpression (ILitExp ilit) = compileIntermediateLiteral ilit
@@ -326,6 +327,19 @@ compileIntermediateExpression (IMultExp ilit1 ilit2) =
   compileIntermediateExpression ilit1 ++
   compileIntermediateExpression ilit2 ++
   [MUL]
+compileIntermediateExpression (ISubtExp ilit1 ilit2) =
+  compileIntermediateExpression ilit1 ++
+  compileIntermediateExpression ilit2 ++
+  [SUB]
+compileIntermediateExpression (IAddiExp ilit1 ilit2) =
+  compileIntermediateExpression ilit1 ++
+  compileIntermediateExpression ilit2 ++
+  [ADD]
+compileIntermediateExpression (IDiviExp ilit1 ilit2) =
+  compileIntermediateExpression ilit1 ++
+  compileIntermediateExpression ilit2 ++
+  [DIV]
+
 
 compileIntermediateLiteral :: ILiteral -> [EvmOpcode]
 compileIntermediateLiteral (IIntVal int) = [PUSH32 $ integer2w256 int]

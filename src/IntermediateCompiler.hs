@@ -5,8 +5,9 @@ import BahrLanguageDefinition
 
 import Test.HUnit
 
+-- scale multiplies both _maxAmount integer and the _amount expression
 scale :: Integer -> Expression -> TransferCall -> TransferCall
-scale maxFactor factorExp transferCall = transferCall { _maxAmount = _maxAmount transferCall * maxFactor, _amount = IMultExp (_amount transferCall) (intermediateCompileExp factorExp) }
+scale maxFactor factorExp transferCall = transferCall { _maxAmount = _maxAmount transferCall * maxFactor, _amount = IMultExp (_amount transferCall) (iCompileExp factorExp) }
 
 translate :: Integer -> TransferCall -> TransferCall
 translate seconds transferCall = transferCall { _delay = _delay transferCall + seconds }
@@ -14,9 +15,13 @@ translate seconds transferCall = transferCall { _delay = _delay transferCall + s
 intermediateCompile :: Contract -> IntermediateContract
 intermediateCompile = IntermediateContract . getTransferCalls
 
-intermediateCompileExp :: Expression -> IntermediateExpression
-intermediateCompileExp (Lit (IntVal i))  = ILitExp $ IIntVal i
-intermediateCompileExp (Lit (BoolVal b)) = ILitExp $ IBoolVal b
+iCompileExp :: Expression -> IntermediateExpression
+iCompileExp (Lit (IntVal i))  = ILitExp $ IIntVal i
+iCompileExp (Lit (BoolVal b)) = ILitExp $ IBoolVal b
+iCompileExp (MultExp e1 e2) = IMultExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (SubtExp e1 e2) = ISubtExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (AddiExp e1 e2) = IAddiExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (DiviExp e1 e2) = IDiviExp (iCompileExp e1) (iCompileExp e2)
 
 getTransferCalls :: Contract -> [TransferCall]
 getTransferCalls (Transfer sym from to) = [TransferCall 1 (ILitExp (IIntVal 1)) 0 sym from to]

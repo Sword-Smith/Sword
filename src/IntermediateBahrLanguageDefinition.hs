@@ -13,7 +13,10 @@ data TransferCall = TransferCall { _maxAmount    :: Integer,
 } deriving (Show, Eq)
 
 data IntermediateExpression = ILitExp ILiteral
-                            | IMultExp IntermediateExpression IntermediateExpression deriving (Show, Eq)
+                            | IMultExp IntermediateExpression IntermediateExpression
+                            | ISubtExp IntermediateExpression IntermediateExpression
+                            | IAddiExp IntermediateExpression IntermediateExpression
+                            | IDiviExp IntermediateExpression IntermediateExpression deriving (Show, Eq)
 
 data ILiteral = IIntVal Integer
               | IBoolVal Bool deriving (Show, Eq)
