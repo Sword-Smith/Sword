@@ -86,25 +86,70 @@ bothParser = do
 -- Handle expressions
 getExpression :: GenParser Char st Expression
 getExpression = do
-  e <- getBoolean <|> getIntegerExpression
-  return $ Lit e
+  tv <- mulExp
+  v <- plusExpOpt tv
+  return v
 
-getBoolean :: GenParser Char st Literal
-getBoolean = getTrue <|> getFalse
+plusExpOpt :: Expression -> GenParser Char st Expression
+plusExpOpt inval = do
+  plusBranch inval <|> minusBranch inval <|> return inval
 
-getTrue :: GenParser Char st Literal
-getTrue = do
+plusBranch :: Expression -> GenParser Char st Expression
+plusBranch inval = do
+  symbol "+"
+  tv <- mulExp
+  v <- plusExpOpt (AddiExp inval tv)
+  return v
+
+minusBranch :: Expression -> GenParser Char st Expression
+minusBranch inval = do
+  symbol "-"
+  tv <- mulExp
+  v <- plusExpOpt (SubtExp inval tv)
+  return v
+
+mulExp :: GenParser Char st Expression
+mulExp = do
+  tv <- leafExp
+  v  <- mulExpOpt tv
+  return v
+
+mulExpOpt :: Expression -> GenParser Char st Expression
+mulExpOpt inval = mulBranch inval <|> return inval
+
+mulBranch :: Expression -> GenParser Char st Expression
+mulBranch inval = do
+  symbol "*"
+  tv <- leafExp
+  v  <- mulExpOpt (MultExp inval tv)
+  return v
+
+divBranch :: Expression -> GenParser Char st Expression
+divBranch inval = do
+  symbol "/"
+  tv <- leafExp
+  v <- mulExpOpt (DiviExp inval tv)
+  return $ v
+
+leafExp :: GenParser Char st Expression
+leafExp = booleanLeaf <|> integerLeaf
+
+booleanLeaf :: GenParser Char st Expression
+booleanLeaf = trueLeaf <|> falseLeaf
+
+trueLeaf :: GenParser Char st Expression
+trueLeaf = do
   symbol "true"
-  return $ BoolVal True
-getFalse :: GenParser Char st Literal
-getFalse = do
+  return $ Lit $ BoolVal True
+falseLeaf :: GenParser Char st Expression
+falseLeaf = do
   symbol "false"
-  return $ BoolVal False
+  return $ Lit $ BoolVal False
 
-getIntegerExpression :: GenParser Char st Literal
-getIntegerExpression = do
+integerLeaf :: GenParser Char st Expression
+integerLeaf = do
   int <- getInt
-  return $ IntVal int
+  return $ Lit $ IntVal int
 
 -- Handle time
 getTime :: GenParser Char st Time

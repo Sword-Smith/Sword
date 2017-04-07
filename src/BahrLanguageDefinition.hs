@@ -25,7 +25,11 @@ data Time = Now
           | Days Integer
           | Weeks Integer deriving (Show, Eq)
 
-data Expression = Lit Literal deriving (Show, Eq)
+data Expression = Lit Literal
+                | MultExp Expression Expression
+                | SubtExp Expression Expression
+                | AddiExp Expression Expression
+                | DiviExp Expression Expression deriving (Show, Eq)
 
 data Literal = IntVal Integer
              | BoolVal Bool deriving (Show, Eq)
