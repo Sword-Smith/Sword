@@ -29,7 +29,11 @@ data Expression = Lit Literal
                 | MultExp Expression Expression
                 | SubtExp Expression Expression
                 | AddiExp Expression Expression
-                | DiviExp Expression Expression deriving (Show, Eq)
+                | DiviExp Expression Expression
+                | LtExp Expression Expression
+                | GtExp Expression Expression
+                | EqExp Expression Expression
+                deriving (Show, Eq)
 
 data Literal = IntVal Integer
              | BoolVal Bool deriving (Show, Eq)

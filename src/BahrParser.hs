@@ -85,7 +85,21 @@ bothParser = do
 
 -- Handle expressions
 getExpression :: GenParser Char st Expression
-getExpression = do
+getExpression = eqExp
+
+-- This ought not to work since eqBranch is non-associative
+eqExp :: GenParser Char st Expression
+eqExp = try eqBranch <|> plusExp
+
+eqBranch :: GenParser Char st Expression
+eqBranch = do
+  e0 <- plusExp
+  symbol "="
+  e1 <- plusExp
+  return $ EqExp e0 e1
+
+plusExp :: GenParser Char st Expression
+plusExp = do
   tv <- mulExp
   v <- plusExpOpt tv
   return v
