@@ -85,7 +85,39 @@ bothParser = do
 
 -- Handle expressions
 getExpression :: GenParser Char st Expression
-getExpression = eqExp
+getExpression = orExp
+
+orExp :: GenParser Char st Expression
+orExp = do
+  tv <- andExp
+  v  <- orExpOpt tv
+  return v
+
+orExpOpt :: Expression -> GenParser Char st Expression
+orExpOpt e0 = orBranch e0 <|> return e0
+
+orBranch :: Expression -> GenParser Char st Expression
+orBranch e0 = do
+  symbol "or"
+  tv <- andExp
+  v  <- orExpOpt $ OrExp e0 tv
+  return v
+
+andExp :: GenParser Char st Expression
+andExp = do
+  tv <- eqExp
+  v  <- andExpOpt tv
+  return v
+
+andExpOpt :: Expression -> GenParser Char st Expression
+andExpOpt inval = andBranch inval <|> return inval
+
+andBranch :: Expression -> GenParser Char st Expression
+andBranch e0 = do
+  symbol "and"
+  tv <- eqExp
+  v  <- andExpOpt $ AndExp e0 tv
+  return v
 
 eqExp :: GenParser Char st Expression
 eqExp = do

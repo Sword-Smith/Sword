@@ -35,6 +35,8 @@ data Expression = Lit Literal
                 | EqExp Expression Expression
                 | GtOrEqExp Expression Expression
                 | LtOrEqExp Expression Expression
+                | OrExp Expression Expression
+                | AndExp Expression Expression
                 deriving (Show, Eq)
 
 data Literal = IntVal Integer
