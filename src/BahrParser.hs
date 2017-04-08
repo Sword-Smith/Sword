@@ -114,19 +114,43 @@ ltgtExp = do
   return v
 
 ltgtExpOpt :: Expression -> GenParser Char st Expression
-ltgtExpOpt inval = ltBranch inval <|> gtBranch inval <|> return inval
+ltgtExpOpt inval = ltXXBranch inval <|>
+                   gtXXBranch inval <|>
+                   return inval
+
+ltXXBranch :: Expression -> GenParser Char st Expression
+ltXXBranch e0 = do
+  symbol "<"
+  v <- ltOrEqBranch e0 <|> ltBranch e0
+  return v
 
 ltBranch :: Expression -> GenParser Char st Expression
 ltBranch e0 = do
-  symbol "<"
   e1 <- plusExp
   return $ LtExp e0 e1
 
+ltOrEqBranch :: Expression -> GenParser Char st Expression
+ltOrEqBranch e0 = do
+  symbol "="
+  e1 <- plusExp
+  return $ LtOrEqExp e0 e1
+
+gtXXBranch :: Expression -> GenParser Char st Expression
+gtXXBranch e0 = do
+  symbol ">"
+  v <- gtOrEqBranch e0 <|> gtBranch e0
+  return v
+
 gtBranch :: Expression -> GenParser Char st Expression
 gtBranch e0 = do
-  symbol ">"
   e1 <- plusExp
   return $ GtExp e0 e1
+
+gtOrEqBranch :: Expression -> GenParser Char st Expression
+gtOrEqBranch e0 = do
+  symbol "="
+  e1 <- plusExp
+  return $ GtOrEqExp e0 e1
 
 plusExp :: GenParser Char st Expression
 plusExp = do
