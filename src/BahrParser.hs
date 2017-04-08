@@ -87,7 +87,7 @@ bothParser = do
 getExpression :: GenParser Char st Expression
 getExpression = eqExp
 
--- This ought not to work since eqBranch is non-associative
+-- DEVFIX: Remove try
 eqExp :: GenParser Char st Expression
 eqExp = try eqBranch <|> plusExp
 
