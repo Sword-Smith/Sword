@@ -87,13 +87,17 @@ bothParser = do
 getExpression :: GenParser Char st Expression
 getExpression = eqExp
 
--- DEVFIX: Remove try
 eqExp :: GenParser Char st Expression
-eqExp = try eqBranch <|> plusExp
+eqExp = do
+  tv <- plusExp
+  v  <- eqExpOpt tv
+  return v
 
-eqBranch :: GenParser Char st Expression
-eqBranch = do
-  e0 <- plusExp
+eqExpOpt :: Expression -> GenParser Char st Expression
+eqExpOpt inval = eqBranch inval <|> return inval
+
+eqBranch :: Expression -> GenParser Char st Expression
+eqBranch e0 = do
   symbol "="
   e1 <- plusExp
   return $ EqExp e0 e1
