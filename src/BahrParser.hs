@@ -89,18 +89,44 @@ getExpression = eqExp
 
 eqExp :: GenParser Char st Expression
 eqExp = do
-  tv <- plusExp
+  tv <- ltgtExp
   v  <- eqExpOpt tv
   return v
 
 eqExpOpt :: Expression -> GenParser Char st Expression
 eqExpOpt inval = eqBranch inval <|> return inval
 
+-- The eq operator is made non-associative here, I think
+-- Conferring Bahr et al 2015, it should be non-associative
+-- since its type is (real, real) -> bool
+-- But expressions such as "x = y < z" are accepted by this parser.
+-- They should be caught by the type checker, though.
 eqBranch :: Expression -> GenParser Char st Expression
 eqBranch e0 = do
   symbol "="
-  e1 <- plusExp
+  e1 <- ltgtExp
   return $ EqExp e0 e1
+
+ltgtExp :: GenParser Char st Expression
+ltgtExp = do
+  tv <- plusExp
+  v  <- ltgtExpOpt tv
+  return v
+
+ltgtExpOpt :: Expression -> GenParser Char st Expression
+ltgtExpOpt inval = ltBranch inval <|> gtBranch inval <|> return inval
+
+ltBranch :: Expression -> GenParser Char st Expression
+ltBranch e0 = do
+  symbol "<"
+  e1 <- plusExp
+  return $ LtExp e0 e1
+
+gtBranch :: Expression -> GenParser Char st Expression
+gtBranch e0 = do
+  symbol ">"
+  e1 <- plusExp
+  return $ GtExp e0 e1
 
 plusExp :: GenParser Char st Expression
 plusExp = do
