@@ -232,10 +232,34 @@ divBranch inval = do
   return $ v
 
 leafExp :: GenParser Char st Expression
-leafExp = booleanLeaf <|> integerLeaf
+leafExp = booleanLeaf <|> integerLeaf <|> minMaxExp
 
 booleanLeaf :: GenParser Char st Expression
 booleanLeaf = trueLeaf <|> falseLeaf
+
+minMaxExp :: GenParser Char st Expression
+minMaxExp = do
+  string "m"
+  e0 <- minExp <|> maxExp
+  return e0
+
+minExp :: GenParser Char st Expression
+minExp = do
+  symbol "in("
+  e0 <- getExpression
+  symbol ","
+  e1 <- getExpression
+  symbol ")"
+  return $ MinExp e0 e1
+
+maxExp :: GenParser Char st Expression
+maxExp = do
+  symbol "ax("
+  e0 <- getExpression
+  symbol ","
+  e1 <- getExpression
+  symbol ")"
+  return $ MaxExp e0 e1
 
 trueLeaf :: GenParser Char st Expression
 trueLeaf = do
