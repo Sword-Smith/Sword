@@ -119,7 +119,10 @@ ppEvm instruction = case instruction of
     PUSH32 (w32_0, w32_1, w32_2, w32_3, w32_4, w32_5, w32_6, w32_7 ) -> "7f" ++ printf "%08x" w32_0 ++ printf "%08x" w32_1 ++ printf "%08x" w32_2 ++ printf "%08x" w32_3 ++ printf "%08x" w32_4 ++ printf "%08x" w32_5 ++ printf "%08x" w32_6 ++ printf "%08x" w32_7
     DUP1         -> "80"
     DUP2         -> "81"
+    DUP3         -> "82"
     SWAP1        -> "90"
+    SWAP2        -> "91"
+    SWAP3        -> "92"
     LOG0         -> "a0"
     CREATE       -> "f0"
     CALL         -> "f1"
@@ -323,27 +326,74 @@ getExecuteH [] _ = []
 -- Return code that places the result of an intermediateExp in mu_s[0]
 compileIntermediateExpression :: IntermediateExpression -> [EvmOpcode]
 compileIntermediateExpression (ILitExp ilit) = compileIntermediateLiteral ilit
-compileIntermediateExpression (IMultExp ilit1 ilit2) =
-  compileIntermediateExpression ilit1 ++
-  compileIntermediateExpression ilit2 ++
+compileIntermediateExpression (IMultExp exp_1 exp_2) =
+  compileIntermediateExpression exp_1 ++
+  compileIntermediateExpression exp_2 ++
   [MUL]
-compileIntermediateExpression (ISubtExp ilit1 ilit2) =
-  compileIntermediateExpression ilit1 ++
-  compileIntermediateExpression ilit2 ++
+compileIntermediateExpression (ISubtExp exp_1 exp_2) =
+  compileIntermediateExpression exp_1 ++
+  compileIntermediateExpression exp_2 ++
   [SUB]
-compileIntermediateExpression (IAddiExp ilit1 ilit2) =
-  compileIntermediateExpression ilit1 ++
-  compileIntermediateExpression ilit2 ++
+compileIntermediateExpression (IAddiExp exp_1 exp_2) =
+  compileIntermediateExpression exp_1 ++
+  compileIntermediateExpression exp_2 ++
   [ADD]
-compileIntermediateExpression (IDiviExp ilit1 ilit2) =
-  compileIntermediateExpression ilit1 ++
-  compileIntermediateExpression ilit2 ++
+compileIntermediateExpression (IDiviExp exp_1 exp_2) =
+  compileIntermediateExpression exp_1 ++
+  compileIntermediateExpression exp_2 ++
   [DIV]
-
+compileIntermediateExpression (ILtExp exp_1 exp_2) =
+  compileIntermediateExpression exp_2 ++
+  compileIntermediateExpression exp_1 ++
+  [EVM_LT]
+compileIntermediateExpression (IGtExp exp_1 exp_2) =
+  compileIntermediateExpression exp_2 ++
+  compileIntermediateExpression exp_1 ++
+  [EVM_GT]
+compileIntermediateExpression (IEqExp exp_1 exp_2) =
+  compileIntermediateExpression exp_2 ++
+  compileIntermediateExpression exp_1 ++
+  [EVM_EQ]
+compileIntermediateExpression (IGtOrEqExp exp_1 exp_2) =
+  compileIntermediateExpression exp_2 ++
+  compileIntermediateExpression exp_1 ++
+  [EVM_LT, ISZERO]
+compileIntermediateExpression (ILtOrEqExp exp_1 exp_2) =
+  compileIntermediateExpression exp_2 ++
+  compileIntermediateExpression exp_1 ++
+  [EVM_GT, ISZERO]
+compileIntermediateExpression (IOrExp exp_1 exp_2) =
+  compileIntermediateExpression exp_2 ++
+  compileIntermediateExpression exp_1 ++
+  [OR]
+compileIntermediateExpression (IAndExp exp_1 exp_2) =
+  compileIntermediateExpression exp_2 ++
+  compileIntermediateExpression exp_1 ++
+  [AND]
+-- To avoid branches we use bit hacks
+-- Using https://graphics.stanford.edu/~seander/bithacks.html#IntegerMinOrMax
+compileIntermediateExpression (IMinExp exp_1 exp_2) =
+  compileIntermediateExpression exp_2 ++
+  compileIntermediateExpression exp_1 ++
+  [DUP2, DUP2, DUP2, DUP2, EVM_LT, NOT, PUSH1 0x1, ADD] ++
+  [SWAP2] ++
+  [XOR] ++
+  [AND] ++
+  [SWAP1, POP] ++
+  [XOR]
+compileIntermediateExpression (IMaxExp exp_1 exp_2) =
+  compileIntermediateExpression exp_2 ++
+  compileIntermediateExpression exp_1 ++
+  [DUP2, DUP2, DUP2, DUP2, EVM_LT, NOT, PUSH1 0x1, ADD] ++
+  [SWAP2] ++
+  [XOR] ++
+  [AND] ++
+  [SWAP2, POP] ++
+  [XOR]
 
 compileIntermediateLiteral :: ILiteral -> [EvmOpcode]
 compileIntermediateLiteral (IIntVal int) = [PUSH32 $ integer2w256 int]
-compileIntermediateLiteral _ = undefined -- false is 0x0, true is 0x1
+compileIntermediateLiteral (IBoolVal bool) = if bool then [PUSH1 0x1] else [PUSH1 0x0] -- false is 0x0, true is 0x1
 
 getExecuteHH :: TransferCall -> Integer -> [EvmOpcode]
 getExecuteHH tc transferCounter =

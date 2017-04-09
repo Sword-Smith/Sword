@@ -71,8 +71,10 @@ data EvmOpcode = STOP
                | PUSH32 Word256
                | DUP1
                | DUP2
+               | DUP3
                | SWAP1
                | SWAP2
+               | SWAP3
                | LOG0
                | CREATE
                | CALL

@@ -16,7 +16,17 @@ data IntermediateExpression = ILitExp ILiteral
                             | IMultExp IntermediateExpression IntermediateExpression
                             | ISubtExp IntermediateExpression IntermediateExpression
                             | IAddiExp IntermediateExpression IntermediateExpression
-                            | IDiviExp IntermediateExpression IntermediateExpression deriving (Show, Eq)
+                            | IDiviExp IntermediateExpression IntermediateExpression
+                            | ILtExp IntermediateExpression IntermediateExpression
+                            | IGtExp IntermediateExpression IntermediateExpression
+                            | IEqExp IntermediateExpression IntermediateExpression
+                            | IGtOrEqExp IntermediateExpression IntermediateExpression
+                            | ILtOrEqExp IntermediateExpression IntermediateExpression
+                            | IOrExp IntermediateExpression IntermediateExpression
+                            | IAndExp IntermediateExpression IntermediateExpression
+                            | IMinExp IntermediateExpression IntermediateExpression
+                            | IMaxExp IntermediateExpression IntermediateExpression
+                            deriving (Show, Eq)
 
 data ILiteral = IIntVal Integer
               | IBoolVal Bool deriving (Show, Eq)
