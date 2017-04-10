@@ -18,10 +18,19 @@ intermediateCompile = IntermediateContract . getTransferCalls
 iCompileExp :: Expression -> IntermediateExpression
 iCompileExp (Lit (IntVal i))  = ILitExp $ IIntVal i
 iCompileExp (Lit (BoolVal b)) = ILitExp $ IBoolVal b
-iCompileExp (MultExp e1 e2) = IMultExp (iCompileExp e1) (iCompileExp e2)
-iCompileExp (SubtExp e1 e2) = ISubtExp (iCompileExp e1) (iCompileExp e2)
-iCompileExp (AddiExp e1 e2) = IAddiExp (iCompileExp e1) (iCompileExp e2)
-iCompileExp (DiviExp e1 e2) = IDiviExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (MultExp e1 e2)   = IMultExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (SubtExp e1 e2)   = ISubtExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (AddiExp e1 e2)   = IAddiExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (DiviExp e1 e2)   = IDiviExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (LtExp e1 e2)     = ILtExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (GtExp e1 e2)     = IGtExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (GtOrEqExp e1 e2) = IGtOrEqExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (LtOrEqExp e1 e2) = ILtOrEqExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (OrExp e1 e2)     = IOrExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (AndExp e1 e2)    = IAndExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (MinExp e1 e2)    = IMinExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (MaxExp e1 e2)    = IMaxExp (iCompileExp e1) (iCompileExp e2)
+
 
 getTransferCalls :: Contract -> [TransferCall]
 getTransferCalls (Transfer sym from to) = [TransferCall 1 (ILitExp (IIntVal 1)) 0 sym from to]
