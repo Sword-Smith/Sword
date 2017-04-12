@@ -233,13 +233,23 @@ divBranch inval = do
 
 -- This should be right associative
 notExpression :: GenParser Char st Expression
-notExpression = notBranch <|> leafExp
+notExpression = notBranch <|> bracketsExp
 
 notBranch :: GenParser Char st Expression
 notBranch = do
   symbol "not"
   e0 <- notExpression
   return $ NotExp e0
+
+bracketsExp :: GenParser Char st Expression
+bracketsExp = leafExp <|> brackets
+
+brackets :: GenParser Char st Expression
+brackets = do
+  symbol "("
+  e0 <- getExpression
+  symbol ")"
+  return e0
 
 leafExp :: GenParser Char st Expression
 leafExp = booleanLeaf <|> integerLeaf <|> minMaxExp
