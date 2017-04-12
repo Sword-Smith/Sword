@@ -210,7 +210,7 @@ minusBranch inval = do
 
 mulExp :: GenParser Char st Expression
 mulExp = do
-  tv <- leafExp
+  tv <- notExpression
   v  <- mulExpOpt tv
   return v
 
@@ -220,16 +220,26 @@ mulExpOpt inval = mulBranch inval <|> return inval
 mulBranch :: Expression -> GenParser Char st Expression
 mulBranch inval = do
   symbol "*"
-  tv <- leafExp
+  tv <- notExpression
   v  <- mulExpOpt (MultExp inval tv)
   return v
 
 divBranch :: Expression -> GenParser Char st Expression
 divBranch inval = do
   symbol "/"
-  tv <- leafExp
+  tv <- notExpression
   v <- mulExpOpt (DiviExp inval tv)
   return $ v
+
+-- This should be right associative
+notExpression :: GenParser Char st Expression
+notExpression = notBranch <|> leafExp
+
+notBranch :: GenParser Char st Expression
+notBranch = do
+  symbol "not"
+  e0 <- notExpression
+  return $ Not e0
 
 leafExp :: GenParser Char st Expression
 leafExp = booleanLeaf <|> integerLeaf <|> minMaxExp

@@ -39,6 +39,7 @@ data Expression = Lit Literal
                 | AndExp Expression Expression
                 | MinExp Expression Expression
                 | MaxExp Expression Expression
+                | Not Expression
                 deriving (Show, Eq)
 
 data Literal = IntVal Integer
