@@ -87,6 +87,8 @@ bothParser = do
 getExpression :: GenParser Char st Expression
 getExpression = orExp
 
+-- if expression goes here. Cf. with the FastoParser
+
 orExp :: GenParser Char st Expression
 orExp = do
   tv <- andExp
