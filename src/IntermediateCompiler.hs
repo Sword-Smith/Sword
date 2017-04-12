@@ -31,6 +31,7 @@ iCompileExp (AndExp e1 e2)    = IAndExp (iCompileExp e1) (iCompileExp e2)
 iCompileExp (MinExp e1 e2)    = IMinExp (iCompileExp e1) (iCompileExp e2)
 iCompileExp (MaxExp e1 e2)    = IMaxExp (iCompileExp e1) (iCompileExp e2)
 iCompileExp (NotExp e1)       = INotExp (iCompileExp e1)
+iCompileExp (IfExp e1 e2 e3)  = IIfExp (iCompileExp e1) (iCompileExp e2) (iCompileExp e3)
 
 
 getTransferCalls :: Contract -> [TransferCall]

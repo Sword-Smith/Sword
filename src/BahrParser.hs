@@ -85,9 +85,22 @@ bothParser = do
 
 -- Handle expressions
 getExpression :: GenParser Char st Expression
-getExpression = orExp
+getExpression = ifExpOpt
 
--- if expression goes here. Cf. with the FastoParser
+ifExpOpt :: GenParser Char st Expression
+ifExpOpt = ifBranch <|> orExp
+
+ifBranch :: GenParser Char st Expression
+ifBranch = do
+  symbol "if"
+  symbol "("
+  e1 <- orExp
+  symbol ")"
+  symbol "then"
+  e2 <- getExpression
+  symbol "else"
+  e3 <- getExpression
+  return $ IfExp e1 e2 e3
 
 orExp :: GenParser Char st Expression
 orExp = do

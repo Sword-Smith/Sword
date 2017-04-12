@@ -324,6 +324,11 @@ getExecuteH [] _ = []
 
 -- THIS IS THE ONLY PLACE IN THE COMPILER WHERE EXPRESSION ARE HANDLED
 -- Return code that places the result of an intermediateExp in mu_s[0]
+-- DEVFIX: In order to fix the problem of uniqueness of labels, such that JUMPI
+-- may be used here and such that intermediateExpressions of type IIfExp may
+-- be compiled, we need unique labels. That can be done by keeping a counter
+-- locally and by receiving the transferCounter from getExecuteHH. Combining
+-- these two counters should produce a unique counter.
 compileIntermediateExpression :: IntermediateExpression -> [EvmOpcode]
 compileIntermediateExpression (ILitExp ilit) = compileIntermediateLiteral ilit
 compileIntermediateExpression (IMultExp exp_1 exp_2) =
@@ -393,6 +398,11 @@ compileIntermediateExpression (IMaxExp exp_1 exp_2) =
 compileIntermediateExpression (INotExp exp_1) =
   compileIntermediateExpression exp_1 ++
   [NOT]
+  -- DEVQ: It is probably not advicable to implement this without JUMPI and labels
+  -- So this instance of the compilation of the intermediate expression needs to
+  -- be rewritten.
+compileIntermediateExpression (IIfExp exp_1 exp_2 exp_3) =
+  undefined
 
 compileIntermediateLiteral :: ILiteral -> [EvmOpcode]
 compileIntermediateLiteral (IIntVal int) = [PUSH32 $ integer2w256 int]

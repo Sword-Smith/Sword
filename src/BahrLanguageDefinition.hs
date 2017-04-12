@@ -40,6 +40,7 @@ data Expression = Lit Literal
                 | MinExp Expression Expression
                 | MaxExp Expression Expression
                 | NotExp Expression
+                | IfExp Expression Expression Expression
                 deriving (Show, Eq)
 
 data Literal = IntVal Integer

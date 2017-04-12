@@ -27,6 +27,7 @@ data IntermediateExpression = ILitExp ILiteral
                             | IMinExp IntermediateExpression IntermediateExpression
                             | IMaxExp IntermediateExpression IntermediateExpression
                             | INotExp IntermediateExpression
+                            | IIfExp IntermediateExpression IntermediateExpression IntermediateExpression
                             deriving (Show, Eq)
 
 data ILiteral = IIntVal Integer
