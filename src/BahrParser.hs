@@ -239,7 +239,7 @@ notBranch :: GenParser Char st Expression
 notBranch = do
   symbol "not"
   e0 <- notExpression
-  return $ Not e0
+  return $ NotExp e0
 
 leafExp :: GenParser Char st Expression
 leafExp = booleanLeaf <|> integerLeaf <|> minMaxExp

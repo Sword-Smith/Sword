@@ -390,6 +390,9 @@ compileIntermediateExpression (IMaxExp exp_1 exp_2) =
   [AND] ++
   [SWAP2, POP] ++
   [XOR]
+compileIntermediateExpression (INotExp exp_1) =
+  compileIntermediateExpression exp_1 ++
+  [NOT]
 
 compileIntermediateLiteral :: ILiteral -> [EvmOpcode]
 compileIntermediateLiteral (IIntVal int) = [PUSH32 $ integer2w256 int]
