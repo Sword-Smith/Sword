@@ -535,6 +535,7 @@ getCancel ic = [JUMPDESTFROM "cancel_method"] ++ getCancelH ic
 getCancelH :: IntermediateContract -> [EvmOpcode]
 getCancelH = concatMap cancelMapElementToAllowanceCall . Map.assocs . intermediateContract2CancelMap
 
+-- Given an intermediate contract update the cancelMap with required locked amount
 intermediateContract2CancelMap :: IntermediateContract -> CancelMap
 intermediateContract2CancelMap (IntermediateContract tcalls) =
   let
@@ -548,6 +549,9 @@ intermediateContract2CancelMap (IntermediateContract tcalls) =
   in
   intermediateContract2CancelMapH Map.empty tcalls
 
+-- Given a cancelMapElement which describes how much should be locked for a
+-- given account on a given token, return the correct allowance call to the
+-- token contracts.
 -- DEVFIX: Poss. optimization: the token address can be read from storage, does not
 -- have to be stored as EVM
 cancelMapElementToAllowanceCall :: CancelMapElement -> [EvmOpcode]
