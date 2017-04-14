@@ -230,7 +230,7 @@ mulExp = do
   return v
 
 mulExpOpt :: Expression -> GenParser Char st Expression
-mulExpOpt inval = mulBranch inval <|> return inval
+mulExpOpt inval = mulBranch inval <|> divBranch inval <|> return inval
 
 mulBranch :: Expression -> GenParser Char st Expression
 mulBranch inval = do

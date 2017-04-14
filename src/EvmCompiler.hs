@@ -6,6 +6,7 @@ import EvmLanguageDefinition
 import IntermediateBahrLanguageDefinition
 import IntermediateCompiler
 
+import Control.Monad.State.Lazy
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8(pack)
 import qualified Data.Map.Strict as Map
@@ -13,11 +14,26 @@ import Data.Word
 import Text.Printf (printf)
 import Crypto.Hash
 
-import Test.HUnit
+import Test.HUnit hiding (State)
 
 -- [(token, owner/from address) => amount]
 type CancelMap = Map.Map (Address,Address) Integer
 type CancelMapElement = ((Address,Address), Integer)
+
+-- State monad definitions
+data CompileEnv = CompileEnv { labelCount :: Integer } deriving Show
+
+type CompileGet a = State CompileEnv a
+
+-- Return a new, unique label. Argument can be anything but should be
+-- descriptive since this will ease debugging.
+newLabel :: String -> CompileGet String
+newLabel desc = do
+  compileEnv <- get
+  let i = labelCount compileEnv
+  put compileEnv { labelCount = i + 1 }
+  return $ desc ++ "_" ++ (show i)
+
 
 -- ATM, "Executed" does not have an integer. If it should be able to handle more
 -- than 256 tcalls, it must take an integer also.
@@ -242,8 +258,7 @@ setExecutedWord tcs = [ PUSH32 $ integer2w256 $ 2^length(tcs) - 1,
                         PUSH4 $ getStorageAddress Executed,
                         SSTORE ]
 
--- ATM all values are known at compile time and placed in storage on contract
--- initialization. This should be changed.
+-- The values that are known at compile time are placed in storage
 placeValsInStorage :: IntermediateContract -> [EvmOpcode]
 placeValsInStorage (IntermediateContract tcs) =
   let
@@ -322,87 +337,84 @@ getExecuteH :: [TransferCall] -> Integer -> [EvmOpcode]
 getExecuteH (tc:tcs) i = (getExecuteHH tc i) ++ (getExecuteH tcs (i + 1))
 getExecuteH [] _ = []
 
+-- Compile intermediate expression into EVM opcodes
 -- THIS IS THE ONLY PLACE IN THE COMPILER WHERE EXPRESSION ARE HANDLED
--- Return code that places the result of an intermediateExp in mu_s[0]
--- DEVFIX: In order to fix the problem of uniqueness of labels, such that JUMPI
--- may be used here and such that intermediateExpressions of type IIfExp may
--- be compiled, we need unique labels. That can be done by keeping a counter
--- locally and by receiving the transferCounter from getExecuteHH. Combining
--- these two counters should produce a unique counter.
-compileIntermediateExpression :: IntermediateExpression -> [EvmOpcode]
-compileIntermediateExpression (ILitExp ilit) = compileIntermediateLiteral ilit
-compileIntermediateExpression (IMultExp exp_1 exp_2) =
-  compileIntermediateExpression exp_1 ++
-  compileIntermediateExpression exp_2 ++
-  [MUL]
-compileIntermediateExpression (ISubtExp exp_1 exp_2) =
-  compileIntermediateExpression exp_1 ++
-  compileIntermediateExpression exp_2 ++
-  [SUB]
-compileIntermediateExpression (IAddiExp exp_1 exp_2) =
-  compileIntermediateExpression exp_1 ++
-  compileIntermediateExpression exp_2 ++
-  [ADD]
-compileIntermediateExpression (IDiviExp exp_1 exp_2) =
-  compileIntermediateExpression exp_1 ++
-  compileIntermediateExpression exp_2 ++
-  [DIV]
-compileIntermediateExpression (ILtExp exp_1 exp_2) =
-  compileIntermediateExpression exp_2 ++
-  compileIntermediateExpression exp_1 ++
-  [EVM_LT]
-compileIntermediateExpression (IGtExp exp_1 exp_2) =
-  compileIntermediateExpression exp_2 ++
-  compileIntermediateExpression exp_1 ++
-  [EVM_GT]
-compileIntermediateExpression (IEqExp exp_1 exp_2) =
-  compileIntermediateExpression exp_2 ++
-  compileIntermediateExpression exp_1 ++
-  [EVM_EQ]
-compileIntermediateExpression (IGtOrEqExp exp_1 exp_2) =
-  compileIntermediateExpression exp_2 ++
-  compileIntermediateExpression exp_1 ++
-  [EVM_LT, ISZERO]
-compileIntermediateExpression (ILtOrEqExp exp_1 exp_2) =
-  compileIntermediateExpression exp_2 ++
-  compileIntermediateExpression exp_1 ++
-  [EVM_GT, ISZERO]
-compileIntermediateExpression (IOrExp exp_1 exp_2) =
-  compileIntermediateExpression exp_2 ++
-  compileIntermediateExpression exp_1 ++
-  [OR]
-compileIntermediateExpression (IAndExp exp_1 exp_2) =
-  compileIntermediateExpression exp_2 ++
-  compileIntermediateExpression exp_1 ++
-  [AND]
--- To avoid branches we use bit hacks
--- Using https://graphics.stanford.edu/~seander/bithacks.html#IntegerMinOrMax
-compileIntermediateExpression (IMinExp exp_1 exp_2) =
-  compileIntermediateExpression exp_2 ++
-  compileIntermediateExpression exp_1 ++
-  [DUP2, DUP2, DUP2, DUP2, EVM_LT, NOT, PUSH1 0x1, ADD] ++
-  [SWAP2] ++
-  [XOR] ++
-  [AND] ++
-  [SWAP1, POP] ++
-  [XOR]
-compileIntermediateExpression (IMaxExp exp_1 exp_2) =
-  compileIntermediateExpression exp_2 ++
-  compileIntermediateExpression exp_1 ++
-  [DUP2, DUP2, DUP2, DUP2, EVM_LT, NOT, PUSH1 0x1, ADD] ++
-  [SWAP2] ++
-  [XOR] ++
-  [AND] ++
-  [SWAP2, POP] ++
-  [XOR]
-compileIntermediateExpression (INotExp exp_1) =
-  compileIntermediateExpression exp_1 ++
-  [NOT]
-  -- DEVQ: It is probably not advicable to implement this without JUMPI and labels
-  -- So this instance of the compilation of the intermediate expression needs to
-  -- be rewritten.
-compileIntermediateExpression (IIfExp exp_1 exp_2 exp_3) =
-  undefined
+compIExp :: IntermediateExpression -> CompileGet [EvmOpcode]
+compIExp (ILitExp ilit) = do
+  return $ compileIntermediateLiteral ilit
+compIExp (IMultExp exp_1 exp_2) = do
+  e1 <- compIExp exp_1
+  e2 <- compIExp exp_2
+  return $ e1 ++ e2 ++ [MUL]
+compIExp (ISubtExp exp_1 exp_2) = do
+  e2 <- compIExp exp_2
+  e1 <- compIExp exp_1
+  return $ e2 ++ e1 ++ [SUB]
+compIExp (IAddiExp exp_1 exp_2) = do
+  e1 <- compIExp exp_1
+  e2 <- compIExp exp_2
+  return $ e1 ++ e2 ++ [ADD]
+compIExp (IDiviExp exp_1 exp_2) = do
+  e2 <- compIExp exp_2
+  e1 <- compIExp exp_1
+  return $ e2 ++ e1 ++ [DIV]
+compIExp (IEqExp exp_1 exp_2) = do
+  e1 <- compIExp exp_1
+  e2 <- compIExp exp_2
+  return $ e1 ++ e2 ++ [EVM_EQ]
+compIExp (ILtExp exp_1 exp_2) = do
+  e2 <- compIExp exp_2
+  e1 <- compIExp exp_1
+  return $ e2 ++ e1 ++ [EVM_LT]
+compIExp (IGtExp exp_1 exp_2) = do
+  e2 <- compIExp exp_2
+  e1 <- compIExp exp_1
+  return $ e2 ++ e1 ++ [EVM_GT]
+compIExp (IGtOrEqExp exp_1 exp_2) = do
+  e2 <- compIExp exp_2
+  e1 <- compIExp exp_1
+  return $ e2 ++ e1 ++ [EVM_LT, ISZERO]
+compIExp (ILtOrEqExp exp_1 exp_2) = do
+  e2 <- compIExp exp_2
+  e1 <- compIExp exp_1
+  return $ e2 ++ e1 ++ [EVM_GT, ISZERO]
+compIExp (IOrExp exp_1 exp_2) = do
+  e2 <- compIExp exp_2
+  e1 <- compIExp exp_1
+  return $ e2 ++ e1 ++ [OR]
+compIExp (IAndExp exp_1 exp_2) = do
+  e2 <- compIExp exp_2
+  e1 <- compIExp exp_1
+  return $ e2 ++ e1 ++ [AND]
+-- MinExp and MaxExp can also be written without jumps: x^((x^y)&-(x<y))
+-- which is cheaper?
+compIExp (IMinExp exp_1 exp_2) = do
+  e2 <- compIExp exp_2
+  e1 <- compIExp exp_1
+  l0 <- newLabel "min_is_e1"
+  return $ e1 ++ e2 ++ [DUP2, DUP2, EVM_GT, JUMPITO l0, SWAP1, JUMPDESTFROM l0, POP]
+compIExp (IMaxExp exp_1 exp_2) = do
+  e2 <- compIExp exp_2
+  e1 <- compIExp exp_1
+  l0 <- newLabel "max_is_e1"
+  return $ e1 ++ e2 ++ [DUP2, DUP2, EVM_LT, JUMPITO l0, SWAP1, JUMPDESTFROM l0, POP]
+compIExp (INotExp exp_1) = do
+  e1 <- compIExp exp_1
+  return $ e1 ++ [NOT]
+compIExp (IIfExp exp_1 exp_2 exp_3) = do
+  e1        <- compIExp exp_1 -- places 0 or 1 in s[0]
+  e2        <- compIExp exp_2
+  e3        <- compIExp exp_3
+  if_label  <- newLabel "if"
+  end_label <- newLabel "end_if_else_exp"
+  return $
+    e1 ++
+    [JUMPITO if_label] ++
+    e3 ++
+    [JUMPTO end_label] ++
+    [JUMPDESTFROM if_label] ++
+    e2 ++
+    [JUMPDESTFROM end_label]
 
 compileIntermediateLiteral :: ILiteral -> [EvmOpcode]
 compileIntermediateLiteral (IIntVal int) = [PUSH32 $ integer2w256 int]
@@ -458,7 +470,7 @@ getExecuteHH tc transferCounter =
                                   MSTORE]
         -- Should take an IntermediateExpression and calculate the correct opcode
         -- The smallest of maxAmount and exp should be stored in mem
-        storeAmountArg            = (compileIntermediateExpression ( _amount tc)) ++
+        storeAmountArg            = evalState (compIExp ( _amount tc)) (CompileEnv 0) ++
                                     [ PUSH4 $ getStorageAddress $ MaxAmount transferCounter,
                                       SLOAD,
                                       DUP2,
