@@ -21,7 +21,9 @@ type CancelMap = Map.Map (Address,Address) Integer
 type CancelMapElement = ((Address,Address), Integer)
 
 -- State monad definitions
-data CompileEnv = CompileEnv { labelCount :: Integer } deriving Show
+data CompileEnv = CompileEnv { labelCount :: Integer,
+                               transferCallCount :: Integer
+                               } deriving Show
 
 type CompileGet a = State CompileEnv a
 
@@ -31,8 +33,9 @@ newLabel :: String -> CompileGet String
 newLabel desc = do
   compileEnv <- get
   let i = labelCount compileEnv
+  let j = transferCallCount compileEnv
   put compileEnv { labelCount = i + 1 }
-  return $ desc ++ "_" ++ (show i)
+  return $ desc ++ "_" ++ (show i) ++ "_" ++ (show j)
 
 
 -- ATM, "Executed" does not have an integer. If it should be able to handle more
@@ -470,18 +473,18 @@ getExecuteHH tc transferCounter =
                                   MSTORE]
         -- Should take an IntermediateExpression and calculate the correct opcode
         -- The smallest of maxAmount and exp should be stored in mem
-        storeAmountArg            = evalState (compIExp ( _amount tc)) (CompileEnv 0) ++
-                                    [ PUSH4 $ getStorageAddress $ MaxAmount transferCounter,
-                                      SLOAD,
-                                      DUP2,
-                                      DUP2,
-                                      EVM_GT,
-                                      JUMPITO $ "use_exp_res" ++ (show transferCounter),
-                                      SWAP1,
-                                      JUMPDESTFROM $ "use_exp_res" ++ (show transferCounter),
-                                      POP,
-                                      PUSH1 0x44,
-                                      MSTORE ]
+        storeAmountArg         = evalState (compIExp ( _amount tc)) (CompileEnv 0 transferCounter) ++
+                                 [ PUSH4 $ getStorageAddress $ MaxAmount transferCounter,
+                                   SLOAD,
+                                   DUP2,
+                                   DUP2,
+                                   EVM_GT,
+                                   JUMPITO $ "use_exp_res" ++ (show transferCounter),
+                                   SWAP1,
+                                   JUMPDESTFROM $ "use_exp_res" ++ (show transferCounter),
+                                   POP,
+                                   PUSH1 0x44,
+                                   MSTORE ]
       in
         storeFunctionSignature ++
         storeFromAddressArg ++
