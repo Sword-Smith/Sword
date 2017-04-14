@@ -1,0 +1,1 @@
+both( translate(seconds(60), scale(300,if(true) then 12*13+1000/10 - 59 else 10, transfer(_address_Tmc4_EUR, _my_address, 0x123456789012345678901234567890123456789b))), translate(now, scale(200, if(false) then 12*13+1000/10 - 59 else 10, transfer(_address_Tmc4_USD, _my_address, 0x123456789012345678901234567890123456789b ))))
