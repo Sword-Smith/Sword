@@ -267,7 +267,7 @@ brackets = do
   return e0
 
 leafExp :: GenParser Char st Expression
-leafExp = booleanLeaf <|> integerLeaf <|> minMaxExp
+leafExp = booleanLeaf <|> integerLeaf <|> minMaxExp <|> observableLeaf
 
 booleanLeaf :: GenParser Char st Expression
 booleanLeaf = trueLeaf <|> falseLeaf
@@ -309,6 +309,32 @@ integerLeaf :: GenParser Char st Expression
 integerLeaf = do
   int <- getInt
   return $ Lit $ IntVal int
+
+-- Parse observable expressions
+observableLeaf :: GenParser Char st Expression
+observableLeaf = do
+  symbol "obs("
+  t <- getObservableType
+  symbol ","
+  address <- getAddress
+  symbol ","
+  key <- many1 alphaNum
+  symbol ")"
+  return $ Lit $ Observable t address key
+
+getObservableType :: GenParser Char st ObservableType
+getObservableType = getBool <|> getInteger
+
+getBool :: GenParser Char st ObservableType
+getBool = do
+  symbol "bool"
+  return OBool
+
+getInteger :: GenParser Char st ObservableType
+getInteger = do
+  symbol "integer"
+  return OInteger
+
 
 -- Handle time
 getTime :: GenParser Char st Time

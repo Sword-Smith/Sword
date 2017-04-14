@@ -30,5 +30,8 @@ data IntermediateExpression = ILitExp ILiteral
                             | IIfExp IntermediateExpression IntermediateExpression IntermediateExpression
                             deriving (Show, Eq)
 
+-- Since the type checker runs before the intermediate compiler we
+-- do not need to carry around the type of the observable anymore.
 data ILiteral = IIntVal Integer
-              | IBoolVal Bool deriving (Show, Eq)
+              | IBoolVal Bool
+              | IObservable Address String deriving (Show, Eq)

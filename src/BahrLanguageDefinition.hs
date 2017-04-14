@@ -44,7 +44,10 @@ data Expression = Lit Literal
                 deriving (Show, Eq)
 
 data Literal = IntVal Integer
-             | BoolVal Bool deriving (Show, Eq)
+             | BoolVal Bool
+             | Observable ObservableType Address String deriving (Show, Eq)
+
+data ObservableType = OBool | OInteger deriving (Show, Eq)
 
 type TokenSymbol = String
 -- DEVFIX: Better choice for type is decided later.

@@ -15,23 +15,26 @@ translate seconds transferCall = transferCall { _delay = _delay transferCall + s
 intermediateCompile :: Contract -> IntermediateContract
 intermediateCompile = IntermediateContract . getTransferCalls
 
+-- The type of the observable is dropped since this is past the type checker stage
 iCompileExp :: Expression -> IntermediateExpression
-iCompileExp (Lit (IntVal i))  = ILitExp $ IIntVal i
-iCompileExp (Lit (BoolVal b)) = ILitExp $ IBoolVal b
-iCompileExp (MultExp e1 e2)   = IMultExp (iCompileExp e1) (iCompileExp e2)
-iCompileExp (SubtExp e1 e2)   = ISubtExp (iCompileExp e1) (iCompileExp e2)
-iCompileExp (AddiExp e1 e2)   = IAddiExp (iCompileExp e1) (iCompileExp e2)
-iCompileExp (DiviExp e1 e2)   = IDiviExp (iCompileExp e1) (iCompileExp e2)
-iCompileExp (LtExp e1 e2)     = ILtExp (iCompileExp e1) (iCompileExp e2)
-iCompileExp (GtExp e1 e2)     = IGtExp (iCompileExp e1) (iCompileExp e2)
-iCompileExp (GtOrEqExp e1 e2) = IGtOrEqExp (iCompileExp e1) (iCompileExp e2)
-iCompileExp (LtOrEqExp e1 e2) = ILtOrEqExp (iCompileExp e1) (iCompileExp e2)
-iCompileExp (OrExp e1 e2)     = IOrExp (iCompileExp e1) (iCompileExp e2)
-iCompileExp (AndExp e1 e2)    = IAndExp (iCompileExp e1) (iCompileExp e2)
-iCompileExp (MinExp e1 e2)    = IMinExp (iCompileExp e1) (iCompileExp e2)
-iCompileExp (MaxExp e1 e2)    = IMaxExp (iCompileExp e1) (iCompileExp e2)
-iCompileExp (NotExp e1)       = INotExp (iCompileExp e1)
-iCompileExp (IfExp e1 e2 e3)  = IIfExp (iCompileExp e1) (iCompileExp e2) (iCompileExp e3)
+iCompileExp (Lit (IntVal i))              = ILitExp $ IIntVal i
+iCompileExp (Lit (BoolVal b))             = ILitExp $ IBoolVal b
+iCompileExp (Lit (Observable _ addr key)) = ILitExp $ IObservable addr key
+iCompileExp (MultExp e1 e2)               = IMultExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (SubtExp e1 e2)               = ISubtExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (AddiExp e1 e2)               = IAddiExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (DiviExp e1 e2)               = IDiviExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (EqExp e1 e2)                 = IEqExp   (iCompileExp e1) (iCompileExp e2)
+iCompileExp (LtExp e1 e2)                 = ILtExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (GtExp e1 e2)                 = IGtExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (GtOrEqExp e1 e2)             = IGtOrEqExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (LtOrEqExp e1 e2)             = ILtOrEqExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (OrExp e1 e2)                 = IOrExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (AndExp e1 e2)                = IAndExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (MinExp e1 e2)                = IMinExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (MaxExp e1 e2)                = IMaxExp (iCompileExp e1) (iCompileExp e2)
+iCompileExp (NotExp e1)                   = INotExp (iCompileExp e1)
+iCompileExp (IfExp e1 e2 e3)              = IIfExp (iCompileExp e1) (iCompileExp e2) (iCompileExp e3)
 
 
 getTransferCalls :: Contract -> [TransferCall]
