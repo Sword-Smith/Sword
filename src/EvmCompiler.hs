@@ -22,7 +22,8 @@ type CancelMapElement = ((Address,Address), Integer)
 
 -- State monad definitions
 data CompileEnv = CompileEnv { labelCount :: Integer,
-                               transferCallCount :: Integer
+                               transferCallCount :: Integer,
+                               memOffset :: Integer
                                } deriving Show
 
 type CompileGet a = State CompileEnv a
@@ -344,7 +345,9 @@ getExecuteH [] _ = []
 -- THIS IS THE ONLY PLACE IN THE COMPILER WHERE EXPRESSION ARE HANDLED
 compIExp :: IntermediateExpression -> CompileGet [EvmOpcode]
 compIExp (ILitExp ilit) = do
-  return $ compileIntermediateLiteral ilit
+  codeEnv <- get
+  let mo = memOffset codeEnv
+  return $ compILit ilit mo
 compIExp (IMultExp exp_1 exp_2) = do
   e1 <- compIExp exp_1
   e2 <- compIExp exp_2
@@ -401,7 +404,7 @@ compIExp (IMaxExp exp_1 exp_2) = do
   e1 <- compIExp exp_1
   l0 <- newLabel "max_is_e1"
   return $ e1 ++ e2 ++ [DUP2, DUP2, EVM_LT, JUMPITO l0, SWAP1, JUMPDESTFROM l0, POP]
-compIExp (INotExp exp_1) = do
+compIExp (INotExp exp_1) = do -- e1 is assumed boolean, and is to be checked in type checker.
   e1 <- compIExp exp_1
   return $ e1 ++ [ISZERO]
 compIExp (IIfExp exp_1 exp_2 exp_3) = do
@@ -419,9 +422,9 @@ compIExp (IIfExp exp_1 exp_2 exp_3) = do
     e2 ++
     [JUMPDESTFROM end_label]
 
-compileIntermediateLiteral :: ILiteral -> [EvmOpcode]
-compileIntermediateLiteral (IIntVal int) = [PUSH32 $ integer2w256 int]
-compileIntermediateLiteral (IBoolVal bool) = if bool then [PUSH1 0x1] else [PUSH1 0x0] -- false is 0x0, true is 0x1
+compILit :: ILiteral -> Integer -> [EvmOpcode]
+compILit (IIntVal int) _ = [PUSH32 $ integer2w256 int]
+compILit (IBoolVal bool) _ = if bool then [PUSH1 0x1] else [PUSH1 0x0] -- false is 0x0, true is 0x1
 
 getExecuteHH :: TransferCall -> Integer -> [EvmOpcode]
 getExecuteHH tc transferCounter =
@@ -473,7 +476,7 @@ getExecuteHH tc transferCounter =
                                   MSTORE]
         -- Should take an IntermediateExpression and calculate the correct opcode
         -- The smallest of maxAmount and exp should be stored in mem
-        storeAmountArg         = evalState (compIExp ( _amount tc)) (CompileEnv 0 transferCounter) ++
+        storeAmountArg         = evalState (compIExp ( _amount tc)) (CompileEnv 0 transferCounter 0x44) ++
                                  [ PUSH4 $ getStorageAddress $ MaxAmount transferCounter,
                                    SLOAD,
                                    DUP2,
