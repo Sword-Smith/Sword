@@ -7,12 +7,13 @@ import IntermediateBahrLanguageDefinition
 import IntermediateCompiler
 
 import Control.Monad.State.Lazy
+import Crypto.Hash
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8(pack)
 import qualified Data.Map.Strict as Map
 import Data.Word
+import Numeric (showHex)
 import Text.Printf (printf)
-import Crypto.Hash
 
 import Test.HUnit hiding (State)
 
@@ -425,6 +426,16 @@ compIExp (IIfExp exp_1 exp_2 exp_3) = do
 compILit :: ILiteral -> Integer -> [EvmOpcode]
 compILit (IIntVal int) _ = [PUSH32 $ integer2w256 int]
 compILit (IBoolVal bool) _ = if bool then [PUSH1 0x1] else [PUSH1 0x0] -- false is 0x0, true is 0x1
+compILit (IObservable address key) memOffset =
+  let
+    storeFSigInMem = [PUSH4 $ getFunctionSignature "get(bytes32)",
+                      PUSH1 $ fromInteger memOffset,
+                      MSTORE]
+    -- showHex' c = showHex c "" -- partial evaluation of showHex
+    -- putStrLn $ concatMap (showHex' . ord) "dave" -- get it to hex repr
+    -- storeKeyInMem  = [PUSH32 $ showHex' ]
+  in
+    storeFSigInMem
 
 getExecuteHH :: TransferCall -> Integer -> [EvmOpcode]
 getExecuteHH tc transferCounter =
