@@ -8,8 +8,9 @@ import IntermediateCompiler
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Combinator as ParSecCom
 
+
 import Text.Parsec.String (Parser)
-import Data.Text as Text
+import Data.Text as Text hiding (map)
 
 import Test.HUnit
 
@@ -318,7 +319,7 @@ observableLeaf = do
   symbol ","
   address <- getAddress
   symbol ","
-  key <- many1 alphaNum
+  key <- many1 $ choice $ map char (['a'..'z'] ++ ['A'..'Z'] ++ [ '0'..'9'])  -- We shall be consistent in the type of the key, perhaps use a string.
   symbol ")"
   return $ Lit $ Observable t address key
 
