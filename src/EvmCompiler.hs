@@ -403,7 +403,7 @@ compIExp (IMaxExp exp_1 exp_2) = do
   return $ e1 ++ e2 ++ [DUP2, DUP2, EVM_LT, JUMPITO l0, SWAP1, JUMPDESTFROM l0, POP]
 compIExp (INotExp exp_1) = do
   e1 <- compIExp exp_1
-  return $ e1 ++ [NOT]
+  return $ e1 ++ [ISZERO]
 compIExp (IIfExp exp_1 exp_2 exp_3) = do
   e1        <- compIExp exp_1 -- places 0 or 1 in s[0]
   e2        <- compIExp exp_2
