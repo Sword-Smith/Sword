@@ -450,6 +450,8 @@ compILit (IBoolVal bool) _ _ = if bool then [PUSH1 0x1] else [PUSH1 0x0] -- 0x1 
 compILit (IObservable address key) memOffset uniqueLabel =
   let
     storeFSigInMem = [PUSH4 $ getFunctionSignature "get(bytes32)",
+                      PUSH32 (0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
+                      MUL,
                       PUSH1 $ fromInteger memOffset,
                       MSTORE]
     storeKeyInMem  = [PUSH32 $ string2w256 key,
