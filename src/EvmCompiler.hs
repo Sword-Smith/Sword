@@ -487,6 +487,7 @@ getExecuteHH tc transferCounter =
                                   MSTORE]
         -- Should take an IntermediateExpression and calculate the correct opcode
         -- The smallest of maxAmount and exp should be stored in mem
+        -- 0x44 is the address in memory up to which memory is occupied
         storeAmountArg         = evalState (compIExp ( _amount tc)) (CompileEnv 0 transferCounter 0x44) ++
                                  [ PUSH4 $ getStorageAddress $ MaxAmount transferCounter,
                                    SLOAD,
