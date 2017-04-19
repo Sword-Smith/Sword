@@ -6,10 +6,12 @@ data IntermediateContract = IntermediateContract [TransferCall] deriving (Show, 
 
 data TransferCall = TransferCall { _maxAmount    :: Integer,
                                    _amount       :: IntermediateExpression,
-                                   _delay        :: Integer,
+                                   _execAfter    :: Integer,
+                                   _execBefore   :: Integer,
                                    _tokenAddress :: Address,
                                    _from         :: Address,
-                                   _to           :: Address
+                                   _to           :: Address,
+                                   _condition    :: IntermediateExpression
 } deriving (Show, Eq)
 
 data IntermediateExpression = ILitExp ILiteral

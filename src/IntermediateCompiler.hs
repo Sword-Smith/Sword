@@ -42,6 +42,7 @@ getTransferCalls (Transfer sym from to) = [TransferCall 1 (ILitExp (IIntVal 1)) 
 getTransferCalls (Scale maxFactor factorExp contract ) = map (scale maxFactor factorExp) (getTransferCalls contract)
 getTransferCalls (Both contractA contractB) = getTransferCalls contractA ++ getTransferCalls contractB
 getTransferCalls (Translate time contract ) = map (translate (time2Seconds time)) (getTransferCalls contract)
+getTransferCalls (IfWithin boolExp withinTime contracA contractB) = undefined
 
 time2Seconds :: Time -> Integer
 time2Seconds Now = 0
