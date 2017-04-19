@@ -368,7 +368,8 @@ compIExp :: IntermediateExpression -> CompileGet [EvmOpcode]
 compIExp (ILitExp ilit) = do
   codeEnv <- get
   let mo = memOffset codeEnv
-  return $ compILit ilit mo
+  uniqueLabel <- newLabel "observable"
+  return $ compILit ilit mo uniqueLabel
 compIExp (IMultExp exp_1 exp_2) = do
   e1 <- compIExp exp_1
   e2 <- compIExp exp_2
@@ -443,17 +444,47 @@ compIExp (IIfExp exp_1 exp_2 exp_3) = do
     e2 ++
     [JUMPDESTFROM end_label]
 
-compILit :: ILiteral -> Integer -> [EvmOpcode]
-compILit (IIntVal int) _ = [PUSH32 $ integer2w256 int]
-compILit (IBoolVal bool) _ = if bool then [PUSH1 0x1] else [PUSH1 0x0] -- false is 0x0, true is 0x1
-compILit (IObservable address key) memOffset =
+compILit :: ILiteral -> Integer -> String -> [EvmOpcode]
+compILit (IIntVal int) _ _ = [PUSH32 $ integer2w256 int]
+compILit (IBoolVal bool) _ _ = if bool then [PUSH1 0x1] else [PUSH1 0x0] -- 0x1 is true
+compILit (IObservable address key) memOffset uniqueLabel =
   let
     storeFSigInMem = [PUSH4 $ getFunctionSignature "get(bytes32)",
                       PUSH1 $ fromInteger memOffset,
                       MSTORE]
-    storeKeyInMem  = [PUSH32 $ string2w256 key]
+    storeKeyInMem  = [PUSH32 $ string2w256 key,
+                      PUSH1 $ fromInteger $ memOffset + 4,
+                      MSTORE]
+    pushOutSize   = [PUSH1 0x20]
+    pushOutOffset = [PUSH1 $ fromInteger memOffset]
+    pushInSize    = [PUSH1 0x24]
+    pushInOffset  = [PUSH1 $ fromInteger memOffset]
+    pushValue     = [PUSH1 0x0]
+    pushToAddress = [PUSH32 $ address2w256 address]
+    pushGas       = [PUSH1 0x32,
+                     GAS,
+                     SUB]
+    call          = [CALL]
+    checkRetValue = [ PUSH1 0x1,
+                      EVM_EQ,
+                      JUMPITO ("ret_val" ++ uniqueLabel),
+                      THROW, -- Is it correct to throw here??
+                      JUMPDESTFROM ("ret_val" ++ uniqueLabel) ]
+    moveResToStack = [ PUSH1 $ fromInteger memOffset,
+                       MLOAD ]
   in
-    storeFSigInMem ++ storeKeyInMem
+    storeFSigInMem ++
+    storeKeyInMem ++
+    pushOutSize ++
+    pushOutOffset ++
+    pushInSize ++
+    pushInOffset ++
+    pushValue ++
+    pushToAddress ++
+    pushGas ++
+    call ++
+    checkRetValue ++
+    moveResToStack
 
 getExecuteHH :: TransferCall -> Integer -> [EvmOpcode]
 getExecuteHH tc transferCounter =
