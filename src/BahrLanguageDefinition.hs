@@ -11,11 +11,6 @@ data Contract = Transfer { tokenAddress_ :: Address,
               | Both { contractA_ :: Contract,
                        contractB_ :: Contract
                      }
-              | IfWithin { boolExp_    :: Expression,
-                           withinTime_ :: Time,
-                           contractA_  :: Contract,
-                           contractB_  :: Contract
-                         }
               | Translate {
                   delay_ :: Time,
                   contract_ :: Contract
