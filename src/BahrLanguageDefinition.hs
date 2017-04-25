@@ -14,6 +14,11 @@ data Contract = Transfer { tokenAddress_ :: Address,
               | Translate {
                   delay_ :: Time,
                   contract_ :: Contract
+                  }
+              | IfWithin {
+                  memExp_ :: MemExp,
+                  contractA_ :: Contract,
+                  contractB_ :: Contract
                   } deriving (Show, Eq)
 
 -- DEVFIX: The value of time units should be natural numbers, not integers
@@ -24,6 +29,9 @@ data Time = Now
           | Hours Integer
           | Days Integer
           | Weeks Integer deriving (Show, Eq)
+
+-- This should also have an identifier in the intermediate expression version
+data MemExp = MemExp Time Expression deriving (Show, Eq)
 
 data Expression = Lit Literal
                 | MultExp Expression Expression

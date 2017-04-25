@@ -3,18 +3,39 @@ module IntermediateCompiler where
 import IntermediateBahrLanguageDefinition
 import BahrLanguageDefinition
 
-import Test.HUnit
+import Control.Monad.State.Lazy
+
+import Test.HUnit hiding (State)
+
+-- State monad definitions
+-- The intermediate compilation happens in a monad since we need to ascribe
+-- unique identifiers to our memory expressions (type: MemExp)
+data ICompileEnv = ICompileEnv { memExpCount :: Integer
+                               } deriving Show
+
+type ICompileGet a = State ICompileEnv a
+
+newCounter :: ICompileGet Integer
+newCounter = do
+  iCompileEnv <- get
+  let i = memExpCount iCompileEnv
+  put iCompileEnv { memExpCount = i + 1 }
+  return i
 
 -- scale multiplies both _maxAmount integer and the _amount expression
-scale :: Integer -> Expression -> TransferCall -> TransferCall
-scale maxFactor factorExp transferCall = transferCall { _maxAmount = _maxAmount transferCall * maxFactor, _amount = IMultExp (_amount transferCall) (iCompileExp factorExp) }
+scale :: Integer -> Expression -> TransferCall -> ICompileGet TransferCall
+scale maxFactor factorExp transferCall = do
+  return $ transferCall { _maxAmount = _maxAmount transferCall * maxFactor, _amount = IMultExp (_amount transferCall) (iCompileExp factorExp)}
 
-translate :: Integer -> TransferCall -> TransferCall
-translate seconds transferCall = transferCall { _delay = _delay transferCall + seconds }
+translate :: Integer -> TransferCall -> ICompileGet TransferCall
+translate seconds transferCall = do
+  return $ transferCall { _delay = _delay transferCall + seconds }
 
+-- This should also be a monad function (I think)
 intermediateCompile :: Contract -> IntermediateContract
-intermediateCompile = IntermediateContract . getTransferCalls
+intermediateCompile c = IntermediateContract $ (evalState (getTransferCalls c) (ICompileEnv 0))
 
+-- DEVNOTE: This does NOT need to run in a state monad
 -- The type of the observable is dropped since this is past the type checker stage
 iCompileExp :: Expression -> IntermediateExpression
 iCompileExp (Lit (IntVal i))              = ILitExp $ IIntVal i
@@ -36,12 +57,20 @@ iCompileExp (MaxExp e1 e2)                = IMaxExp (iCompileExp e1) (iCompileEx
 iCompileExp (NotExp e1)                   = INotExp (iCompileExp e1)
 iCompileExp (IfExp e1 e2 e3)              = IIfExp (iCompileExp e1) (iCompileExp e2) (iCompileExp e3)
 
-
-getTransferCalls :: Contract -> [TransferCall]
-getTransferCalls (Transfer sym from to) = [TransferCall 1 (ILitExp (IIntVal 1)) 0 sym from to]
-getTransferCalls (Scale maxFactor factorExp contract ) = map (scale maxFactor factorExp) (getTransferCalls contract)
-getTransferCalls (Both contractA contractB) = getTransferCalls contractA ++ getTransferCalls contractB
-getTransferCalls (Translate time contract ) = map (translate (time2Seconds time)) (getTransferCalls contract)
+-- DEVFIX: This needs to run in a state monad
+getTransferCalls :: Contract -> ICompileGet [TransferCall]
+getTransferCalls (Transfer sym from to) = do
+  return $ [TransferCall 1 (ILitExp (IIntVal 1)) 0 sym from to]
+getTransferCalls (Scale maxFactor factorExp contract ) = do
+  tcalls <- getTransferCalls contract
+  mapM (scale maxFactor factorExp) tcalls
+getTransferCalls (Both contractA contractB) = do
+  contA <- getTransferCalls contractA
+  contB <- getTransferCalls contractB
+  return $ contA ++ contB
+getTransferCalls (Translate time contract) = do
+  tcalls <- getTransferCalls contract
+  mapM (translate (time2Seconds time)) tcalls
 
 time2Seconds :: Time -> Integer
 time2Seconds Now = 0

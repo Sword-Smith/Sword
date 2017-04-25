@@ -9,8 +9,16 @@ data TransferCall = TransferCall { _maxAmount    :: Integer,
                                    _delay        :: Integer,
                                    _tokenAddress :: Address,
                                    _from         :: Address,
-                                   _to           :: Address
+                                   _to           :: Address,
+                                   --_memExpRefs   :: [IMemExpRef]
 } deriving (Show, Eq)
+
+-- DEVNOTE:
+-- We start by attempting to implement the evaluation of IMemExp values.
+-- Later we try to find out how to read them when tcalls are executed.
+data IMemExp = IMemExp Time Integer Expression deriving (Show, Eq)
+
+data IMemExpRef = IMemExpRef Integer Bool deriving (Show, Eq)
 
 data IntermediateExpression = ILitExp ILiteral
                             | IMultExp IntermediateExpression IntermediateExpression
