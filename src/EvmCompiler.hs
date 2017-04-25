@@ -45,6 +45,7 @@ newLabel desc = do
 -- than 256 tcalls, it must take an integer also.
 data StorageType = CreationTimestamp
                  | Executed
+                 | MemoryExpressionRefs
                  | MaxAmount Integer
                  | Delay Integer
                  | TokenAddress Integer
@@ -54,11 +55,12 @@ data StorageType = CreationTimestamp
 getStorageAddress :: StorageType -> Word32
 getStorageAddress CreationTimestamp      = 0x0
 getStorageAddress Executed               = 0x20
-getStorageAddress (MaxAmount tcCount)    = 0x40 + 0xa0 * (fromInteger tcCount)
-getStorageAddress (Delay tcCount)        = 0x60 + 0xa0 * (fromInteger tcCount)
-getStorageAddress (TokenAddress tcCount) = 0x80 + 0xa0 * (fromInteger tcCount)
-getStorageAddress (ToAddress tcCount)    = 0xa0 + 0xa0 * (fromInteger tcCount)
-getStorageAddress (FromAddress tcCount)  = 0xc0 + 0xa0 * (fromInteger tcCount)
+getStorageAddress MemoryExpressionRefs   = 0x40
+getStorageAddress (MaxAmount tcCount)    = 0x60 + 0xa0 * (fromInteger tcCount)
+getStorageAddress (Delay tcCount)        = 0x80 + 0xa0 * (fromInteger tcCount)
+getStorageAddress (TokenAddress tcCount) = 0xa0 + 0xa0 * (fromInteger tcCount)
+getStorageAddress (ToAddress tcCount)    = 0xc0 + 0xa0 * (fromInteger tcCount)
+getStorageAddress (FromAddress tcCount)  = 0xe0 + 0xa0 * (fromInteger tcCount)
 
 address2w256 :: Address -> Word256
 address2w256 ('0':'x':addr) =
@@ -230,36 +232,38 @@ keccak256 fname =
 -- Check that there are not more than 2^8 transfercalls
 -- Wrapper for intermediateToOpcodesH
 intermediateToOpcodes :: IntermediateContract -> String
-intermediateToOpcodes (IntermediateContract tcs _) =
+intermediateToOpcodes (IntermediateContract tcs memExps) =
   let
     intermediateToOpcodesH :: IntermediateContract -> String
     intermediateToOpcodesH = asmToMachineCode . eliminatePseudoInstructions . evmCompile
   in
     if length(tcs) > 256
     then undefined
-    else intermediateToOpcodesH (IntermediateContract tcs [])
+    else intermediateToOpcodesH (IntermediateContract tcs memExps)
 
 -- Given an IntermediateContract, returns the EvmOpcodes representing the binary
 evmCompile :: IntermediateContract -> [EvmOpcode]
-evmCompile c =
+evmCompile (IntermediateContract tcs memExps) =
   let
-    constructor    = getConstructor c
+    constructor    = getConstructor tcs
     codecopy       = getCodeCopy constructor (contractHeader ++ execute ++ cancel)
     contractHeader = getContractHeader
-    execute        = getExecute c -- also contains selfdestruct when contract is fully executed
-    cancel         = getCancel c
+    --memExpEval     = getMemExpEval memExps
+    execute        = getExecute tcs -- also contains selfdestruct when contract is fully executed
+    cancel         = getCancel tcs
   in
     -- The addresses of the constructor run are different from runs when DC is on BC
+    --linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute ++ cancel ++ memExpEval)
     linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute ++ cancel)
 
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
-getConstructor :: IntermediateContract -> [EvmOpcode]
-getConstructor (IntermediateContract tcs _) =
+getConstructor :: [TransferCall] -> [EvmOpcode]
+getConstructor tcs =
   (getCheckNoValue "Constructor_Header" ) ++
   saveTimestampToStorage ++
   setExecutedWord tcs ++
-  placeValsInStorage (IntermediateContract tcs [])
+  placeValsInStorage tcs
 
 -- Checks that no value is sent when executing contract method
 -- Used in both contract header and in constructor
@@ -277,6 +281,7 @@ saveTimestampToStorage =  [TIMESTAMP,
                            SSTORE]
 
 -- Given a number of transfercalls, set executed word in storage
+-- A setMemExpWord is not needed since that word is initialized to zero automatically
 setExecutedWord :: [TransferCall] -> [EvmOpcode]
 setExecutedWord []  = undefined
 setExecutedWord tcs = [ PUSH32 $ integer2w256 $ 2^length(tcs) - 1,
@@ -284,8 +289,8 @@ setExecutedWord tcs = [ PUSH32 $ integer2w256 $ 2^length(tcs) - 1,
                         SSTORE ]
 
 -- The values that are known at compile time are placed in storage
-placeValsInStorage :: IntermediateContract -> [EvmOpcode]
-placeValsInStorage (IntermediateContract tcs _) =
+placeValsInStorage :: [TransferCall] -> [EvmOpcode]
+placeValsInStorage tcs =
   let
     placeValsInStorageH :: Integer -> [TransferCall] -> [EvmOpcode]
     placeValsInStorageH _ []        = []
@@ -343,9 +348,9 @@ getContractHeader =
   in
     (getCheckNoValue "Contract_Header") ++ switchStatement
 
--- Returns the code for executing all tcalls in this IntermediateContract
-getExecute :: IntermediateContract -> [EvmOpcode]
-getExecute (IntermediateContract tcs _) =
+-- Returns the code for executing all tcalls that function gets
+getExecute :: [TransferCall] -> [EvmOpcode]
+getExecute tcs =
   let
     selfdestruct = [ JUMPDESTFROM "selfdestruct",
                      CALLER,
@@ -515,6 +520,15 @@ getExecuteHH tc transferCounter =
                                      AND,
                                      ISZERO,
                                      JUMPITO $ "method_end" ++ (show (transferCounter)) ]
+        checkIfTCIsInChosenBranch = undefined
+          -- First check whether memExp bit is set or not
+          -- If it is set, jump to the end of this expression
+          -- If it is not set, check the time is within the time defined in within
+          -- If not within time, jump to method_end
+          -- If it is not set and time has not run out, evaluate the expression
+          -- Then check if memExp bit is set or not
+          -- If not set, jump to method_end
+          -- If set, do not jump
       in
         checkIfTimeHasPassed ++ checkIfTCHasBeenExecuted
 
@@ -610,25 +624,29 @@ getExecuteHH tc transferCounter =
     updateExecutedWord ++
     functionEndLabel
 
-getCancel :: IntermediateContract -> [EvmOpcode]
-getCancel ic = [JUMPDESTFROM "cancel_method"] ++ getCancelH ic
+getCancel :: [TransferCall] -> [EvmOpcode]
+getCancel tcs = [JUMPDESTFROM "cancel_method"] ++ getCancelH tcs
 
-getCancelH :: IntermediateContract -> [EvmOpcode]
-getCancelH = concatMap cancelMapElementToAllowanceCall . Map.assocs . intermediateContract2CancelMap
+getCancelH :: [TransferCall] -> [EvmOpcode]
+getCancelH = concatMap cancelMapElementToAllowanceCall . Map.assocs . transferCalls2CancelMap
 
--- Given an intermediate contract update the cancelMap with required locked amount
-intermediateContract2CancelMap :: IntermediateContract -> CancelMap
-intermediateContract2CancelMap (IntermediateContract tcalls _) =
+-- Given a list of tcalls update the cancelMap with required locked amount
+-- DEVFIX: HOW SHOULD THIS BE CALCULATED WHEN THE CONTRACT CONTAINS BRANCHES??!
+-- I guess all branches should be calculated, and the max poss. amount found
+-- Right all the branches are summed and that gives an unreasonably high amount
+-- that the contract demands that a party locks.
+transferCalls2CancelMap :: [TransferCall] -> CancelMap
+transferCalls2CancelMap tcalls =
   let
-    intermediateContract2CancelMapH :: CancelMap -> [TransferCall] -> CancelMap
-    intermediateContract2CancelMapH cm (tcall:tcalls) = intermediateContract2CancelMapH (intermediateContract2CancelMapHH tcall cm) tcalls
-    intermediateContract2CancelMapH cm [] = cm
-    intermediateContract2CancelMapHH :: TransferCall -> CancelMap -> CancelMap
-    intermediateContract2CancelMapHH tcall cm = case (Map.lookup (_tokenAddress tcall, _from tcall) cm) of
+    transferCalls2CancelMapH :: CancelMap -> [TransferCall] -> CancelMap
+    transferCalls2CancelMapH cm (tcall:tcalls) = transferCalls2CancelMapH (transferCalls2CancelMapHH tcall cm) tcalls
+    transferCalls2CancelMapH cm [] = cm
+    transferCalls2CancelMapHH :: TransferCall -> CancelMap -> CancelMap
+    transferCalls2CancelMapHH tcall cm = case (Map.lookup (_tokenAddress tcall, _from tcall) cm) of
       (Just _) -> Map.adjust (_maxAmount tcall +) (_tokenAddress tcall, _from tcall) cm
       Nothing  -> Map.insert (_tokenAddress tcall, _from tcall) (_maxAmount tcall) cm
   in
-  intermediateContract2CancelMapH Map.empty tcalls
+  transferCalls2CancelMapH Map.empty tcalls
 
 -- Given a cancelMapElement which describes how much should be locked for a
 -- given account on a given token, return the correct allowance call to the

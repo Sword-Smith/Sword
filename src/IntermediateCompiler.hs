@@ -88,6 +88,7 @@ getTransferCalls (IfWithin _ contractA contractB) = do
 -- This MUST happen in the same order as it does in the getTransferCalls function!
 -- Otherwise the Ancient Ones will return.
 -- DEVFIX: This requirement is probably not a great quality of this compiler.
+-- So getTransferCalls and getMemoryExpressions should prob. be made into one function
 getMemoryExpressions :: Contract -> ICompileGet [IMemExp]
 getMemoryExpressions (Transfer _ _ _) = do
   return []
