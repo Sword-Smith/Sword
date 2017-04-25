@@ -31,9 +31,14 @@ translate :: Integer -> TransferCall -> ICompileGet TransferCall
 translate seconds transferCall = do
   return $ transferCall { _delay = _delay transferCall + seconds }
 
--- This should also be a monad function (I think)
+addMemExpRefCondition :: Integer -> Bool -> TransferCall -> ICompileGet TransferCall
+addMemExpRefCondition counter condition transferCall = do
+  return $ transferCall { _memExpRefs = (IMemExpRef counter condition) : (_memExpRefs transferCall) }
+
+-- Main method of the intermediate compiler
 intermediateCompile :: Contract -> IntermediateContract
-intermediateCompile c = IntermediateContract $ (evalState (getTransferCalls c) (ICompileEnv 0))
+intermediateCompile c =
+  IntermediateContract (evalState (getTransferCalls c) (ICompileEnv 0)) (evalState (getMemoryExpressions c) (ICompileEnv 0))
 
 -- DEVNOTE: This does NOT need to run in a state monad
 -- The type of the observable is dropped since this is past the type checker stage
@@ -57,10 +62,10 @@ iCompileExp (MaxExp e1 e2)                = IMaxExp (iCompileExp e1) (iCompileEx
 iCompileExp (NotExp e1)                   = INotExp (iCompileExp e1)
 iCompileExp (IfExp e1 e2 e3)              = IIfExp (iCompileExp e1) (iCompileExp e2) (iCompileExp e3)
 
--- DEVFIX: This needs to run in a state monad
+-- Run through the AST and return a list of transfer calls
 getTransferCalls :: Contract -> ICompileGet [TransferCall]
 getTransferCalls (Transfer sym from to) = do
-  return $ [TransferCall 1 (ILitExp (IIntVal 1)) 0 sym from to]
+  return $ [TransferCall 1 (ILitExp (IIntVal 1)) 0 sym from to []]
 getTransferCalls (Scale maxFactor factorExp contract ) = do
   tcalls <- getTransferCalls contract
   mapM (scale maxFactor factorExp) tcalls
@@ -71,6 +76,36 @@ getTransferCalls (Both contractA contractB) = do
 getTransferCalls (Translate time contract) = do
   tcalls <- getTransferCalls contract
   mapM (translate (time2Seconds time)) tcalls
+getTransferCalls (IfWithin _ contractA contractB) = do
+  contA <- getTransferCalls contractA
+  contB <- getTransferCalls contractB
+  counter <- newCounter
+  contAConds <- mapM (addMemExpRefCondition counter True) contA
+  contBConds <- mapM (addMemExpRefCondition counter False) contB
+  return $ contAConds ++ contBConds
+
+-- Run through the AST and return a list of memory expressions
+-- This MUST happen in the same order as it does in the getTransferCalls function!
+-- Otherwise the Ancient Ones will return.
+-- DEVFIX: This requirement is probably not a great quality of this compiler.
+getMemoryExpressions :: Contract -> ICompileGet [IMemExp]
+getMemoryExpressions (Transfer _ _ _) = do
+  return []
+getMemoryExpressions (Scale _ _ contract ) = do
+  memExps <- getMemoryExpressions contract
+  return memExps
+getMemoryExpressions (Both contractA contractB) = do
+  memExpsA <- getMemoryExpressions contractA
+  memExpsB <- getMemoryExpressions contractB
+  return $ memExpsA ++ memExpsB
+getMemoryExpressions (Translate _ contract) = do
+  memExps <- getMemoryExpressions contract
+  return memExps
+getMemoryExpressions (IfWithin (MemExp time exp0) contractA contractB) = do
+  memExpsA <- getMemoryExpressions contractA
+  memExpsB <- getMemoryExpressions contractB
+  counter <- newCounter
+  return $ (IMemExp time counter exp0) : (memExpsA ++ memExpsB)
 
 time2Seconds :: Time -> Integer
 time2Seconds Now = 0

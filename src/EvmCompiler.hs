@@ -230,14 +230,14 @@ keccak256 fname =
 -- Check that there are not more than 2^8 transfercalls
 -- Wrapper for intermediateToOpcodesH
 intermediateToOpcodes :: IntermediateContract -> String
-intermediateToOpcodes (IntermediateContract tcs) =
+intermediateToOpcodes (IntermediateContract tcs _) =
   let
     intermediateToOpcodesH :: IntermediateContract -> String
     intermediateToOpcodesH = asmToMachineCode . eliminatePseudoInstructions . evmCompile
   in
     if length(tcs) > 256
     then undefined
-    else intermediateToOpcodesH (IntermediateContract tcs)
+    else intermediateToOpcodesH (IntermediateContract tcs [])
 
 -- Given an IntermediateContract, returns the EvmOpcodes representing the binary
 evmCompile :: IntermediateContract -> [EvmOpcode]
@@ -255,11 +255,11 @@ evmCompile c =
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
 getConstructor :: IntermediateContract -> [EvmOpcode]
-getConstructor (IntermediateContract tcs) =
+getConstructor (IntermediateContract tcs _) =
   (getCheckNoValue "Constructor_Header" ) ++
   saveTimestampToStorage ++
   setExecutedWord tcs ++
-  placeValsInStorage (IntermediateContract tcs)
+  placeValsInStorage (IntermediateContract tcs [])
 
 -- Checks that no value is sent when executing contract method
 -- Used in both contract header and in constructor
@@ -285,7 +285,7 @@ setExecutedWord tcs = [ PUSH32 $ integer2w256 $ 2^length(tcs) - 1,
 
 -- The values that are known at compile time are placed in storage
 placeValsInStorage :: IntermediateContract -> [EvmOpcode]
-placeValsInStorage (IntermediateContract tcs) =
+placeValsInStorage (IntermediateContract tcs _) =
   let
     placeValsInStorageH :: Integer -> [TransferCall] -> [EvmOpcode]
     placeValsInStorageH _ []        = []
@@ -345,7 +345,7 @@ getContractHeader =
 
 -- Returns the code for executing all tcalls in this IntermediateContract
 getExecute :: IntermediateContract -> [EvmOpcode]
-getExecute (IntermediateContract tcs) =
+getExecute (IntermediateContract tcs _) =
   let
     selfdestruct = [ JUMPDESTFROM "selfdestruct",
                      CALLER,
@@ -618,7 +618,7 @@ getCancelH = concatMap cancelMapElementToAllowanceCall . Map.assocs . intermedia
 
 -- Given an intermediate contract update the cancelMap with required locked amount
 intermediateContract2CancelMap :: IntermediateContract -> CancelMap
-intermediateContract2CancelMap (IntermediateContract tcalls) =
+intermediateContract2CancelMap (IntermediateContract tcalls _) =
   let
     intermediateContract2CancelMapH :: CancelMap -> [TransferCall] -> CancelMap
     intermediateContract2CancelMapH cm (tcall:tcalls) = intermediateContract2CancelMapH (intermediateContract2CancelMapHH tcall cm) tcalls

@@ -2,7 +2,7 @@ module IntermediateBahrLanguageDefinition where
 
 import BahrLanguageDefinition
 
-data IntermediateContract = IntermediateContract [TransferCall] deriving (Show, Eq)
+data IntermediateContract = IntermediateContract [TransferCall] [IMemExp] deriving (Show, Eq)
 
 data TransferCall = TransferCall { _maxAmount    :: Integer,
                                    _amount       :: IntermediateExpression,
@@ -10,7 +10,7 @@ data TransferCall = TransferCall { _maxAmount    :: Integer,
                                    _tokenAddress :: Address,
                                    _from         :: Address,
                                    _to           :: Address,
-                                   --_memExpRefs   :: [IMemExpRef]
+                                   _memExpRefs   :: [IMemExpRef]
 } deriving (Show, Eq)
 
 -- DEVNOTE:
