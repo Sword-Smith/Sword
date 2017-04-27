@@ -25,7 +25,8 @@ type CancelMapElement = ((Address,Address), Integer)
 -- State monad definitions
 data CompileEnv = CompileEnv { labelCount :: Integer,
                                transferCallCount :: Integer,
-                               memOffset :: Integer
+                               memOffset :: Integer,
+                               labelString :: [Char]
                                } deriving Show
 
 type CompileGet a = State CompileEnv a
@@ -37,8 +38,9 @@ newLabel desc = do
   compileEnv <- get
   let i = labelCount compileEnv
   let j = transferCallCount compileEnv
+  let k = labelString compileEnv
   put compileEnv { labelCount = i + 1 }
-  return $ desc ++ "_" ++ (show i) ++ "_" ++ (show j)
+  return $ desc ++ "_" ++ (show i) ++ "_" ++ (show j) ++ "_" ++ (show k)
 
 
 -- ATM, "Executed" does not have an integer. If it should be able to handle more
@@ -565,7 +567,7 @@ getExecuteTCsHH tc transferCounter =
         -- Should take an IntermediateExpression and calculate the correct opcode
         -- The smallest of maxAmount and exp should be stored in mem
         -- 0x44 is the address in memory up to which memory is occupied
-        storeAmountArg         = evalState (compIExp ( _amount tc)) (CompileEnv 0 transferCounter 0x44) ++
+        storeAmountArg         = evalState (compIExp ( _amount tc)) (CompileEnv 0 transferCounter 0x44 "amount_exp") ++
                                  [ PUSH4 $ getStorageAddress $ MaxAmount transferCounter,
                                    SLOAD,
                                    DUP2,
