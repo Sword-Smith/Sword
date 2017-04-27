@@ -360,7 +360,45 @@ getExecuteIMemExps [] = []
 -- Here the IMemExp should be evaluated. But only iff it is NOT true atm.
 -- And also only iff current time is less than time in the IMemExp
 getExecuteIMemExp :: IMemExp -> [EvmOpcode]
-getExecuteIMemExp (IMemExp time count exp) = undefined
+getExecuteIMemExp (IMemExp time count iExp) =
+  let
+    checkIfExpShouldBeEvaluated =
+      let
+        checkIfMemExpIsTrue  = [ PUSH4 $ getStorageAddress MemoryExpressionRefs,
+                                 SLOAD,
+                                 PUSH1 $ fromInteger count,
+                                 PUSH1 0x2,
+                                 EXP,
+                                 AND,
+                                 JUMPITO $ "memExp_end" ++ show count ]
+        checkIfTimeHasPassed = [ PUSH4 $ getStorageAddress CreationTimestamp,
+                                 SLOAD,
+                                 TIMESTAMP,
+                                 SUB,
+                                 PUSH32 $ integer2w256 time,
+                                 EVM_LT,
+                                 JUMPITO $ "memExp_end" ++ show count ]
+      in
+      checkIfMemExpIsTrue ++ checkIfTimeHasPassed
+
+    evaulateExpression = evalState (compIExp iExp) (CompileEnv 0 count 0x0 "mem_exp")
+    checkEvalResult    = [ ISZERO,
+                           JUMPITO $ "memExp_end" ++ show count ]
+    updateMemExpWord   = [PUSH4 $ getStorageAddress MemoryExpressionRefs,
+                          SLOAD,
+                          PUSH1 $ fromInteger count,
+                          PUSH1 0x2,
+                          EXP,
+                          XOR,
+                          PUSH4 $ getStorageAddress MemoryExpressionRefs,
+                          SSTORE ]
+  in
+    checkIfExpShouldBeEvaluated ++
+    evaulateExpression ++
+    checkEvalResult ++
+    updateMemExpWord ++
+    [JUMPDESTFROM $ "memExp_end" ++ show count]
+
 
 -- Returns the code for executing all tcalls that function gets
 getExecuteTCs :: [TransferCall] -> [EvmOpcode]
