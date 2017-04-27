@@ -106,7 +106,7 @@ getMemoryExpressions (IfWithin (MemExp time exp0) contractA contractB) = do
   memExpsA <- getMemoryExpressions contractA
   memExpsB <- getMemoryExpressions contractB
   counter <- newCounter
-  return $ (IMemExp time counter exp0) : (memExpsA ++ memExpsB)
+  return $ (IMemExp (time2Seconds time) counter (iCompileExp exp0)) : (memExpsA ++ memExpsB)
 
 time2Seconds :: Time -> Integer
 time2Seconds Now = 0

@@ -232,28 +232,28 @@ keccak256 fname =
 -- Check that there are not more than 2^8 transfercalls
 -- Wrapper for intermediateToOpcodesH
 intermediateToOpcodes :: IntermediateContract -> String
-intermediateToOpcodes (IntermediateContract tcs memExps) =
+intermediateToOpcodes (IntermediateContract tcs iMemExps) =
   let
     intermediateToOpcodesH :: IntermediateContract -> String
     intermediateToOpcodesH = asmToMachineCode . eliminatePseudoInstructions . evmCompile
   in
     if length(tcs) > 256
     then undefined
-    else intermediateToOpcodesH (IntermediateContract tcs memExps)
+    else intermediateToOpcodesH (IntermediateContract tcs iMemExps)
 
 -- Given an IntermediateContract, returns the EvmOpcodes representing the binary
 evmCompile :: IntermediateContract -> [EvmOpcode]
-evmCompile (IntermediateContract tcs memExps) =
+evmCompile (IntermediateContract tcs iMemExps) =
   let
     constructor    = getConstructor tcs
     codecopy       = getCodeCopy constructor (contractHeader ++ execute ++ cancel)
     contractHeader = getContractHeader
-    --memExpEval     = getMemExpEval memExps
-    execute        = getExecute tcs -- also contains selfdestruct when contract is fully executed
+    --iMemExpEval     = getMemExpEval iMemExps
+    execute        = getExecute iMemExps tcs -- also contains selfdestruct when contract is fully executed
     cancel         = getCancel tcs
   in
     -- The addresses of the constructor run are different from runs when DC is on BC
-    --linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute ++ cancel ++ memExpEval)
+    --linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute ++ cancel ++ iMemExpEval)
     linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute ++ cancel)
 
 -- Once the values have been placed in storage, the CODECOPY opcode should
@@ -348,9 +348,21 @@ getContractHeader =
   in
     (getCheckNoValue "Contract_Header") ++ switchStatement
 
+getExecute :: [IMemExp] -> [TransferCall] -> [EvmOpcode]
+getExecute mes tcs = (getExecuteIMemExps mes) ++ (getExecuteTCs tcs)
+
+getExecuteIMemExps :: [IMemExp] -> [EvmOpcode]
+getExecuteIMemExps (iMemExp:iMemExps) = (getExecuteIMemExp iMemExp) ++ (getExecuteIMemExps iMemExps)
+getExecuteIMemExps [] = []
+
+-- Here the IMemExp should be evaluated. But only iff it is NOT true atm.
+-- And also only iff current time is less than time in the IMemExp
+getExecuteIMemExp :: IMemExp -> [EvmOpcode]
+getExecuteIMemExp (IMemExp time count exp) = undefined
+
 -- Returns the code for executing all tcalls that function gets
-getExecute :: [TransferCall] -> [EvmOpcode]
-getExecute tcs =
+getExecuteTCs :: [TransferCall] -> [EvmOpcode]
+getExecuteTCs tcs =
   let
     selfdestruct = [ JUMPDESTFROM "selfdestruct",
                      CALLER,
@@ -358,14 +370,14 @@ getExecute tcs =
                      STOP ]
   in
     (JUMPDESTFROM "execute_method") :
-    (getExecuteH tcs 0) ++
-    -- Prevent selfdestruct from running after each call
+    (getExecuteTCsH tcs 0) ++
+      -- Prevent selfdestruct from running after each call
     [STOP] ++
     selfdestruct
 
-getExecuteH :: [TransferCall] -> Integer -> [EvmOpcode]
-getExecuteH (tc:tcs) i = (getExecuteHH tc i) ++ (getExecuteH tcs (i + 1))
-getExecuteH [] _ = []
+getExecuteTCsH :: [TransferCall] -> Integer -> [EvmOpcode]
+getExecuteTCsH (tc:tcs) i = (getExecuteTCsHH tc i) ++ (getExecuteTCsH tcs (i + 1))
+getExecuteTCsH [] _ = []
 
 -- Compile intermediate expression into EVM opcodes
 -- THIS IS THE ONLY PLACE IN THE COMPILER WHERE EXPRESSION ARE HANDLED
@@ -493,8 +505,8 @@ compILit (IObservable address key) memOffset uniqueLabel =
     checkRetValue ++
     moveResToStack
 
-getExecuteHH :: TransferCall -> Integer -> [EvmOpcode]
-getExecuteHH tc transferCounter =
+getExecuteTCsHH :: TransferCall -> Integer -> [EvmOpcode]
+getExecuteTCsHH tc transferCounter =
   let
     checkIfCallShouldBeMade =
       let
@@ -521,12 +533,12 @@ getExecuteHH tc transferCounter =
                                      ISZERO,
                                      JUMPITO $ "method_end" ++ (show (transferCounter)) ]
         checkIfTCIsInChosenBranch = undefined
-          -- First check whether memExp bit is set or not
+          -- First check whether iMemExp bit is set or not
           -- If it is set, jump to the end of this expression
           -- If it is not set, check the time is within the time defined in within
           -- If not within time, jump to method_end
           -- If it is not set and time has not run out, evaluate the expression
-          -- Then check if memExp bit is set or not
+          -- Then check if iMemExp bit is set or not
           -- If not set, jump to method_end
           -- If set, do not jump
       in
