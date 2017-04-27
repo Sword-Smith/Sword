@@ -31,9 +31,9 @@ translate :: Integer -> TransferCall -> ICompileGet TransferCall
 translate seconds transferCall = do
   return $ transferCall { _delay = _delay transferCall + seconds }
 
-addMemExpRefCondition :: Integer -> Bool -> TransferCall -> ICompileGet TransferCall
-addMemExpRefCondition counter condition transferCall = do
-  return $ transferCall { _memExpRefs = (IMemExpRef counter condition) : (_memExpRefs transferCall) }
+addMemExpRefCondition :: Time -> Integer -> Bool -> TransferCall -> ICompileGet TransferCall
+addMemExpRefCondition time counter condition transferCall = do
+  return $ transferCall { _memExpRefs = (IMemExpRef (time2Seconds time) counter condition) : (_memExpRefs transferCall) }
 
 -- Main method of the intermediate compiler
 intermediateCompile :: Contract -> IntermediateContract
@@ -76,12 +76,12 @@ getTransferCalls (Both contractA contractB) = do
 getTransferCalls (Translate time contract) = do
   tcalls <- getTransferCalls contract
   mapM (translate (time2Seconds time)) tcalls
-getTransferCalls (IfWithin _ contractA contractB) = do
+getTransferCalls (IfWithin (MemExp time _) contractA contractB) = do
   contA <- getTransferCalls contractA
   contB <- getTransferCalls contractB
   counter <- newCounter
-  contAConds <- mapM (addMemExpRefCondition counter True) contA
-  contBConds <- mapM (addMemExpRefCondition counter False) contB
+  contAConds <- mapM (addMemExpRefCondition time counter True) contA
+  contBConds <- mapM (addMemExpRefCondition time counter False) contB
   return $ contAConds ++ contBConds
 
 -- Run through the AST and return a list of memory expressions

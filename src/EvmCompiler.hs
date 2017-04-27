@@ -89,6 +89,9 @@ integer2w256 i =
   in
     (fromInteger (i `quot` w32r^7 ), fromInteger (i `quot` w32r^6 ), fromInteger (i `quot` w32r^5 ), fromInteger (i `quot` w32r^4 ), fromInteger (i `quot` w32r^3 ), fromInteger (i `quot` w32r^2 ), fromInteger (i `quot` w32r^1 ), fromInteger (i `quot` w32r^0 ) )
 
+bool2w8 :: Bool -> Word8
+bool2w8 b = if b then 0x1 else 0x0
+
 -- Store string in ASCII format, with appending zeros
 string2w256 :: String -> Word256
 string2w256 str =
@@ -572,25 +575,55 @@ getExecuteTCsHH tc transferCounter =
                                      AND,
                                      ISZERO,
                                      JUMPITO $ "method_end" ++ (show (transferCounter)) ]
-        checkIfTCIsInChosenBranches =
+        checkIfTCIsInChosenBranches memExps =
           let
-            checkIfTCIsInChosenBranch =
+            checkIfTCIsInChosenBranch (IMemExpRef time count branch) =
               let
-                checkIfMemExpIsSet :: IMemExpRef -> [EvmOpcode]
-                checkIfMemExpIsSet (IMemExpRef count branch) = [
-                  PUSH4 $ getStorageAddress MemoryExpressionRefs,
-                  SLOAD,
-                  PUSH1 $ fromInteger count,
-                  PUSH1 0x2,
-                  EXP,
-                  AND,
-                  ISZERO,
-                  JUMPITO $ "else_branch_" ++ show count]
-                checkIfBranchIsTrue = undefined
+                checkIfMemExpIsSet =
+                  [PUSH4 $ getStorageAddress MemoryExpressionRefs,
+                   SLOAD,
+                   PUSH1 $ fromInteger count,
+                   PUSH1 0x2,
+                   EXP,
+                   AND,
+                   ISZERO,
+                   -- jump to else_branch if membit == 0
+                   JUMPITO $ "outer_else_branch_" ++ show count ++ "_" ++ show transferCounter]
+
+                checkIfBranchIsTrue0 =
+                  if branch then
+                    []
+                  else
+                    [JUMPTO $ "set_execute_bit_to_zero" ++ show transferCounter]
+
+                passThisCheck =
+                  [JUMPTO $ "pass_this_memExp_check" ++ show count ++ "_" ++ show transferCounter]
+                jdOuterElse =
+                  [JUMPDESTFROM $ "outer_else_branch_" ++ show count ++ "_" ++ show transferCounter]
+                checkIfMemTimeHasPassed = [PUSH4 $ getStorageAddress CreationTimestamp,
+                                        SLOAD,
+                                        TIMESTAMP,
+                                        SUB,
+                                        PUSH32 $ integer2w256 time,
+                                        EVM_GT,
+                                        -- If time > elapsed time, skip the call, don't flip execute bit
+                                        JUMPITO $ "method_end" ++ (show transferCounter)]
+                checkIfBranchIsTrue1 =
+                  if branch then
+                    [JUMPTO $ "set_execute_bit_to_zero" ++ show transferCounter]
+                  else
+                    [JUMPTO $ "pass_this_memExp_check" ++ show count ++ "_" ++ show transferCounter]
+
               in
-                undefined
+                checkIfMemExpIsSet ++
+                checkIfBranchIsTrue0 ++
+                passThisCheck ++
+                jdOuterElse ++
+                checkIfMemTimeHasPassed ++
+                checkIfBranchIsTrue1 ++
+                [JUMPDESTFROM $ "pass_this_memExp_check" ++ show count ++ "_" ++ show transferCounter]
           in
-            undefined
+            concatMap checkIfTCIsInChosenBranch memExps
           -- First check whether iMemExp bit is set or not
           -- If it is set, check the time is within the time defined in within
           -- If not within time, jump to method_end
@@ -599,7 +632,9 @@ getExecuteTCsHH tc transferCounter =
           -- If not set, jump to method_end
           -- If set, do not jump
       in
-        checkIfTimeHasPassed ++ checkIfTCHasBeenExecuted
+        checkIfTimeHasPassed ++
+        checkIfTCHasBeenExecuted ++
+        checkIfTCIsInChosenBranches (_memExpRefs tc)
 
     storeMethodsArgsToMem =
       let
@@ -665,7 +700,8 @@ getExecuteTCsHH tc transferCounter =
                          THROW, -- Is it correct to throw here??
                          JUMPDESTFROM ("ret_val" ++ (show transferCounter)) ]
     -- Flip correct bit from one to zero and call selfdestruct if all tcalls compl.
-    updateExecutedWord = [ PUSH4 $ getStorageAddress Executed,
+    updateExecutedWord = [ JUMPDESTFROM $ "set_execute_bit_to_zero" ++ show transferCounter,
+                           PUSH4 $ getStorageAddress Executed,
                            SLOAD,
                            PUSH1 $ fromInteger transferCounter,
                            PUSH1 0x2,

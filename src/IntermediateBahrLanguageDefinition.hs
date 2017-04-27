@@ -19,7 +19,7 @@ data TransferCall = TransferCall { _maxAmount    :: Integer,
 -- The 1st integer represents time, the second is a unique identifier.
 data IMemExp = IMemExp Integer Integer IntermediateExpression deriving (Show, Eq)
 
-data IMemExpRef = IMemExpRef Integer Bool deriving (Show, Eq)
+data IMemExpRef = IMemExpRef Integer Integer Bool deriving (Show, Eq)
 
 data IntermediateExpression = ILitExp ILiteral
                             | IMultExp IntermediateExpression IntermediateExpression
