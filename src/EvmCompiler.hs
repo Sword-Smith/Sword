@@ -572,10 +572,27 @@ getExecuteTCsHH tc transferCounter =
                                      AND,
                                      ISZERO,
                                      JUMPITO $ "method_end" ++ (show (transferCounter)) ]
-        checkIfTCIsInChosenBranch = undefined
+        checkIfTCIsInChosenBranches =
+          let
+            checkIfTCIsInChosenBranch =
+              let
+                checkIfMemExpIsSet :: IMemExpRef -> [EvmOpcode]
+                checkIfMemExpIsSet (IMemExpRef count branch) = [
+                  PUSH4 $ getStorageAddress MemoryExpressionRefs,
+                  SLOAD,
+                  PUSH1 $ fromInteger count,
+                  PUSH1 0x2,
+                  EXP,
+                  AND,
+                  ISZERO,
+                  JUMPITO $ "else_branch_" ++ show count]
+                checkIfBranchIsTrue = undefined
+              in
+                undefined
+          in
+            undefined
           -- First check whether iMemExp bit is set or not
-          -- If it is set, jump to the end of this expression
-          -- If it is not set, check the time is within the time defined in within
+          -- If it is set, check the time is within the time defined in within
           -- If not within time, jump to method_end
           -- If it is not set and time has not run out, evaluate the expression
           -- Then check if iMemExp bit is set or not
