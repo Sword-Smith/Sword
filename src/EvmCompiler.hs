@@ -354,7 +354,7 @@ getContractHeader =
     (getCheckNoValue "Contract_Header") ++ switchStatement
 
 getExecute :: [IMemExp] -> [TransferCall] -> [EvmOpcode]
-getExecute mes tcs = (getExecuteIMemExps mes) ++ (getExecuteTCs tcs)
+getExecute mes tcs = [JUMPDESTFROM "execute_method"] ++ (getExecuteIMemExps mes) ++ (getExecuteTCs tcs)
 
 getExecuteIMemExps :: [IMemExp] -> [EvmOpcode]
 getExecuteIMemExps (iMemExp:iMemExps) = (getExecuteIMemExp iMemExp) ++ (getExecuteIMemExps iMemExps)
@@ -380,6 +380,8 @@ getExecuteIMemExp (IMemExp time count iExp) =
                                  SUB,
                                  PUSH32 $ integer2w256 time,
                                  EVM_LT,
+                                 -- If contract time is less than elapsed time, don't evaluate,
+                                 -- jump to end of memory expression evaluation.
                                  JUMPITO $ "memExp_end" ++ show count ]
       in
       checkIfMemExpIsTrue ++ checkIfTimeHasPassed
@@ -412,7 +414,6 @@ getExecuteTCs tcs =
                      SELFDESTRUCT,
                      STOP ]
   in
-    (JUMPDESTFROM "execute_method") :
     (getExecuteTCsH tcs 0) ++
       -- Prevent selfdestruct from running after each call
     [STOP] ++
