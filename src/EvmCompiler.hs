@@ -360,6 +360,7 @@ getExecuteIMemExps :: [IMemExp] -> [EvmOpcode]
 getExecuteIMemExps (iMemExp:iMemExps) = (getExecuteIMemExp iMemExp) ++ (getExecuteIMemExps iMemExps)
 getExecuteIMemExps [] = []
 
+-- This sets the relevant bits in the memory expression word in storage
 -- Here the IMemExp should be evaluated. But only iff it is NOT true atm.
 -- And also only iff current time is less than time in the IMemExp
 getExecuteIMemExp :: IMemExp -> [EvmOpcode]
@@ -578,6 +579,29 @@ getExecuteTCsHH tc transferCounter =
                                      JUMPITO $ "method_end" ++ (show (transferCounter)) ]
         checkIfTCIsInChosenBranches memExps =
           let
+            -- A transferCall contains a list of IMemExpRefs
+            -- Here, the value of the IMemExps are checked. The values
+            -- are set by the getExecuteIMemExps code.
+            -- What happens here is that for each IMemExpRef,
+            -- the following C-like code is run:
+            -- if (memBit == 1){
+            --   if (branch){
+            --     JUMPTO "PASS"
+            --   } else {
+            --     JUMPTO "SET_EXECUTE_BIT_TO_ZERO"
+            --   }
+            -- } else { // i.e., memBit == 0
+            --   if (time_has_passed){
+            --     if (branch){
+            --       JUMPTO "SET_EXECUTE_BIT_TO_ZERO"
+            --     } else {
+            --       JUMPTO "PASS"
+            --     }
+            --   } else {
+            --     JUMPTO "SKIP" // don't execute and don't set executed bit to zero
+            --   }
+            -- }
+            -- JUMPDESTFROM "PASS"
             checkIfTCIsInChosenBranch (IMemExpRef time count branch) =
               let
                 checkIfMemExpIsSet =
