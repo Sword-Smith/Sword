@@ -649,13 +649,6 @@ getExecuteTCsHH tc transferCounter =
                 [JUMPDESTFROM $ "pass_this_memExp_check" ++ show count ++ "_" ++ show transferCounter]
           in
             concatMap checkIfTCIsInChosenBranch memExps
-          -- First check whether iMemExp bit is set or not
-          -- If it is set, check the time is within the time defined in within
-          -- If not within time, jump to method_end
-          -- If it is not set and time has not run out, evaluate the expression
-          -- Then check if iMemExp bit is set or not
-          -- If not set, jump to method_end
-          -- If set, do not jump
       in
         checkIfTimeHasPassed ++
         checkIfTCHasBeenExecuted ++
@@ -668,9 +661,6 @@ getExecuteTCsHH tc transferCounter =
                                   MUL,
                                   PUSH1 0x0,
                                   MSTORE]
-        -- 0x20 is for timestamp, 0x80 is place for address in storage, 0xa0 is size of data
-        -- associated with one function call
-        -- DEVFIX: create function to return address in storage
         storeFromAddressArg    = [PUSH4 $ getStorageAddress $ FromAddress transferCounter,
                                   SLOAD,
                                   PUSH1 0x4,
