@@ -22,7 +22,7 @@ library:
 
 executables:
   heather: &heather
-    main: src/main.hs
+    main: src/Main.hs
     dependencies:
       - heather
       - base >= 4.9.1.0
