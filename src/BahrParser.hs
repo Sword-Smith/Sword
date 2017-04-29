@@ -345,7 +345,7 @@ getBool = do
 
 getInteger :: GenParser Char st ObservableType
 getInteger = do
-  symbol "integer"
+  symbol "int"
   return OInteger
 
 
