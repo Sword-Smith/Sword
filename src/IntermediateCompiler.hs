@@ -5,8 +5,6 @@ import BahrLanguageDefinition
 
 import Control.Monad.State.Lazy
 
-import Test.HUnit hiding (State)
-
 -- State monad definitions
 -- The intermediate compilation happens in a monad since we need to ascribe
 -- unique identifiers to our memory expressions (type: MemExp)

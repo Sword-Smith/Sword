@@ -16,8 +16,6 @@ import Data.Word
 import Numeric (showHex)
 import Text.Printf (printf)
 
-import Test.HUnit hiding (State)
-
 -- [(token, owner/from address) => amount]
 type CancelMap = Map.Map (Address,Address) Integer
 type CancelMapElement = ((Address,Address), Integer)
