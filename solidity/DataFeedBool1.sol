@@ -1,11 +1,11 @@
-2pragma solidity ^0.4.9;
+pragma solidity ^0.4.9;
 
 contract DataFeedBool1 {
   bool b;
   string public symbol;
 
-  function DataFeedBool1(string _dfSymbol){
-    symbol = _dfSymbol;
+  function DataFeedBool1(string dataFeedSymbol){
+    symbol = dataFeedSymbol;
   }
 
   function set(bytes32 _key, bool _b){
