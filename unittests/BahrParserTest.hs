@@ -2,8 +2,8 @@ module BahrParserTest (tests) where
 
 import BahrParser
 import BahrLanguageDefinition
-import Test.HUnit hiding (Test)
 
+import Test.HUnit hiding (Test)
 import Test.Framework
 import Test.Framework.Providers.HUnit
 
