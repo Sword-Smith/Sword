@@ -126,7 +126,7 @@ getType (IfExp e0 e1 e2) = do
   if (t0 == BoolType && ((t1 == BoolType && t2 == BoolType) || (t1 == IntType && t2 == IntType))) then
     return $ if t1 == BoolType then BoolType else IntType
   else
-    if t0 != BoolType
+    if t0 /= BoolType
     then
       Left $ "Error in IfExp expression! First exp must be of type bool; got " ++ show t0
     else
