@@ -4,6 +4,7 @@ module Main where
 import EvmCompiler as EVMC
 import IntermediateCompiler as IMC
 import BahrParser as BP
+import TypeChecker as TC
 
 import Data.Aeson
 --import qualified Data.Text.Lazy.IO as I (writeFile)
@@ -121,9 +122,15 @@ main = do
             -- DEVFIX: The error handling could probably be better here
             -- Do we need checks after the parser is successful?
             Right ast -> do
-              putStrLn ("Writing to file " ++ binPath)
-              writeAbiDef writeDir bn
-              writeFile binPath (intermediateToOpcodes $ intermediateCompile ast)
+              -- Here we can call the type checker.
+              -- It could also return Left/Right
+              let typeCheck = TC.typeCheck ast
+              case typeCheck of
+                Left errTC -> putStrLn( "Type check error! " ++ (show errTC))
+                Right astTC -> do
+                  putStrLn ("Writing to file " ++ binPath)
+                  writeAbiDef writeDir bn
+                  writeFile binPath (intermediateToOpcodes $ intermediateCompile astTC)
         _ -> do
           let binPath = outdir ++ "/" ++ bn ++ ".bin"
           source <- readFile fp
@@ -133,7 +140,13 @@ main = do
             -- DEVFIX: The error handling could probably be better here
             -- Do we need checks after the parser is successful?
             Right ast -> do
-              putStrLn ("Writing to file " ++ binPath)
-              writeAbiDef outdir bn
-              writeFile binPath (intermediateToOpcodes $ intermediateCompile ast)
+              -- Here we can call the type checker.
+              -- It could also return Left/Right
+              let typeCheck = TC.typeCheck ast
+              case typeCheck of
+                Left errTC -> putStrLn( "Type check error! " ++ (show errTC))
+                Right astTC -> do
+                  putStrLn ("Writing to file " ++ binPath)
+                  writeAbiDef outdir bn
+                  writeFile binPath (intermediateToOpcodes $ intermediateCompile astTC)
 
