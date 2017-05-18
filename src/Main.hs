@@ -111,42 +111,18 @@ main = do
       putStrLn "Usage: Main [-o outdir] <file name>"
       exitFailure
     _ -> do
-      case outdir of
-        "" -> do
-          writeDir <- getCurrentDirectory
-          let binPath = writeDir ++ "/" ++ bn ++ ".bin"
-          source <- readFile fp
-          let parseRes = BP.parseWrap source
-          case parseRes of
-            Left err  -> putStrLn ("Parse error! " ++ (show err))
-            -- DEVFIX: The error handling could probably be better here
-            -- Do we need checks after the parser is successful?
-            Right ast -> do
-              -- Here we can call the type checker.
-              -- It could also return Left/Right
-              let typeCheck = TC.typeChecker ast
-              case typeCheck of
-                Left errTC -> putStrLn( "Type check error! " ++ (show errTC))
-                Right astTC -> do
-                  putStrLn ("Writing to file " ++ binPath)
-                  writeAbiDef writeDir bn
-                  writeFile binPath (intermediateToOpcodes $ intermediateCompile astTC)
-        _ -> do
-          let binPath = outdir ++ "/" ++ bn ++ ".bin"
-          source <- readFile fp
-          let parseRes = BP.parseWrap source
-          case parseRes of
-            Left err  -> putStrLn ("Parse error! " ++ (show err))
-            -- DEVFIX: The error handling could probably be better here
-            -- Do we need checks after the parser is successful?
-            Right ast -> do
-              -- Here we can call the type checker.
-              -- It could also return Left/Right
-              let typeCheck = TC.typeChecker ast
-              case typeCheck of
-                Left errTC -> putStrLn( "Type check error! " ++ (show errTC))
-                Right astTC -> do
-                  putStrLn ("Writing to file " ++ binPath)
-                  writeAbiDef outdir bn
-                  writeFile binPath (intermediateToOpcodes $ intermediateCompile astTC)
-
+      let binPath = outdir ++ "/" ++ bn ++ ".bin"
+      source <- readFile fp
+      let parseRes = BP.parseWrap source
+      case parseRes of
+        Left err  -> putStrLn ("Parse error! " ++ show err)
+        -- DEVFIX: The error handling could probably be better here
+        -- Do we need checks after the parser is successful?
+        Right ast -> do
+          let typeCheck = TC.typeChecker ast
+          case typeCheck of
+            Left errTC -> putStrLn( "Type check error! " ++ show errTC)
+            Right astTC -> do
+              putStrLn ("Writing to file " ++ binPath)
+              writeAbiDef outdir bn
+              writeFile binPath (intermediateToOpcodes $ intermediateCompile astTC)
