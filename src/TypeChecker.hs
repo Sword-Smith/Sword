@@ -17,10 +17,13 @@ typeChecker (Translate delay contract) = do
   c <- typeChecker contract
   return $ Translate delay c
 typeChecker (IfWithin (MemExp time e) contractA contractB) = do
-  _ <- getType e
-  cA <- typeChecker contractA
-  cB <- typeChecker contractB
-  return $ IfWithin (MemExp time e) cA cB
+  t0 <- getType e
+  if t0 == BoolType then do
+    cA <- typeChecker contractA
+    cB <- typeChecker contractB
+    return $ IfWithin (MemExp time e) cA cB
+  else
+    Left $ "First argument in If-Within must be of type Boolean, got " ++ show t0
 typeChecker (Scale maxFac scaleFac contract) = do
   t0 <- getType scaleFac
   if t0 /= BoolType then do
