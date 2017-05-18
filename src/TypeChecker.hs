@@ -6,17 +6,25 @@ import BahrParser
 -- typeChecker :: Contract -> Either String Contract
 -- typeChecker ast =
 
---typeCheckerH :: Contract ->
--- typeCheckerH (Transfer tokenAddress from to) = Transfer tokenAddress from to
--- typeCheckerH (Both contractA contractB)      = Both (typeCheckerH contractA) (typeCheckerH contractB)
--- typeCheckerH (Translate delay contract)      = Translate delay (typeCheckerH contract)
--- typeCheckerH (IfWithin memExp contractA contractB) =
---   IfWithin (checkExp memExp) (typeCheckerH contractA) (typeCheckerH contractB)
--- typeCheckerH (Scale maxFac scaleFac contractA) =
---   Scale maxFac (checkExp scaleFac) typeCheckerH contractA
-
--- checkExp :: Expression -> Either String Expression
--- checkExp (Lit )
+typeCheckerH :: Contract -> Either String Contract
+typeCheckerH (Transfer tokenAddress from to) = do
+  return $ Transfer tokenAddress from to
+typeCheckerH (Both contractA contractB)      = do
+  cA <- typeCheckerH contractA
+  cB <- typeCheckerH contractB
+  return $ Both cA cB
+typeCheckerH (Translate delay contract)      = do
+  c <- typeCheckerH contract
+  return $ Translate delay c
+typeCheckerH (IfWithin (MemExp time e) contractA contractB) = do
+  _ <- getType e
+  cA <- typeCheckerH contractA
+  cB <- typeCheckerH contractB
+  return $ IfWithin (MemExp time e) cA cB
+typeCheckerH (Scale maxFac scaleFac contract) = do
+  _ <- getType scaleFac
+  c <- typeCheckerH contract
+  return $ Scale maxFac scaleFac c
 
 getType :: Expression -> Either String ExpType
 getType (Lit literal) = do
