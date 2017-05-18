@@ -124,7 +124,7 @@ main = do
             Right ast -> do
               -- Here we can call the type checker.
               -- It could also return Left/Right
-              let typeCheck = TC.typeCheck ast
+              let typeCheck = TC.typeChecker ast
               case typeCheck of
                 Left errTC -> putStrLn( "Type check error! " ++ (show errTC))
                 Right astTC -> do
@@ -142,7 +142,7 @@ main = do
             Right ast -> do
               -- Here we can call the type checker.
               -- It could also return Left/Right
-              let typeCheck = TC.typeCheck ast
+              let typeCheck = TC.typeChecker ast
               case typeCheck of
                 Left errTC -> putStrLn( "Type check error! " ++ (show errTC))
                 Right astTC -> do

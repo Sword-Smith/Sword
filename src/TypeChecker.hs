@@ -1,30 +1,33 @@
 module TypeChecker where
 
 import BahrLanguageDefinition
-import BahrParser
 
--- typeChecker :: Contract -> Either String Contract
--- typeChecker ast =
 
-typeCheckerH :: Contract -> Either String Contract
-typeCheckerH (Transfer tokenAddress from to) = do
+data ExpType = BoolType
+             | IntType deriving (Show, Eq)
+
+typeChecker :: Contract -> Either String Contract
+typeChecker (Transfer tokenAddress from to) = do
   return $ Transfer tokenAddress from to
-typeCheckerH (Both contractA contractB)      = do
-  cA <- typeCheckerH contractA
-  cB <- typeCheckerH contractB
+typeChecker (Both contractA contractB) = do
+  cA <- typeChecker contractA
+  cB <- typeChecker contractB
   return $ Both cA cB
-typeCheckerH (Translate delay contract)      = do
-  c <- typeCheckerH contract
+typeChecker (Translate delay contract) = do
+  c <- typeChecker contract
   return $ Translate delay c
-typeCheckerH (IfWithin (MemExp time e) contractA contractB) = do
+typeChecker (IfWithin (MemExp time e) contractA contractB) = do
   _ <- getType e
-  cA <- typeCheckerH contractA
-  cB <- typeCheckerH contractB
+  cA <- typeChecker contractA
+  cB <- typeChecker contractB
   return $ IfWithin (MemExp time e) cA cB
-typeCheckerH (Scale maxFac scaleFac contract) = do
-  _ <- getType scaleFac
-  c <- typeCheckerH contract
-  return $ Scale maxFac scaleFac c
+typeChecker (Scale maxFac scaleFac contract) = do
+  t0 <- getType scaleFac
+  if t0 /= BoolType then do
+    c <- typeChecker contract
+    return $ Scale maxFac scaleFac c
+    else
+    Left $ "2nd argument to scale must be of type int, got: " ++ show t0
 
 getType :: Expression -> Either String ExpType
 getType (Lit literal) = do
@@ -62,35 +65,35 @@ getType (LtExp e0 e1) = do
   t0 <- getType e0
   t1 <- getType e1
   if t0 == IntType && t1 == IntType then
-    return IntType
+    return BoolType
   else
     Left $ "Error in LtExp expression! Expected int, int; got " ++ (show t0) ++ ", " ++ (show t1)
 getType (GtExp e0 e1) = do
   t0 <- getType e0
   t1 <- getType e1
   if t0 == IntType && t1 == IntType then
-    return IntType
+    return BoolType
   else
     Left $ "Error in GtExp expression! Expected int, int; got " ++ (show t0) ++ ", " ++ (show t1)
 getType (EqExp e0 e1) = do
   t0 <- getType e0
   t1 <- getType e1
   if (t0 == IntType && t1 == IntType) then
-    return IntType
+    return BoolType
   else
     Left $ "Error in EqExp expression! Expected int, int; got " ++ (show t0) ++ ", " ++ (show t1)
 getType (GtOrEqExp e0 e1) = do
   t0 <- getType e0
   t1 <- getType e1
   if (t0 == IntType && t1 == IntType) then
-    return IntType
+    return BoolType
   else
     Left $ "Error in GtOrEqExp expression! Expected int, int; got " ++ (show t0) ++ ", " ++ (show t1)
 getType (LtOrEqExp e0 e1) = do
   t0 <- getType e0
   t1 <- getType e1
   if (t0 == IntType && t1 == IntType) then
-    return IntType
+    return BoolType
   else
     Left $ "Error in LtOrEqExp expression! Expected int, int; got " ++ (show t0) ++ ", " ++ (show t1)
 getType (OrExp e0 e1) = do
@@ -145,6 +148,3 @@ getLiteral (IntVal _)                 = Right IntType
 getLiteral (BoolVal _)                = Right BoolType
 getLiteral (Observable OBool _ _ )    = Right BoolType
 getLiteral (Observable OInteger _ _ ) = Right IntType
-
-data ExpType = BoolType
-             | IntType deriving (Show, Eq)
