@@ -24,7 +24,7 @@ contract Eur_Option {
     function execute()
     {
         if (contractExecuted){return;}
-        if (now - deployTime >= 36000) // Ten hours
+        if (now - deployTime >= 180) // Three minutes
         {
             uint obs_value = dataFeed.get("0");
             if (obs_value == 0)
