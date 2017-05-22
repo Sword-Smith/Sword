@@ -1,6 +1,6 @@
 pragma solidity ^0.4.10;
-import "Tmc4.sol";
-import "DataFeed0.sol";
+import "./Tmc4.sol";
+import "./DataFeed0.sol";
 
 contract Eur_Option {
 
