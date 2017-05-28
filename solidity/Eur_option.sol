@@ -19,6 +19,7 @@ contract Eur_Option {
         dataFeed = DataFeed0(datafeed_address); // Write in the correct address for the DF
         to_address = to_address_;
         from_address = from_address_;
+        contractExecuted = false;
     }
 
     function execute()
