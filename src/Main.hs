@@ -89,14 +89,14 @@ writeAbiDef outdir bn = do
 args2fileInfo :: [String] -> (String, String, String)
 args2fileInfo (fp:[]) =
   let
-    fPath = head (splitOn ".bahr" fp)
-    bn    = last (splitOn "/" fPath)
+    fPath = head $ splitOn ".bahr" $ head $ splitOn ".dag" fp
+    bn    = last $ splitOn "/" fPath
   in
     ("", bn, fp)
 args2fileInfo ["-o", outdir, fp] =
   let
-    fPath = head (splitOn ".bahr" fp)
-    bn    = last (splitOn "/" fPath)
+    fPath = head $ splitOn ".bahr" $ head $ splitOn ".dag" fp
+    bn    = last $ splitOn "/" fPath
   in
     (outdir, bn, fp)
 args2fileInfo _ = ("", "", "")
