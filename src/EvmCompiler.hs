@@ -1,9 +1,8 @@
 module EvmCompiler where
 
-import BahrLanguageDefinition
-import BahrParser
+import DaggerLanguageDefinition
 import EvmLanguageDefinition
-import IntermediateBahrLanguageDefinition
+import IntermediateLanguageDefinition
 import IntermediateCompiler
 
 import Control.Monad.State.Lazy

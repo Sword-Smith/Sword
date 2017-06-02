@@ -1,6 +1,6 @@
 module TypeChecker where
 
-import BahrLanguageDefinition
+import DaggerLanguageDefinition
 
 
 data ExpType = BoolType

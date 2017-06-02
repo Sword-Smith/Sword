@@ -1,13 +1,12 @@
 {-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
 {-# LANGUAGE OverloadedStrings #-}
-module BahrParser where
+module DaggerParser where
 
 -- file: Parser.hs
-import BahrLanguageDefinition
+import DaggerLanguageDefinition
 import IntermediateCompiler
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Combinator as ParSecCom
-
 
 import Text.Parsec.String (Parser)
 import Data.Text as Text hiding (map)

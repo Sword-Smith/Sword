@@ -1,7 +1,7 @@
 module IntermediateCompiler where
 
-import IntermediateBahrLanguageDefinition
-import BahrLanguageDefinition
+import IntermediateLanguageDefinition
+import DaggerLanguageDefinition
 
 import Control.Monad.State.Lazy
 

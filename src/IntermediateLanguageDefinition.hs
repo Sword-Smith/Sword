@@ -1,6 +1,6 @@
-module IntermediateBahrLanguageDefinition where
+module IntermediateLanguageDefinition where
 
-import BahrLanguageDefinition
+import DaggerLanguageDefinition
 
 data IntermediateContract = IntermediateContract [TransferCall] [IMemExp] deriving (Show, Eq)
 

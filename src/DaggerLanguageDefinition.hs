@@ -1,4 +1,4 @@
-module BahrLanguageDefinition where
+module DaggerLanguageDefinition where
 
 data Contract = Transfer { tokenAddress_ :: Address,
                            from_         :: Address,
