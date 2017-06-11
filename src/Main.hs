@@ -115,7 +115,7 @@ main = do
       source <- readFile fp
       let parseRes = BP.parseWrap source
       case parseRes of
-        Left err  -> putStrLn ("Parse error! " ++ show err)
+        Left err  -> putStrLn ("Parse error! " ++ show err ++ "Source code:\n" ++ source)
         -- DEVFIX: The error handling could probably be better here
         -- Do we need checks after the parser is successful?
         Right ast -> do
