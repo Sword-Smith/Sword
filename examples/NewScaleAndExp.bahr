@@ -1,1 +1,1 @@
-both( translate(seconds(120), transfer(_address_Tmc4_EUR, _address_my, 0x123456789012345678901234567890123456789b)), translate(now, scale(42, max(99, 98), transfer(_address_Tmc4_USD, _address_my, 0x123456789012345678901234567890123456789b ))))
+both( translate(seconds(120), transfer(_address_Tmc4_EUR, _address_my_, 0x123456789012345678901234567890123456789b)), translate(now, scale(42, max(99, 98), transfer(_address_Tmc4_USD, _address_my_, 0x123456789012345678901234567890123456789b ))))

@@ -1,1 +1,1 @@
-scale(10101, obs(integer, _address_DataFeed0_, 101), transfer(_address_Tmc4_EUR, _address_my, 0x123456789012345678901234567890123456789b))
+scale(10101, obs(integer, _address_DataFeed0_, 101), transfer(_address_Tmc4_EUR, _address_my_, 0x123456789012345678901234567890123456789b))
