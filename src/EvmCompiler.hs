@@ -741,6 +741,20 @@ getExecuteTCsHH tc transferCounter =
     updateExecutedWord ++
     functionEndLabel
 
+-- The getCancel should be replaced by getActivate which
+-- given a list of TransferCalls should return the EVM
+-- needed to activate a DC. Once a DC is activated, a
+-- bit indicating this could be flipped. It is also possible that
+-- the flipping of this bit is not needed at all and that the DC
+-- does not need to record in its state whether it is active or not.
+-- It seems to me that a bit is needed since partial execution of the
+-- Activate or the execute state would be very unfair.
+
+-- The getActivate function should take a list of TransferCalls as
+-- input and return a list of EVM instructions. The EVM instructions
+-- must call the transferFrom function like MicahZoltu explained to
+-- sword_smith when he proposed a new ERC standard.
+
 getCancel :: [TransferCall] -> [EvmOpcode]
 getCancel tcs = [JUMPDESTFROM "cancel_method"] ++ getCancelH tcs
 
@@ -750,7 +764,7 @@ getCancelH = concatMap cancelMapElementToAllowanceCall . Map.assocs . transferCa
 -- Given a list of tcalls update the cancelMap with required locked amount
 -- DEVFIX: HOW SHOULD THIS BE CALCULATED WHEN THE CONTRACT CONTAINS BRANCHES??!
 -- I guess all branches should be calculated, and the max poss. amount found
--- Right all the branches are summed and that gives an unreasonably high amount
+-- Right now all the branches are summed and that gives an unreasonably high amount
 -- that the contract demands that a party locks.
 transferCalls2CancelMap :: [TransferCall] -> CancelMap
 transferCalls2CancelMap tcalls =
