@@ -1,11 +1,11 @@
 module IntermediateCompilerTest (tests) where
 
-import BahrParser
-import BahrLanguageDefinition
+import DaggerParser
+import DaggerLanguageDefinition
 import IntermediateCompiler
-import IntermediateBahrLanguageDefinition
+import IntermediateLanguageDefinition
 
-import BahrParserTest hiding (tests)
+import DaggerParserTest hiding (tests)
 
 import Test.HUnit hiding (Test)
 import Test.Framework

@@ -1,7 +1,7 @@
-module BahrParserTest (tests, canonical_iw_source) where
+module DaggerParserTest (tests, canonical_iw_source) where
 
-import BahrParser
-import BahrLanguageDefinition
+import DaggerParser
+import DaggerLanguageDefinition
 
 import Test.HUnit hiding (Test)
 import Test.Framework
