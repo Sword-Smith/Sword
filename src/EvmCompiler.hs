@@ -234,25 +234,25 @@ keccak256 fname =
 -- Check that there are not more than 2^8 transfercalls
 -- Wrapper for intermediateToOpcodesH
 intermediateToOpcodes :: IntermediateContract -> String
-intermediateToOpcodes (IntermediateContract tcs iMemExps) =
+intermediateToOpcodes (IntermediateContract tcs iMemExps activateMap) =
   let
     intermediateToOpcodesH :: IntermediateContract -> String
     intermediateToOpcodesH = asmToMachineCode . eliminatePseudoInstructions . evmCompile
   in
     if length(tcs) > 256
     then undefined
-    else intermediateToOpcodesH (IntermediateContract tcs iMemExps)
+    else intermediateToOpcodesH (IntermediateContract tcs iMemExps activateMap)
 
 -- Given an IntermediateContract, returns the EvmOpcodes representing the binary
 evmCompile :: IntermediateContract -> [EvmOpcode]
-evmCompile (IntermediateContract tcs iMemExps) =
+evmCompile (IntermediateContract tcs iMemExps _) =
   let
     constructor    = getConstructor tcs
     codecopy       = getCodeCopy constructor (contractHeader ++ execute ++ cancel)
     contractHeader = getContractHeader
     --iMemExpEval     = getMemExpEval iMemExps
     execute        = getExecute iMemExps tcs -- also contains selfdestruct when contract is fully executed
-    cancel         = getCancel tcs
+    cancel         = getCancel tcs -- replace with getActivate and activateMap (3rd member of IntermediateContract)
   in
     -- The addresses of the constructor run are different from runs when DC is on BC
     --linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute ++ cancel ++ iMemExpEval)

@@ -2,7 +2,9 @@ module IntermediateLanguageDefinition where
 
 import DaggerLanguageDefinition
 
-data IntermediateContract = IntermediateContract [TransferCall] [IMemExp] deriving (Show, Eq)
+import qualified Data.Map.Strict as Map
+
+data IntermediateContract = IntermediateContract [TransferCall] [IMemExp] ActivateMap deriving (Show, Eq)
 
 data TransferCall = TransferCall { _maxAmount    :: Integer,
                                    _amount       :: IntermediateExpression,
@@ -44,3 +46,5 @@ data IntermediateExpression = ILitExp ILiteral
 data ILiteral = IIntVal Integer
               | IBoolVal Bool
               | IObservable Address String deriving (Show, Eq)
+
+type ActivateMap = Map.Map (Address,Address) Integer

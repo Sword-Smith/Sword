@@ -37,7 +37,7 @@ addMemExpRefCondition time counter condition transferCall = do
 -- Main method of the intermediate compiler
 intermediateCompile :: Contract -> IntermediateContract
 intermediateCompile c =
-  IntermediateContract (evalState (getTransferCalls c) (ICompileEnv 0)) (evalState (getMemoryExpressions c) (ICompileEnv 0))
+  IntermediateContract (evalState (getTransferCalls c) (ICompileEnv 0)) (evalState (getMemoryExpressions c) (ICompileEnv 0)) (getActivateMap c)
 
 -- DEVNOTE: This does NOT need to run in a state monad
 -- The type of the observable is dropped since this is past the type checker stage
@@ -88,6 +88,8 @@ getTransferCalls (IfWithin (MemExp time _) contractA contractB) = do
 -- Otherwise the Ancient Ones will return.
 -- DEVFIX: This requirement is probably not a great quality of this compiler.
 -- So getTransferCalls and getMemoryExpressions should prob. be made into one function
+-- If this is done, then getActivateMap should be included as well. Perhaps a big,
+-- bad monad?
 getMemoryExpressions :: Contract -> ICompileGet [IMemExp]
 getMemoryExpressions (Transfer _ _ _) = do
   return []
@@ -107,9 +109,9 @@ getMemoryExpressions (IfWithin (MemExp time exp0) contractA contractB) = do
   counter <- newCounter
   return $ (IMemExp (time2Seconds time) counter (iCompileExp exp0)) : (memExpsA ++ memExpsB)
 
-type ActivateMap = Map.Map (Address,Address) Integer
-type ActivateMapElement = ((Address,Address), Integer)
-
+-- Find out how large amount each party must commit
+-- as margin. This is equivalent to the largest amount
+-- each party can possibly lose.
 -- Run through the AST and return ActivateMap value
 -- I believe this currently has an exponential running
 -- time in the depth of the tree. That should probably
