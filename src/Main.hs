@@ -11,7 +11,6 @@ import Data.Aeson
 import qualified Data.ByteString.Lazy as BS
 import Data.List.Split
 import GHC.Generics
-import System.Directory
 import System.Environment
 import System.Exit
 

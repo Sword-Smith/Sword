@@ -3,7 +3,6 @@ module EvmCompiler where
 import DaggerLanguageDefinition
 import EvmLanguageDefinition
 import IntermediateLanguageDefinition
-import IntermediateCompiler
 
 import Control.Monad.State.Lazy
 import Crypto.Hash

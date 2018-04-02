@@ -2,7 +2,6 @@ module TypeChecker where
 
 import DaggerLanguageDefinition
 
-
 data ExpType = BoolType
              | IntType deriving (Show, Eq)
 
