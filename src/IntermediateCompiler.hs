@@ -4,6 +4,7 @@ import IntermediateLanguageDefinition
 import DaggerLanguageDefinition
 
 import Control.Monad.State.Lazy
+import qualified Data.Map.Strict as Map
 
 -- State monad definitions
 -- The intermediate compilation happens in a monad since we need to ascribe
@@ -105,6 +106,28 @@ getMemoryExpressions (IfWithin (MemExp time exp0) contractA contractB) = do
   memExpsB <- getMemoryExpressions contractB
   counter <- newCounter
   return $ (IMemExp (time2Seconds time) counter (iCompileExp exp0)) : (memExpsA ++ memExpsB)
+
+type ActivateMap = Map.Map (Address,Address) Integer
+type ActivateMapElement = ((Address,Address), Integer)
+
+-- Run through the AST and return ActivateMap value
+-- I believe this currently has an exponential running
+-- time in the depth of the tree. That should probably
+-- be fixed through memoization or dynamic programming
+-- where the tree is traversed buttom-up instead of
+-- top-down.
+getActivateMap :: Contract -> ActivateMap
+getActivateMap (Transfer tokenAddress from _) =
+  Map.fromList [((tokenAddress, from), 1)]
+getActivateMap (Scale maxFactor _ contract ) =
+  Map.map (* maxFactor) (getActivateMap contract)
+getActivateMap (Both contractA contractB) =
+  Map.unionWith (+) (getActivateMap contractA) (getActivateMap contractB)
+getActivateMap (Translate _ contract) =
+  getActivateMap contract
+getActivateMap (IfWithin (MemExp _ _) contractA contractB) =
+  Map.unionWith (max) (getActivateMap contractA) (getActivateMap contractB)
+
 
 time2Seconds :: Time -> Integer
 time2Seconds Now = 0
