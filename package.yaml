@@ -41,3 +41,4 @@ tests:
       - test-framework
       - test-framework-hunit
       - HUnit
+      - containers

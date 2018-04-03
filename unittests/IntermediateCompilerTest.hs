@@ -21,7 +21,6 @@ ic_unittest0 :: [Test]
 ic_unittest0 =
   [ testCase "iCompileExp mult" $
     iCompileExp (MultExp (Lit( IntVal 7)) (Lit( IntVal 17)) ) @?=
-    IMultExp (ILitExp( IIntVal 7)) (ILitExp( IIntVal 17))
     IMultExp (ILitExp( IIntVal 7)) (ILitExp( IIntVal 17)),
 
     testCase "iCompileExp if" $
@@ -98,7 +97,8 @@ ic_unittest1 =
                       _delay = 0, _tokenAddress = "0x1234567890123456789012345678901234567898",
                       _from = "0x1234567890123456789012345678901234567898",
                       _to = "0x1234567890123456789012345678901234567898",
-                      _memExpRefs = [IMemExpRef 1 6 False,IMemExpRef 6 5 False,IMemExpRef 7 4 False]}]
+                      _memExpRefs = [IMemExpRef 1 6 False,IMemExpRef 6 5 False,IMemExpRef 7 4 False]}
+                      ]
         [
             IMemExp 1 6 (IGtExp (IMultExp (ILitExp (IIntVal 1)) (ILitExp (IIntVal 1))) (ILitExp (IIntVal 1))),
             IMemExp 2 3 (IGtExp (IMultExp (ILitExp (IIntVal 2)) (ILitExp (IIntVal 2))) (ILitExp (IIntVal 2))),
@@ -108,6 +108,7 @@ ic_unittest1 =
             IMemExp 6 5 (IGtExp (IMultExp (ILitExp (IIntVal 6)) (ILitExp (IIntVal 6))) (ILitExp (IIntVal 6))),
             IMemExp 7 4 (IGtExp (IMultExp (ILitExp (IIntVal 7)) (ILitExp (IIntVal 7))) (ILitExp (IIntVal 7)))
         ]
+        (Map.fromList [(("0x1234567890123456789012345678901234567891","0x1234567890123456789012345678901234567891"),1),(("0x1234567890123456789012345678901234567892","0x1234567890123456789012345678901234567892"),1),(("0x1234567890123456789012345678901234567893","0x1234567890123456789012345678901234567893"),1),(("0x1234567890123456789012345678901234567894","0x1234567890123456789012345678901234567894"),1),(("0x1234567890123456789012345678901234567895","0x1234567890123456789012345678901234567895"),1),(("0x1234567890123456789012345678901234567896","0x1234567890123456789012345678901234567896"),1),(("0x1234567890123456789012345678901234567897","0x1234567890123456789012345678901234567897"),1),(("0x1234567890123456789012345678901234567898","0x1234567890123456789012345678901234567898"),1)])
   ]
 
 -- Test that the getActivateMap function returns a correct map given a function
