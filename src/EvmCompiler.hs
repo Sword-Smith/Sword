@@ -1,6 +1,7 @@
 module EvmCompiler where
 
 import DaggerLanguageDefinition
+import EvmCompilerHelper
 import EvmLanguageDefinition
 import IntermediateLanguageDefinition
 
@@ -59,44 +60,6 @@ getStorageAddress (Delay tcCount)        = 0x80 + 0xa0 * (fromInteger tcCount)
 getStorageAddress (TokenAddress tcCount) = 0xa0 + 0xa0 * (fromInteger tcCount)
 getStorageAddress (ToAddress tcCount)    = 0xc0 + 0xa0 * (fromInteger tcCount)
 getStorageAddress (FromAddress tcCount)  = 0xe0 + 0xa0 * (fromInteger tcCount)
-
-address2w256 :: Address -> Word256
-address2w256 ('0':'x':addr) =
-  let
-    address2w256H (h0:h1:h2:h3:h4:h5:h6:h7:h8:h9:h10:h11:h12:h13:h14:h15:h16:h17:h18:h19:h20:h21:h22:h23:h24:h25:h26:h27:h28:h29:h30:h31:h32:h33:h34:h35:h36:h37:h38:h39:[]) = (0x0, 0x0, 0x0, read ("0x" ++ [h0,h1,h2,h3,h4,h5,h6,h7]), read ("0x" ++ [h8,h9,h10,h11,h12,h13,h14,h15]), read ("0x" ++ [h16,h17,h18,h19,h20,h21,h22,h23]), read ("0x" ++ [h24,h25,h26,h27,h28,h29,h30,h31]), read ("0x" ++ [h32,h33,h34,h35,h36,h37,h38,h39]))
-    address2w256H _ = undefined
-  in
-    address2w256H addr
-address2w256 _ = undefined
-
-hexString2w256 :: String -> Word256
-hexString2w256 ('0':'x':addr) =
-  let
-    hexString2w256H (h0:h1:h2:h3:h4:h5:h6:h7:h8:h9:h10:h11:h12:h13:h14:h15:h16:h17:h18:h19:h20:h21:h22:h23:h24:h25:h26:h27:h28:h29:h30:h31:h32:h33:h34:h35:h36:h37:h38:h39:h40:h41:h42:h43:h44:h45:h46:h47:h48:h49:h50:h51:h52:h53:h54:h55:h56:h57:h58:h59:h60:h61:h62:h63:[]) = (read ("0x" ++ [h0,h1,h2,h3,h4,h5,h6,h7]), read ("0x" ++ [h8,h9,h10,h11,h12,h13,h14,h15]), read ("0x" ++ [h16,h17,h18,h19,h20,h21,h22,h23]), read ("0x" ++ [h24,h25,h26,h27,h28,h29,h30,h31]), read ("0x" ++ [h32,h33,h34,h35,h36,h37,h38,h39]), read ("0x" ++ [h40,h41,h42,h43,h44,h45,h46,h47]), read ("0x" ++ [h48,h49,h50,h51,h52,h53,h54,h55]), read ("0x" ++ [h56,h57,h58,h59,h60,h61,h62,h63]))
-    hexString2w256H _ = undefined
-  in
-    hexString2w256H addr
-hexString2w256 _ = undefined
-
-integer2w256 :: Integer -> Word256
-integer2w256 i =
-  let
-    w32r = 2^32
-  in
-    (fromInteger (i `quot` w32r^7 ), fromInteger (i `quot` w32r^6 ), fromInteger (i `quot` w32r^5 ), fromInteger (i `quot` w32r^4 ), fromInteger (i `quot` w32r^3 ), fromInteger (i `quot` w32r^2 ), fromInteger (i `quot` w32r^1 ), fromInteger (i `quot` w32r^0 ) )
-
-bool2w8 :: Bool -> Word8
-bool2w8 b = if b then 0x1 else 0x0
-
--- Store string in ASCII format, with appending zeros
-string2w256 :: String -> Word256
-string2w256 str =
-  let
-    showHex' c = showHex c "" -- partial evaluation of showHex
-    keyArg = concatMap (showHex' . ord) str -- get it to hex repr as string
-    formatted = "0x" ++ keyArg ++ (replicate (64 - 2*(length str)) '0')
-  in
-    hexString2w256 formatted
 
 asmToMachineCode :: [EvmOpcode] -> String
 asmToMachineCode opcodes = foldl (++) "" (map ppEvm opcodes)
