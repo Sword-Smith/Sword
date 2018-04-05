@@ -470,44 +470,20 @@ compILit (IIntVal int) _ _ = [PUSH32 $ integer2w256 int]
 compILit (IBoolVal bool) _ _ = if bool then [PUSH1 0x1] else [PUSH1 0x0] -- 0x1 is true
 compILit (IObservable address key) memOffset uniqueLabel =
   let
-    storeFSigInMem = [PUSH4 $ getFunctionSignature "get(bytes32)",
-                      PUSH32 (0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
-                      MUL,
-                      PUSH1 $ fromInteger memOffset,
-                      MSTORE]
-    storeKeyInMem  = [PUSH32 $ string2w256 key,
-                      PUSH1 $ fromInteger $ memOffset + 4,
-                      MSTORE]
-    pushOutSize   = [PUSH1 0x20]
-    pushOutOffset = [PUSH1 $ fromInteger memOffset]
-    pushInSize    = [PUSH1 0x24]
-    pushInOffset  = [PUSH1 $ fromInteger memOffset]
-    pushValue     = [PUSH1 0x0]
-    pushToAddress = [PUSH32 $ address2w256 address]
-    pushGas       = [PUSH1 0x32,
-                     GAS,
-                     SUB]
-    call          = [CALL]
-    checkRetValue = [ PUSH1 0x1,
-                      EVM_EQ,
-                      JUMPITO ("ret_val" ++ uniqueLabel),
-                      THROW, -- Is it correct to throw here??
-                      JUMPDESTFROM ("ret_val" ++ uniqueLabel) ]
+    functionCall =
+      getFunctionCallEvm
+        uniqueLabel
+        address
+        (getFunctionSignature "get(bytes32)")
+        (string2w256 key : [])
+        (fromInteger memOffset)
+        (fromInteger memOffset)
+        0x20
     moveResToStack = [ PUSH1 $ fromInteger memOffset,
                        MLOAD ]
   in
-    storeFSigInMem ++
-    storeKeyInMem ++
-    pushOutSize ++
-    pushOutOffset ++
-    pushInSize ++
-    pushInOffset ++
-    pushValue ++
-    pushToAddress ++
-    pushGas ++
-    call ++
-    checkRetValue ++
-    moveResToStack
+    functionCall
+    ++ moveResToStack
 
 getExecuteTCsHH :: TransferCall -> Integer -> [EvmOpcode]
 getExecuteTCsHH tc transferCounter =

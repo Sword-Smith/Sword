@@ -45,13 +45,12 @@ string2w256 str =
   in
     hexString2w256 formatted
 
-
--- This is an attempt to create a function
--- that returns the code for a function call.
+-- Return the code for a function call.
 -- This function should be used when generating the code
--- for the transferFrom function call.
-getFunctionCallEvm :: Int -> Address -> Word32 -> [Word256] -> Word8 -> Word8 -> Word8 -> [EvmOpcode]
-getFunctionCallEvm uniqueIdentifier calleeAddress callFunSig callArgs inMemOffset outMemOffset outSize =
+-- for the transferFrom function call, to generate the code
+-- that probes oracles, etc.
+getFunctionCallEvm :: String -> Address -> Word32 -> [Word256] -> Word8 -> Word8 -> Word8 -> [EvmOpcode]
+getFunctionCallEvm uniqueLabel calleeAddress callFunSig callArgs inMemOffset outMemOffset outSize =
   (storeFunctionSignature callFunSig)
   ++ storeArguments
   ++ pushOutSize
@@ -79,7 +78,7 @@ getFunctionCallEvm uniqueIdentifier calleeAddress callFunSig callArgs inMemOffse
     callInstruction   = [CALL]
     checkReturnValue  = [JUMPITO jumpLabel, THROW, JUMPDESTFROM jumpLabel] -- cancel entire execution if call was unsuccesfull
       where
-        jumpLabel = "return_value_success" ++ show uniqueIdentifier
+        jumpLabel = "return_value_success" ++ uniqueLabel
 
     storeArguments = storeArgumentsH callArgs 0
       where
