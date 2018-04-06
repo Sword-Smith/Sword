@@ -13,7 +13,6 @@ import Data.Char
 import qualified Data.Map.Strict as Map
 import Data.Word
 import Numeric (showHex)
-import Text.Printf (printf)
 
 -- [(token, owner/from address) => amount]
 type CancelMap = Map.Map (Address,Address) Integer
@@ -63,81 +62,6 @@ getStorageAddress (FromAddress tcCount)  = 0xe0 + 0xa0 * (fromInteger tcCount)
 
 asmToMachineCode :: [EvmOpcode] -> String
 asmToMachineCode opcodes = foldl (++) "" (map ppEvm opcodes)
-
-ppEvm :: EvmOpcode -> String
-ppEvm instruction = case instruction of
-    STOP         -> "00"
-    ADD          -> "01"
-    MUL          -> "02"
-    SUB          -> "03"
-    DIV          -> "04"
-    SDIV         -> "05"
-    MOD          -> "06"
-    SMOD         -> "07"
-    ADDMOD       -> "08"
-    MULMOD       -> "09"
-    EXP          -> "0a"
-    SIGNEXTEND   -> "0b"
-    EVM_LT       -> "10"
-    EVM_GT       -> "11"
-    SLT          -> "12"
-    SGT          -> "13"
-    EVM_EQ       -> "14"
-    ISZERO       -> "15"
-    AND          -> "16"
-    OR           -> "17"
-    XOR          -> "18"
-    NOT          -> "19"
-    BYTE         -> "1a"
-    SHA3         -> "20"
-    ADDRESS      -> "30"
-    BALANCE      -> "31"
-    ORIGIN       -> "32"
-    CALLER       -> "33"
-    CALLVALUE    -> "34"
-    CALLDATALOAD -> "35"
-    CALLDATASIZE -> "36"
-    CALLDATACOPY -> "37"
-    CODESIZE     -> "38"
-    CODECOPY     -> "39"
-    GASPRICE     -> "3a"
-    EXTCODESIZE  -> "3b"
-    EXTCODECOPY  -> "3c"
-    BLOCKHASH    -> "40"
-    COINBASE     -> "41"
-    TIMESTAMP    -> "42"
-    NUMBER       -> "43"
-    DIFFICULTY   -> "44"
-    GASLIMIT     -> "45"
-    POP          -> "50"
-    MLOAD        -> "51"
-    MSTORE       -> "52"
-    MSTORES      -> "53"
-    SLOAD        -> "54"
-    SSTORE       -> "55"
-    JUMP         -> "56"
-    JUMPI        -> "57"
-    PC           -> "58"
-    MSIZE        -> "59"
-    GAS          -> "5a"
-    JUMPDEST     -> "5b"
-    PUSH1 w8     -> "60" ++ printf "%02x" w8
-    PUSH4 w32    -> "63" ++ printf "%08x" w32
-    PUSH32 (w32_0, w32_1, w32_2, w32_3, w32_4, w32_5, w32_6, w32_7 ) -> "7f" ++ printf "%08x" w32_0 ++ printf "%08x" w32_1 ++ printf "%08x" w32_2 ++ printf "%08x" w32_3 ++ printf "%08x" w32_4 ++ printf "%08x" w32_5 ++ printf "%08x" w32_6 ++ printf "%08x" w32_7
-    DUP1         -> "80"
-    DUP2         -> "81"
-    DUP3         -> "82"
-    SWAP1        -> "90"
-    SWAP2        -> "91"
-    SWAP3        -> "92"
-    LOG0         -> "a0"
-    CREATE       -> "f0"
-    CALL         -> "f1"
-    CALLCODE     -> "f2"
-    RETURN       -> "f3"
-    DELEGATECALL -> "f4"
-    SELFDESTRUCT -> "ff"
-    THROW        -> "fe"
 
 getSizeOfOpcodeList :: [EvmOpcode] -> Integer
 getSizeOfOpcodeList xs = foldl (+) 0 (map getOpcodeSize xs)
