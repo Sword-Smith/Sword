@@ -50,9 +50,9 @@ string2w256 str =
 -- This function should be used when generating the code
 -- for the transferFrom function call, to generate the code
 -- that probes oracles, etc.
-getFunctionCallEvm :: String -> Address -> Word32 -> [Word256] -> Word8 -> Word8 -> Word8 -> [EvmOpcode]
-getFunctionCallEvm uniqueLabel calleeAddress callFunSig callArgs inMemOffset outMemOffset outSize =
-  (storeFunctionSignature callFunSig)
+getFunctionCallEvm :: String -> Address -> Word32 -> [CallArgument] -> Word8 -> Word8 -> Word8 -> [EvmOpcode]
+getFunctionCallEvm uniqueLabel calleeAddress funSig callArgs inMemOffset outMemOffset outSize =
+  storeFunctionSignature
   ++ storeArguments
   ++ pushOutSize
   ++ pushOutOffset
@@ -64,7 +64,7 @@ getFunctionCallEvm uniqueLabel calleeAddress callFunSig callArgs inMemOffset out
   ++ callInstruction
   ++ checkReturnValue -- should this be here?
   where
-    storeFunctionSignature funSig = [ PUSH32 (funSig, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+    storeFunctionSignature = [ PUSH32 (funSig, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
                                     , PUSH1 inMemOffset
                                     , MSTORE ]
     pushOutSize       = [PUSH1 outSize]
@@ -85,7 +85,10 @@ getFunctionCallEvm uniqueLabel calleeAddress callFunSig callArgs inMemOffset out
       where
         storeArgumentsH [] _ = []
         storeArgumentsH (arg:args) counter =
-          [PUSH32 arg, PUSH1 (inMemOffset + 0x4 + counter * 0x20), MSTORE] ++ (storeArgumentsH args (counter + 1))
+          storeArgumentsHH arg ++ (storeArgumentsH args (counter + 1))
+          where
+            storeArgumentsHH (Word256 w256) = [ PUSH32 w256, PUSH1 (inMemOffset + 0x4 + counter * 0x20) ]
+            storeArgumentsHH OwnAddress     = [ ADDRESS, PUSH1 (inMemOffset + 0x4 + counter * 0x20) ]
 
 ppEvm :: EvmOpcode -> String
 ppEvm instruction = case instruction of

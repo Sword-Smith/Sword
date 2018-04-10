@@ -47,4 +47,6 @@ data ILiteral = IIntVal Integer
               | IBoolVal Bool
               | IObservable Address String deriving (Show, Eq)
 
-type ActivateMap = Map.Map (Address,Address) Integer
+type ActivateMap = Map.Map (Address, Address) Integer
+
+type ActivateMapElement = ((Address, Address), Integer)

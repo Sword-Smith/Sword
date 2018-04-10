@@ -4,6 +4,9 @@ import Data.Word
 
 type Word256 = (Word32, Word32, Word32, Word32, Word32, Word32, Word32, Word32)
 
+data CallArgument = Word256 Word256
+                  | OwnAddress
+
 type Label = String
 
 data EvmOpcode = STOP

@@ -399,7 +399,7 @@ compILit (IObservable address key) memOffset uniqueLabel =
         uniqueLabel
         address
         (getFunctionSignature "get(bytes32)")
-        (string2w256 key : [])
+        (Word256 ( string2w256 key ) : [])
         (fromInteger memOffset)
         (fromInteger memOffset)
         0x20
