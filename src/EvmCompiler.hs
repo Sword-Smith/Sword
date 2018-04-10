@@ -603,6 +603,26 @@ getExecuteTCsHH tc transferCounter =
     updateExecutedWord ++
     functionEndLabel
 
+-- This might have to take place within the state monad to get unique labels for each TransferFrom call
+getActivate :: ActivateMap -> [EvmOpcode]
+getActivate am = [JUMPDESTFROM "activateMethod"] ++ ( concatMap activateMapElementToTransferFromCall $ Map.assocs am )
+
+activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
+activateMapElementToTransferFromCall ((tokenAddress, fromAddress), amount) =
+  getFunctionCallEvm
+    "activate_function_call" -- TODO: This must be made unique!
+    tokenAddress
+    (getFunctionSignature "transferFrom(address,address,uint)")
+    [ Word256 (address2w256 fromAddress), OwnAddress, Word256 (integer2w256 amount) ]
+    0 -- inMemOffset
+    0 -- outMemOffset
+    1 -- outSize
+-- We also need to add a check whether the transferFrom function call
+-- returns true or false. Only of all function calls return true, should
+-- the activated bit be set. This bit has not yet been reserved in
+-- memory/defined.
+
+
 -- The getCancel should be replaced by getActivate which
 -- given a list of TransferCalls should return the EVM
 -- needed to activate a DC. Once a DC is activated, a
