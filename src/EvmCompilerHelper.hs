@@ -69,7 +69,7 @@ getFunctionCallEvm uniqueLabel calleeAddress funSig callArgs inMemOffset outMemO
                                     , MSTORE ]
     pushOutSize       = [PUSH1 outSize]
     pushOutOffset     = [PUSH1 outMemOffset]
-    pushInSize        = [PUSH1 (4 + 20 * (fromIntegral (length callArgs)))]
+    pushInSize        = [PUSH1 (0x4 + 0x20 * (fromIntegral (length callArgs)))]
     pushInOffset      = [PUSH1 inMemOffset]
     pushValue         = [PUSH1 0x0]
     pushCalleeAddress = [PUSH32 $ address2w256 calleeAddress]
@@ -87,8 +87,8 @@ getFunctionCallEvm uniqueLabel calleeAddress funSig callArgs inMemOffset outMemO
         storeArgumentsH (arg:args) counter =
           storeArgumentsHH arg ++ (storeArgumentsH args (counter + 1))
           where
-            storeArgumentsHH (Word256 w256) = [ PUSH32 w256, PUSH1 (inMemOffset + 0x4 + counter * 0x20) ]
-            storeArgumentsHH OwnAddress     = [ ADDRESS, PUSH1 (inMemOffset + 0x4 + counter * 0x20) ]
+            storeArgumentsHH (Word256 w256) = [ PUSH32 w256, PUSH1 (inMemOffset + 0x4 + counter * 0x20), MSTORE ]
+            storeArgumentsHH OwnAddress     = [ ADDRESS, PUSH1 (inMemOffset + 0x4 + counter * 0x20), MSTORE ]
 
 ppEvm :: EvmOpcode -> String
 ppEvm instruction = case instruction of
