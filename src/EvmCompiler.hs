@@ -43,6 +43,7 @@ newLabel desc = do
 -- than 256 tcalls, it must take an integer also.
 data StorageType = CreationTimestamp
                  | Executed
+                 | Activated
                  | MemoryExpressionRefs
                  | MaxAmount Integer
                  | Delay Integer
@@ -50,9 +51,12 @@ data StorageType = CreationTimestamp
                  | ToAddress Integer
                  | FromAddress Integer
 
+-- For each storage index we pay 20000 GAS.
+-- It would therefore make sense to pack as much as possible into the same index.
 getStorageAddress :: StorageType -> Word32
 getStorageAddress CreationTimestamp      = 0x0
-getStorageAddress Executed               = 0x20
+getStorageAddress Activated              = 0x1
+getStorageAddress Executed               = 0x20 -- Storage is word addressed, not byte addressed as we assumed originally.
 getStorageAddress MemoryExpressionRefs   = 0x40
 getStorageAddress (MaxAmount tcCount)    = 0x60 + 0xa0 * (fromInteger tcCount)
 getStorageAddress (Delay tcCount)        = 0x80 + 0xa0 * (fromInteger tcCount)
