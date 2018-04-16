@@ -50,8 +50,8 @@ string2w256 str =
 -- This function should be used when generating the code
 -- for the transferFrom function call, to generate the code
 -- that probes oracles, etc.
-getFunctionCallEvm :: String -> Address -> Word32 -> [CallArgument] -> Word8 -> Word8 -> Word8 -> [EvmOpcode]
-getFunctionCallEvm uniqueLabel calleeAddress funSig callArgs inMemOffset outMemOffset outSize =
+getFunctionCallEvm :: Address -> Word32 -> [CallArgument] -> Word8 -> Word8 -> Word8 -> [EvmOpcode]
+getFunctionCallEvm calleeAddress funSig callArgs inMemOffset outMemOffset outSize =
   storeFunctionSignature
   ++ storeArguments
   ++ pushOutSize
@@ -77,10 +77,7 @@ getFunctionCallEvm uniqueLabel calleeAddress funSig callArgs inMemOffset outMemO
                         , GAS
                         , SUB ]
     callInstruction   = [CALL]
-    checkReturnValue  = [JUMPITO jumpLabel, THROW, JUMPDESTFROM jumpLabel] -- cancel entire execution if call was unsuccesfull
-      where
-        jumpLabel = "return_value_success" ++ uniqueLabel
-
+    checkReturnValue  = [ISZERO, JUMPITO "global_throw"] -- cancel entire execution if call was unsuccesfull
     storeArguments = storeArgumentsH callArgs 0
       where
         storeArgumentsH [] _ = []

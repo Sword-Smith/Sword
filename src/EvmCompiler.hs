@@ -14,10 +14,6 @@ import qualified Data.Map.Strict as Map
 import Data.Word
 import Numeric (showHex)
 
--- [(token, owner/from address) => amount]
-type CancelMap = Map.Map (Address,Address) Integer
-type CancelMapElement = ((Address,Address), Integer)
-
 -- State monad definitions
 data CompileEnv = CompileEnv { labelCount :: Integer,
                                transferCallCount :: Integer,
@@ -51,7 +47,7 @@ data StorageType = CreationTimestamp
                  | ToAddress Integer
                  | FromAddress Integer
 
--- For each storage index we pay 20000 GAS.
+-- For each storage index we pay 20000 GAS. Reusing one is only 5000 GAS.
 -- It would therefore make sense to pack as much as possible into the same index.
 getStorageAddress :: StorageType -> Word32
 getStorageAddress CreationTimestamp      = 0x0
@@ -135,18 +131,17 @@ intermediateToOpcodes (IntermediateContract tcs iMemExps activateMap) =
 
 -- Given an IntermediateContract, returns the EvmOpcodes representing the binary
 evmCompile :: IntermediateContract -> [EvmOpcode]
-evmCompile (IntermediateContract tcs iMemExps _) =
+evmCompile (IntermediateContract tcs iMemExps activateMap) =
   let
-    constructor    = getConstructor tcs
-    codecopy       = getCodeCopy constructor (contractHeader ++ execute ++ cancel)
-    contractHeader = getContractHeader
-    --iMemExpEval     = getMemExpEval iMemExps
-    execute        = getExecute iMemExps tcs -- also contains selfdestruct when contract is fully executed
-    cancel         = getCancel tcs -- replace with getActivate and activateMap (3rd member of IntermediateContract)
+    constructor      = getConstructor tcs
+    codecopy         = getCodeCopy constructor (jumpTable ++ checkIfActivated ++ execute ++ activate)
+    jumpTable        = getJumpTable
+    checkIfActivated = getActivateCheck
+    execute          = getExecute iMemExps tcs -- also contains selfdestruct when contract is fully executed
+    activate         = getActivate activateMap
   in
     -- The addresses of the constructor run are different from runs when DC is on BC
-    --linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute ++ cancel ++ iMemExpEval)
-    linker (constructor ++ codecopy) ++ linker (contractHeader ++ execute ++ cancel)
+    linker (constructor ++ codecopy) ++ linker (jumpTable ++ checkIfActivated ++ execute ++ activate)
 
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
@@ -157,7 +152,7 @@ getConstructor tcs =
   setExecutedWord tcs ++
   placeValsInStorage tcs
 
--- Checks that no value is sent when executing contract method
+-- Checks that no value (ether) is sent when executing contract method
 -- Used in both contract header and in constructor
 getCheckNoValue :: String -> [EvmOpcode]
 getCheckNoValue target = [CALLVALUE,
@@ -221,8 +216,8 @@ getCodeCopy con exe = [PUSH4 $ fromInteger (getSizeOfOpcodeList exe),
                        RETURN,
                        STOP] -- 22 is the length of itself, right now we are just saving in mem0
 
-getContractHeader :: [EvmOpcode]
-getContractHeader =
+getJumpTable :: [EvmOpcode]
+getJumpTable =
   let
     -- This does not allow for multiple calls.
     switchStatement = [PUSH1 0,
@@ -233,15 +228,28 @@ getContractHeader =
                        PUSH32 $ (getFunctionSignature "execute()" , 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
                        EVM_EQ,
                        JUMPITO "execute_method",
-                       PUSH32 $ (getFunctionSignature "cancel()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
+                       PUSH32 $ (getFunctionSignature "activate()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
                        EVM_EQ,
-                       JUMPITO "cancel_method",
+                       JUMPITO "activate_method",
+                       JUMPDESTFROM "global_throw",
                        THROW]
   in
     (getCheckNoValue "Contract_Header") ++ switchStatement
 
+-- When calling execute(), PC must be set here
+-- to check if the DC is activated
+-- throw iff activated bit is zero
+getActivateCheck :: [EvmOpcode]
+getActivateCheck =
+  [ JUMPDESTFROM "execute_method"
+  , PUSH4 $ getStorageAddress Activated
+  , SLOAD
+  , ISZERO
+  , JUMPITO "global_throw" ]
+
 getExecute :: [IMemExp] -> [TransferCall] -> [EvmOpcode]
-getExecute mes tcs = [JUMPDESTFROM "execute_method"] ++ (getExecuteIMemExps mes) ++ (getExecuteTCs tcs)
+getExecute mes tcs = (getExecuteIMemExps mes)
+                     ++ (getExecuteTCs tcs)
 
 getExecuteIMemExps :: [IMemExp] -> [EvmOpcode]
 getExecuteIMemExps (iMemExp:iMemExps) = (getExecuteIMemExp iMemExp) ++ (getExecuteIMemExps iMemExps)
@@ -396,11 +404,10 @@ compIExp (IIfExp exp_1 exp_2 exp_3) = do
 compILit :: ILiteral -> Integer -> String -> [EvmOpcode]
 compILit (IIntVal int) _ _ = [PUSH32 $ integer2w256 int]
 compILit (IBoolVal bool) _ _ = if bool then [PUSH1 0x1] else [PUSH1 0x0] -- 0x1 is true
-compILit (IObservable address key) memOffset uniqueLabel =
+compILit (IObservable address key) memOffset _ =
   let
     functionCall =
       getFunctionCallEvm
-        uniqueLabel
         address
         (getFunctionSignature "get(bytes32)")
         (Word256 ( string2w256 key ) : [])
@@ -519,22 +526,18 @@ getExecuteTCsHH tc transferCounter =
 
     storeMethodsArgsToMem =
       let
-        storeFunctionSignature = [PUSH4 $ getFunctionSignature "transferFrom(address,address,uint256)",
+        storeFunctionSignature = [PUSH4 $ getFunctionSignature "transfer(address,uint256)",
                                   PUSH32 (0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
                                   MUL,
                                   PUSH1 0x0,
                                   MSTORE]
-        storeFromAddressArg    = [PUSH4 $ getStorageAddress $ FromAddress transferCounter,
+        storeToAddressArg      = [PUSH4 $ getStorageAddress $ ToAddress transferCounter,
                                   SLOAD,
                                   PUSH1 0x4,
                                   MSTORE]
-        storeToAddressArg      = [PUSH4 $ getStorageAddress $ ToAddress transferCounter,
-                                  SLOAD,
-                                  PUSH1 0x24,
-                                  MSTORE]
         -- Should take an IntermediateExpression and calculate the correct opcode
         -- The smallest of maxAmount and exp should be stored in mem
-        -- 0x44 is the address in memory up to which memory is occupied
+        -- 0x24 is the address in memory up to which memory is occupied
         storeAmountArg         = evalState (compIExp ( _amount tc)) (CompileEnv 0 transferCounter 0x44 "amount_exp") ++
                                  [ PUSH4 $ getStorageAddress $ MaxAmount transferCounter,
                                    SLOAD,
@@ -545,19 +548,18 @@ getExecuteTCsHH tc transferCounter =
                                    SWAP1,
                                    JUMPDESTFROM $ "use_exp_res" ++ (show transferCounter),
                                    POP,
-                                   PUSH1 0x44,
+                                   PUSH1 0x24,
                                    MSTORE ]
       in
         storeFunctionSignature ++
-        storeFromAddressArg ++
         storeToAddressArg ++
         storeAmountArg
 
     pushOutSize      = [PUSH1 0x1]
     pushOutOffset    = [PUSH1 0x0]
 
-    -- The arguments with which we are calling transferFrom need to be stored in memory
-    pushInSize       = [PUSH1 $ fromInteger $ 4 + 3 * 32 ] -- four bytes for f_sig, 3*32 for (from, to, value)
+    -- The arguments with which we are calling transfer need to be stored in memory
+    pushInSize       = [PUSH1 $ fromInteger $ 4 + 2 * 32 ] -- four bytes for f_sig, 2*32 for (to, value)
     pushInOffset     = [PUSH1 0x0]
     pushValue        = [PUSH1 0x0]
 
@@ -609,132 +611,30 @@ getExecuteTCsHH tc transferCounter =
 
 -- This might have to take place within the state monad to get unique labels for each TransferFrom call
 getActivate :: ActivateMap -> [EvmOpcode]
-getActivate am = [JUMPDESTFROM "activateMethod"] ++ ( concatMap activateMapElementToTransferFromCall $ Map.assocs am )
+getActivate am = [JUMPDESTFROM "activate_method"]
+                 ++ ( concatMap activateMapElementToTransferFromCall $ Map.assocs am )
+                 -- set activate bit to 0x01 (true)
+                 ++ [ PUSH1 0x01, PUSH4 $ getStorageAddress Activated, SSTORE ]
 
 activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
 activateMapElementToTransferFromCall ((tokenAddress, fromAddress), amount) =
-  getFunctionCallEvm
-    "activate_function_call" -- TODO: This must be made unique!
-    tokenAddress
-    (getFunctionSignature "transferFrom(address,address,uint)")
-    [ Word256 (address2w256 fromAddress), OwnAddress, Word256 (integer2w256 amount) ]
-    0 -- inMemOffset
-    0 -- outMemOffset
-    1 -- outSize
+  functionCallEvm ++ moveResToStack ++ throwIfReturnFalse
+  where
+    functionCallEvm =
+      getFunctionCallEvm
+        tokenAddress
+        (getFunctionSignature "transferFrom(address,address,uint256)")
+        [ Word256 (address2w256 fromAddress), OwnAddress, Word256 (integer2w256 amount) ]
+        0 -- inMemOffset
+        0 -- outMemOffset
+        32 -- outSize
+    moveResToStack = [ PUSH1 $ fromInteger 0, MLOAD ]
+    throwIfReturnFalse = [ISZERO, JUMPITO "global_throw" ]
+
 -- We also need to add a check whether the transferFrom function call
 -- returns true or false. Only of all function calls return true, should
 -- the activated bit be set. This bit has not yet been reserved in
 -- memory/defined.
-
-
--- The getCancel should be replaced by getActivate which
--- given a list of TransferCalls should return the EVM
--- needed to activate a DC. Once a DC is activated, a
--- bit indicating this could be flipped. It is also possible that
--- the flipping of this bit is not needed at all and that the DC
--- does not need to record in its state whether it is active or not.
--- It seems to me that a bit is needed since partial execution of the
--- Activate or the execute state would be very unfair.
-
--- The getActivate function should take a list of TransferCalls as
--- input and return a list of EVM instructions. The EVM instructions
--- must call the transferFrom function like MicahZoltu explained to
--- sword_smith when he proposed a new ERC standard.
-
-getCancel :: [TransferCall] -> [EvmOpcode]
-getCancel tcs = [JUMPDESTFROM "cancel_method"] ++ getCancelH tcs
-
-getCancelH :: [TransferCall] -> [EvmOpcode]
-getCancelH = concatMap cancelMapElementToAllowanceCall . Map.assocs . transferCalls2CancelMap
-
--- Given a list of tcalls update the cancelMap with required locked amount
--- DEVFIX: HOW SHOULD THIS BE CALCULATED WHEN THE CONTRACT CONTAINS BRANCHES??!
--- I guess all branches should be calculated, and the max poss. amount found
--- Right now all the branches are summed and that gives an unreasonably high amount
--- that the contract demands that a party locks.
-transferCalls2CancelMap :: [TransferCall] -> CancelMap
-transferCalls2CancelMap tcalls =
-  let
-    transferCalls2CancelMapH :: CancelMap -> [TransferCall] -> CancelMap
-    transferCalls2CancelMapH cm (tcall:tcalls) = transferCalls2CancelMapH (transferCalls2CancelMapHH tcall cm) tcalls
-    transferCalls2CancelMapH cm [] = cm
-    transferCalls2CancelMapHH :: TransferCall -> CancelMap -> CancelMap
-    transferCalls2CancelMapHH tcall cm = case (Map.lookup (_tokenAddress tcall, _from tcall) cm) of
-      (Just _) -> Map.adjust (_maxAmount tcall +) (_tokenAddress tcall, _from tcall) cm
-      Nothing  -> Map.insert (_tokenAddress tcall, _from tcall) (_maxAmount tcall) cm
-  in
-  transferCalls2CancelMapH Map.empty tcalls
-
--- Given a cancelMapElement which describes how much should be locked for a
--- given account on a given token, return the correct allowance call to the
--- token contracts.
--- DEVFIX: Poss. optimization: the token address can be read from storage, does not
--- have to be stored as EVM
-cancelMapElementToAllowanceCall :: CancelMapElement -> [EvmOpcode]
-cancelMapElementToAllowanceCall ((tokenAddress,ownerAddress),maxAmount) =
-  let
-    storeMethodArgsToMem =
-      let
-        storeFunctionSignature = [ PUSH4 $ getFunctionSignature "allowance(address,address)",
-                                   PUSH32 (0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
-                                   MUL,
-                                   PUSH1 0x0,
-                                   MSTORE ]
-        storeOwnerAddress      = [ PUSH32 $ address2w256 ownerAddress,
-                                   PUSH1 0x4,
-                                   MSTORE]
-        storeSpenderAddress    = [ ADDRESS,
-                                   PUSH1 0x24,
-                                   MSTORE ]
-      in
-        storeFunctionSignature ++ storeOwnerAddress ++ storeSpenderAddress
-    pushOutSize      = [PUSH1 0x20]
-    pushOutOffset    = [PUSH1 0x0] -- assumes memory is empty/existing data not used after this call
-    pushInSize       = [PUSH1 0x44]
-    pushInOffset     = [PUSH1 0x0] -- DEVFIX: Add args to memory
-    pushValue        = [PUSH1 0x0]
-    pushTokenAddress = [PUSH32 $ address2w256 tokenAddress]
-    pushGasAmount    = [PUSH1 0x32,
-                        GAS,
-                        SUB]
-    call             = [CALL]
-    -- Check exit code!
-    checkReturnValue = [PUSH1 0x0,
-                        MLOAD,
-                        PUSH32 $ integer2w256 maxAmount,
-                        EVM_GT,
-                        JUMPITO "selfdestruct"] -- Maybe this is wrong, since release does not happen
-  in
-    storeMethodArgsToMem ++
-    pushOutSize ++
-    pushOutOffset ++
-    pushInSize ++
-    pushInOffset ++
-    pushValue ++
-    pushTokenAddress ++
-    pushGasAmount ++
-    call ++
-    checkReturnValue
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -748,16 +648,16 @@ cancelMapElementToAllowanceCall ((tokenAddress,ownerAddress),maxAmount) =
 -- test_ppEvmWithHex = TestCase ( assertEqual "ppEvm with hex input" (ppEvm(test_EvmOpCodePush1Hex)) "6060" )
 -- test_ppEvmWithDec = TestCase ( assertEqual "ppEvm with dec input" (ppEvm(test_EvmOpCodePush1Dec)) "603c" )
 
--- -- getContractHeader
+-- -- getJumpTable
 
--- test_getContractHeader = TestCase (assertEqual "getContractHeader test" (getContractHeader) ([CALLVALUE,ISZERO,JUMPITO "no_val0",THROW,JUMPDESTFROM "no_val0",STOP]))
+-- test_getJumpTable = TestCase (assertEqual "getJumpTable test" (getJumpTable) ([CALLVALUE,ISZERO,JUMPITO "no_val0",THROW,JUMPDESTFROM "no_val0",STOP]))
 
 -- -- evmCompile
 
 -- exampleContact             = parse' "translate(100, both(scale(101, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000)), scale(42, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000))))"
 -- exampleIntermediateContact = intermediateCompile(exampleContact)
 
--- test_evmCompile = TestCase( assertEqual "evmCompile test with two contracts" (evmCompile exampleIntermediateContact) (getContractHeader) )
+-- test_evmCompile = TestCase( assertEqual "evmCompile test with two contracts" (evmCompile exampleIntermediateContact) (getJumpTable) )
 
 -- -- getOpcodeSize
 
@@ -788,7 +688,7 @@ cancelMapElementToAllowanceCall ((tokenAddress,ownerAddress),maxAmount) =
 
 -- tests = TestList [TestLabel "test_ppEvmWithHex" test_ppEvmWithHex,
 --                   TestLabel "test_ppEvmWithDec" test_ppEvmWithDec,
---                   TestLabel "test_getContractHeader" test_getContractHeader,
+--                   TestLabel "test_getJumpTable" test_getJumpTable,
 --                   TestLabel "test_evmCompile" test_evmCompile,
 --                   TestLabel "test_getOpcodeSize_push1" test_getOpcodeSize_push1,
 --                   TestLabel "test_getOpcodeSize_push4" test_getOpcodeSize_push4,

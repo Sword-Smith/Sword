@@ -1,8 +1,8 @@
 translate(
-    minutes(3),
+    now,
     scale(
-        2000,
+        100,
         max(obs(int, _address_DataFeed0_, 0) - 10, 0),
-        transfer( _address_Tmc4_EUR, _address_my_, 0x123456789012345678901234567890123456789b)
+        transfer( _address_Tmc4_DKK, _address_my_0, _address_my_1)
     )
 )
