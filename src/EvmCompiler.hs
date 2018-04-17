@@ -524,61 +524,36 @@ getExecuteTCsHH tc transferCounter =
         checkIfTCHasBeenExecuted ++
         checkIfTCIsInChosenBranches (_memExpRefs tc)
 
-    storeMethodsArgsToMem =
-      let
-        storeFunctionSignature = [PUSH4 $ getFunctionSignature "transfer(address,uint256)",
-                                  PUSH32 (0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
-                                  MUL,
-                                  PUSH1 0x0,
-                                  MSTORE]
-        storeToAddressArg      = [PUSH4 $ getStorageAddress $ ToAddress transferCounter,
-                                  SLOAD,
-                                  PUSH1 0x4,
-                                  MSTORE]
-        -- Should take an IntermediateExpression and calculate the correct opcode
-        -- The smallest of maxAmount and exp should be stored in mem
-        -- 0x24 is the address in memory up to which memory is occupied
-        storeAmountArg         = evalState (compIExp ( _amount tc)) (CompileEnv 0 transferCounter 0x44 "amount_exp") ++
-                                 [ PUSH4 $ getStorageAddress $ MaxAmount transferCounter,
-                                   SLOAD,
-                                   DUP2,
-                                   DUP2,
-                                   EVM_GT,
-                                   JUMPITO $ "use_exp_res" ++ (show transferCounter),
-                                   SWAP1,
-                                   JUMPDESTFROM $ "use_exp_res" ++ (show transferCounter),
-                                   POP,
-                                   PUSH1 0x24,
-                                   MSTORE ]
-      in
-        storeFunctionSignature ++
-        storeToAddressArg ++
-        storeAmountArg
-
-    pushOutSize      = [PUSH1 0x1]
-    pushOutOffset    = [PUSH1 0x0]
-
-    -- The arguments with which we are calling transfer need to be stored in memory
-    pushInSize       = [PUSH1 $ fromInteger $ 4 + 2 * 32 ] -- four bytes for f_sig, 2*32 for (to, value)
-    pushInOffset     = [PUSH1 0x0]
-    pushValue        = [PUSH1 0x0]
-
-    -- 0xa0 is total size of args for one transferCall
-    pushTokenAddress = [PUSH4 $ getStorageAddress $ TokenAddress transferCounter,
-                        SLOAD]
-
-  -- 0x32 is magic value from Solidity compiler
-    pushGasAmount    = [PUSH1 0x32,
-                        GAS,
-                        SUB]
-
-    call             = [CALL]
-
-    checkReturnValue = [ PUSH1 0x1,
-                         EVM_EQ,
-                         JUMPITO ("ret_val" ++ (show transferCounter)),
-                         THROW, -- Is it correct to throw here??
-                         JUMPDESTFROM ("ret_val" ++ (show transferCounter)) ]
+    callTransferToTcRecipient =
+      getFunctionCallEvm
+        (_tokenAddress tc)
+        (getFunctionSignature "transfer(address,uint256)")
+        [ Word256 (address2w256 (_to tc))
+        , (RawEvm getTransferAmount) ]
+        0
+        0
+        0x20
+        where
+          getTransferAmount =
+            evalState (compIExp ( _amount tc)) (CompileEnv 0 transferCounter 0x44 "amount_exp")
+            ++ [ PUSH4 $ getStorageAddress $ MaxAmount transferCounter
+               , SLOAD
+               , DUP2
+               , DUP2
+               , EVM_GT
+               , JUMPITO $ "use_exp_res" ++ (show transferCounter)
+               , SWAP1
+               , JUMPDESTFROM $ "use_exp_res" ++ (show transferCounter)
+               , POP
+               , PUSH1 0x24
+               , MSTORE ]
+      -- TODO: Here, we should call transfer to the
+      -- TC originator (transfer back unspent margin)
+      -- but we do not want to recalculate the amount
+      -- so we should locate the amount on the stack.
+      -- And make sure it is preserved on the stack
+      -- for the next call to transfer.
+--    callTransferToTcOriginator =
     -- Flip correct bit from one to zero and call selfdestruct if all tcalls compl.
     updateExecutedWord = [ JUMPDESTFROM $ "set_execute_bit_to_zero" ++ show transferCounter,
                            PUSH4 $ getStorageAddress Executed,
@@ -596,16 +571,7 @@ getExecuteTCsHH tc transferCounter =
     functionEndLabel = [JUMPDESTFROM  $ "method_end" ++ (show transferCounter)]
   in
     checkIfCallShouldBeMade ++
-    storeMethodsArgsToMem ++
-    pushOutSize ++
-    pushOutOffset ++
-    pushInSize ++
-    pushInOffset ++
-    pushValue ++
-    pushTokenAddress ++
-    pushGasAmount ++
-    call ++
-    checkReturnValue ++
+    callTransferToTcRecipient ++
     updateExecutedWord ++
     functionEndLabel
 

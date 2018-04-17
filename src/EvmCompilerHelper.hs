@@ -84,8 +84,10 @@ getFunctionCallEvm calleeAddress funSig callArgs inMemOffset outMemOffset outSiz
         storeArgumentsH (arg:args) counter =
           storeArgumentsHH arg ++ (storeArgumentsH args (counter + 1))
           where
+            storeArgumentsHH :: CallArgument -> [EvmOpcode]
             storeArgumentsHH (Word256 w256) = [ PUSH32 w256, PUSH1 (inMemOffset + 0x4 + counter * 0x20), MSTORE ]
             storeArgumentsHH OwnAddress     = [ ADDRESS, PUSH1 (inMemOffset + 0x4 + counter * 0x20), MSTORE ]
+            storeArgumentsHH (RawEvm evmOpcodes) = evmOpcodes
 
 ppEvm :: EvmOpcode -> String
 ppEvm instruction = case instruction of
