@@ -545,8 +545,16 @@ getExecuteTCsHH tc transferCounter =
                , SWAP1
                , JUMPDESTFROM $ "use_exp_res" ++ (show transferCounter)
                , POP
+               , DUP1 -- leaves transferred amount on stack for next call to transfer
                , PUSH1 0x24
                , MSTORE ]
+    checkIfTransferToTcSenderShouldBeMade =
+      [ PUSH32 (integer2w256 (_maxAmount tc))
+      , SUB
+      , DUP1
+      , PUSH1 0x0
+      , EVM_EQ
+      , JUMPITO $ "skip_call_to_sender" ++ (show transferCounter) ]
       -- TODO: Here, we should call transfer to the
       -- TC originator (transfer back unspent margin)
       -- but we do not want to recalculate the amount
@@ -555,6 +563,8 @@ getExecuteTCsHH tc transferCounter =
       -- for the next call to transfer.
 --    callTransferToTcOriginator =
     -- Flip correct bit from one to zero and call selfdestruct if all tcalls compl.
+    skipCallToTcSenderJumpDest = [ JUMPDESTFROM $ "skip_call_to_sender" ++ (show transferCounter)
+                                 , POP ] -- pop return amount from stack
     updateExecutedWord = [ JUMPDESTFROM $ "set_execute_bit_to_zero" ++ show transferCounter,
                            PUSH4 $ getStorageAddress Executed,
                            SLOAD,
