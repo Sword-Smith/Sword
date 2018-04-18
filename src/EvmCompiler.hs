@@ -563,7 +563,17 @@ getExecuteTCsHH tc transferCounter =
       -- so we should locate the amount on the stack.
       -- And make sure it is preserved on the stack
       -- for the next call to transfer.
---    callTransferToTcOriginator =
+    callTransferToTcOriginator =
+      getFunctionCallEvm
+        (_tokenAddress tc)
+        (getFunctionSignature "transfer(address,uint256)")
+        [ Word256 (address2w256 (_from tc))
+        -- push amount of remaining margin to memory, DUP1 to ensure consistent
+        -- stack whether this call is made or not
+        , (RawEvm [DUP1, PUSH1 0x24, MSTORE]) ]
+        0
+        0
+        0x20
     -- Flip correct bit from one to zero and call selfdestruct if all tcalls compl.
     skipCallToTcSenderJumpDest = [ JUMPDESTFROM $ "skip_call_to_sender" ++ (show transferCounter)
                                  , POP ] -- pop return amount from stack
@@ -584,6 +594,9 @@ getExecuteTCsHH tc transferCounter =
   in
     checkIfCallShouldBeMade ++
     callTransferToTcRecipient ++
+    checkIfTransferToTcSenderShouldBeMade ++
+    callTransferToTcOriginator ++
+    skipCallToTcSenderJumpDest ++
     updateExecutedWord ++
     functionEndLabel
 
