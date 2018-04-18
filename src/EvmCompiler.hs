@@ -176,6 +176,8 @@ setExecutedWord tcs = [ PUSH32 $ integer2w256 $ 2^length(tcs) - 1,
                         SSTORE ]
 
 -- The values that are known at compile time are placed in storage
+-- We should only store the values that are needed, all the TC data
+-- is probably not needed in storage!
 placeValsInStorage :: [TransferCall] -> [EvmOpcode]
 placeValsInStorage tcs =
   let
