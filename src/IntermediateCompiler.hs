@@ -37,7 +37,9 @@ addMemExpRefCondition time counter condition transferCall = do
 -- Main method of the intermediate compiler
 intermediateCompile :: Contract -> IntermediateContract
 intermediateCompile c =
-  IntermediateContract (evalState (getTransferCalls c) (ICompileEnv 0)) (evalState (getMemoryExpressions c) (ICompileEnv 0)) (getActivateMap c)
+  IntermediateContract (evalState (getTransferCalls c) (ICompileEnv 0))
+                       (evalState (getMemoryExpressions c) (ICompileEnv 0))
+                       (getActivateMap c)
 
 -- DEVNOTE: This does NOT need to run in a state monad
 -- The type of the observable is dropped since this is past the type checker stage

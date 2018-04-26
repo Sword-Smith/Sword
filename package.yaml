@@ -41,4 +41,5 @@ tests:
       - test-framework
       - test-framework-hunit
       - HUnit
+      - QuickCheck
       - containers
