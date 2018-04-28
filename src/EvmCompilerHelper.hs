@@ -3,10 +3,21 @@ module EvmCompilerHelper where
 import DaggerLanguageDefinition
 import EvmLanguageDefinition
 
+import Crypto.Hash
+import Data.ByteString (ByteString)
+import Data.ByteString.Char8(pack)
 import Data.Char
 import Data.Word
 import Numeric (showHex)
 import Text.Printf (printf)
+
+keccak256 :: String -> String
+keccak256 fname =
+  let
+    keccak256H :: ByteString -> Digest Keccak_256
+    keccak256H = hash
+  in
+    show $ keccak256H $ pack fname
 
 address2w256 :: Address -> Word256
 address2w256 ('0':'x':addr) =

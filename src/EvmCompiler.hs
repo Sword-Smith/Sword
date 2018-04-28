@@ -1,18 +1,12 @@
 module EvmCompiler where
 
-import DaggerLanguageDefinition
 import EvmCompilerHelper
 import EvmLanguageDefinition
 import IntermediateLanguageDefinition
 
 import Control.Monad.State.Lazy
-import Crypto.Hash
-import Data.ByteString (ByteString)
-import Data.ByteString.Char8(pack)
-import Data.Char
 import qualified Data.Map.Strict as Map
 import Data.Word
-import Numeric (showHex)
 
 -- State monad definitions
 data CompileEnv = CompileEnv { labelCount :: Integer,
@@ -97,14 +91,6 @@ eliminatePseudoInstructions [] = []
 
 getFunctionSignature :: String -> Word32
 getFunctionSignature funDecl = read $ "0x" ++ take 8 (keccak256 funDecl)
-
-keccak256 :: String -> String
-keccak256 fname =
-  let
-    keccak256H :: ByteString -> Digest Keccak_256
-    keccak256H = hash
-  in
-    show $ keccak256H $ pack fname
 
 -- Main method for this module. Returns binary.
 -- Check that there are not more than 2^8 transfercalls
