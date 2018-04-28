@@ -15,7 +15,8 @@ import qualified Data.Map.Strict as Map
 tests :: [Test]
 tests = ic_unittest0 ++
         ic_unittest1 ++
-        ic_unittest2
+        ic_unittest2 ++
+        ic_unittest3
 
 ic_unittest0 :: [Test]
 ic_unittest0 =
@@ -118,3 +119,11 @@ ic_unittest2 =
     getActivateMap (parse' "both( if true within seconds(1) then scale(1, 1, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) else scale(7, 7, transfer(0xdddddddddddddddddddddddddddddddddddddddd,0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee,0xffffffffffffffffffffffffffffffffffffffff)),  if true within seconds(2) then scale(17, 17, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) else if true within seconds(3) then scale(53, 53, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) else scale(101, 101, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) )") @?=
     Map.fromList [(("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),102),(("0xdddddddddddddddddddddddddddddddddddddddd","0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),7)]
   ]
+
+-- Test that the getActivateMap works for the canonical IW source code
+ic_unittest3 :: [Test]
+ic_unittest3 =
+  [ testCase "getActivateMapCanonicalIw" $
+   getActivateMap (parse' canonical_iw_source) @?= Map.fromList [(("0x1234567890123456789012345678901234567891","0x1234567890123456789012345678901234567891"),1),(("0x1234567890123456789012345678901234567892","0x1234567890123456789012345678901234567892"),1),(("0x1234567890123456789012345678901234567893","0x1234567890123456789012345678901234567893"),1),(("0x1234567890123456789012345678901234567894","0x1234567890123456789012345678901234567894"),1),(("0x1234567890123456789012345678901234567895","0x1234567890123456789012345678901234567895"),1),(("0x1234567890123456789012345678901234567896","0x1234567890123456789012345678901234567896"),1),(("0x1234567890123456789012345678901234567897","0x1234567890123456789012345678901234567897"),1),(("0x1234567890123456789012345678901234567898","0x1234567890123456789012345678901234567898"),1)]
+  ]
+
