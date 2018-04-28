@@ -34,32 +34,21 @@ newLabel desc = do
   put compileEnv { labelCount = i + 1 }
   return $ desc ++ "_" ++ (show i) ++ "_" ++ (show j) ++ "_" ++ (show k)
 
-
 -- ATM, "Executed" does not have an integer. If it should be able to handle more
 -- than 256 tcalls, it must take an integer also.
 data StorageType = CreationTimestamp
                  | Executed
                  | Activated
                  | MemoryExpressionRefs
-                 | MaxAmount Integer
-                 | Delay Integer
-                 | TokenAddress Integer
-                 | ToAddress Integer
-                 | FromAddress Integer
 
 -- For each storage index we pay 20000 GAS. Reusing one is only 5000 GAS.
 -- It would therefore make sense to pack as much as possible into the same index.
--- TODO: Reduce the use of storage that the DCs use as much as possible.
+ -- Storage is word addressed, not byte addressed
 getStorageAddress :: StorageType -> Word32
 getStorageAddress CreationTimestamp      = 0x0
 getStorageAddress Activated              = 0x1
-getStorageAddress Executed               = 0x20 -- Storage is word addressed, not byte addressed as we assumed originally.
-getStorageAddress MemoryExpressionRefs   = 0x40
-getStorageAddress (MaxAmount tcCount)    = 0x60 + 0xa0 * (fromInteger tcCount)
-getStorageAddress (Delay tcCount)        = 0x80 + 0xa0 * (fromInteger tcCount)
-getStorageAddress (TokenAddress tcCount) = 0xa0 + 0xa0 * (fromInteger tcCount)
-getStorageAddress (ToAddress tcCount)    = 0xc0 + 0xa0 * (fromInteger tcCount)
-getStorageAddress (FromAddress tcCount)  = 0xe0 + 0xa0 * (fromInteger tcCount)
+getStorageAddress Executed               = 0x2
+getStorageAddress MemoryExpressionRefs   = 0x3
 
 asmToMachineCode :: [EvmOpcode] -> String
 asmToMachineCode opcodes = foldl (++) "" (map ppEvm opcodes)
@@ -150,8 +139,7 @@ getConstructor :: [TransferCall] -> [EvmOpcode]
 getConstructor tcs =
   (getCheckNoValue "Constructor_Header" ) ++
   saveTimestampToStorage ++
-  setExecutedWord tcs ++
-  placeValsInStorage tcs
+  setExecutedWord tcs
 
 -- Checks that no value (ether) is sent when executing contract method
 -- Used in both contract header and in constructor
@@ -175,38 +163,6 @@ setExecutedWord []  = undefined
 setExecutedWord tcs = [ PUSH32 $ integer2w256 $ 2^length(tcs) - 1,
                         PUSH4 $ getStorageAddress Executed,
                         SSTORE ]
-
--- The values that are known at compile time are placed in storage
--- We should only store the values that are needed, all the TC data
--- is probably not needed in storage!
-placeValsInStorage :: [TransferCall] -> [EvmOpcode]
-placeValsInStorage tcs =
-  let
-    placeValsInStorageH :: Integer -> [TransferCall] -> [EvmOpcode]
-    placeValsInStorageH _ []        = []
-    placeValsInStorageH i (tc:tcs') =
-      let
-        placeValsInStorageHH :: Integer -> TransferCall -> [EvmOpcode]
-        placeValsInStorageHH i tcall =
-            [ PUSH32 $ integer2w256 (_maxAmount tcall),
-              PUSH4 $ getStorageAddress $ MaxAmount i,
-              SSTORE,
-              PUSH32 $ integer2w256 (_delay tcall),
-              PUSH4 $ getStorageAddress $ Delay i,
-              SSTORE,
-              PUSH32 $ address2w256 (_tokenAddress tcall),
-              PUSH4 $ getStorageAddress $ TokenAddress i,
-              SSTORE,
-              PUSH32 $ address2w256 (_to tcall),
-              PUSH4 $ getStorageAddress $ ToAddress i,
-              SSTORE,
-              PUSH32 $ address2w256 (_from tcall),
-              PUSH4 $ getStorageAddress $ FromAddress i,
-              SSTORE ]
-      in
-        placeValsInStorageHH i tc ++ placeValsInStorageH (i + 1) tcs'
-  in
-    placeValsInStorageH 0 tcs
 
 -- Returns the code needed to transfer code from *init* to I_b in the EVM
 getCodeCopy :: [EvmOpcode] -> [EvmOpcode] -> [EvmOpcode]
@@ -544,8 +500,7 @@ getExecuteTCsHH tc transferCounter =
         where
           getTransferAmount =
             evalState (compIExp ( _amount tc)) (CompileEnv 0 transferCounter 0x44 "amount_exp")
-            ++ [ PUSH4 $ getStorageAddress $ MaxAmount transferCounter
-               , SLOAD
+            ++ [ PUSH32 $ integer2w256 $ _maxAmount tc
                , DUP2
                , DUP2
                , EVM_GT
