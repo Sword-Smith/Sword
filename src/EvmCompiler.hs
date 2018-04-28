@@ -49,6 +49,7 @@ data StorageType = CreationTimestamp
 
 -- For each storage index we pay 20000 GAS. Reusing one is only 5000 GAS.
 -- It would therefore make sense to pack as much as possible into the same index.
+-- TODO: Reduce the use of storage that the DCs use as much as possible.
 getStorageAddress :: StorageType -> Word32
 getStorageAddress CreationTimestamp      = 0x0
 getStorageAddress Activated              = 0x1
@@ -454,18 +455,21 @@ getExecuteTCsHH tc transferCounter =
             -- A transferCall contains a list of IMemExpRefs
             -- Here, the value of the IMemExps are checked. The values
             -- are set by the getExecuteIMemExps code.
+            -- In the following membit == 1 iff expression has evaluated
+            -- to true.
+            -- "PASS" means that this check evaluates to true
             -- What happens here is that for each IMemExpRef,
             -- the following C-like code is run:
             -- if (memBit == 1){
             --   if (branch){
             --     JUMPTO "PASS"
             --   } else {
-            --     JUMPTO "SET_EXECUTE_BIT_TO_ZERO"
+            --     JUMPTO TRANSFER_BACK_TO_FROM_ADDRESS
             --   }
             -- } else { // i.e., memBit == 0
             --   if (time_has_passed){
             --     if (branch){
-            --       JUMPTO "SET_EXECUTE_BIT_TO_ZERO"
+            --       JUMPTO TRANSFER_BACK_TO_FROM_ADDRESS
             --     } else {
             --       JUMPTO "PASS"
             --     }
@@ -491,7 +495,8 @@ getExecuteTCsHH tc transferCounter =
                   if branch then
                     []
                   else
-                    [JUMPTO $ "set_execute_bit_to_zero" ++ show transferCounter]
+                    -- push 0x0 to tell transfer that no amount has been sent to recipient
+                    [PUSH1 0x0, JUMPTO $ "transfer_back_to_from_address" ++ show transferCounter]
 
                 passThisCheck =
                   [JUMPTO $ "pass_this_memExp_check" ++ show count ++ "_" ++ show transferCounter]
@@ -507,7 +512,8 @@ getExecuteTCsHH tc transferCounter =
                                         JUMPITO $ "method_end" ++ (show transferCounter)]
                 checkIfBranchIsTrue1 =
                   if branch then
-                    [JUMPTO $ "set_execute_bit_to_zero" ++ show transferCounter]
+                    -- push 0x0 to tell transfer that no amount has been sent to recipient
+                    [PUSH1 0x0, JUMPTO $ "transfer_back_to_from_address" ++ show transferCounter]
                   else
                     [JUMPTO $ "pass_this_memExp_check" ++ show count ++ "_" ++ show transferCounter]
 
@@ -551,7 +557,8 @@ getExecuteTCsHH tc transferCounter =
                , PUSH1 0x24
                , MSTORE ]
     checkIfTransferToTcSenderShouldBeMade =
-      [ PUSH32 (integer2w256 (_maxAmount tc))
+      [JUMPDESTFROM $ "transfer_back_to_from_address" ++ show transferCounter
+      , PUSH32 (integer2w256 (_maxAmount tc))
       , SUB
       , DUP1
       , PUSH1 0x0
@@ -577,8 +584,7 @@ getExecuteTCsHH tc transferCounter =
     -- Flip correct bit from one to zero and call selfdestruct if all tcalls compl.
     skipCallToTcSenderJumpDest = [ JUMPDESTFROM $ "skip_call_to_sender" ++ (show transferCounter)
                                  , POP ] -- pop return amount from stack
-    updateExecutedWord = [ JUMPDESTFROM $ "set_execute_bit_to_zero" ++ show transferCounter,
-                           PUSH4 $ getStorageAddress Executed,
+    updateExecutedWord = [ PUSH4 $ getStorageAddress Executed,
                            SLOAD,
                            PUSH1 $ fromInteger transferCounter,
                            PUSH1 0x2,
@@ -589,7 +595,6 @@ getExecuteTCsHH tc transferCounter =
                            JUMPITO "selfdestruct",
                            PUSH4 $ getStorageAddress Executed,
                            SSTORE ]
-    -- setTransferCallIsExecuted = [  ]
     functionEndLabel = [JUMPDESTFROM  $ "method_end" ++ (show transferCounter)]
   in
     checkIfCallShouldBeMade ++
