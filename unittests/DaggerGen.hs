@@ -142,13 +142,20 @@ prec e = case e of
   OrExp     _ _ -> 6
   IfExp   _ _ _ -> 7
 
+isAssoc :: Expression -> Bool
+isAssoc e = case e of
+  MultExp _ _ -> True
+  AddiExp _ _ -> True
+  _ -> False
+
 ppBinOp :: Expression -> Expression -> Expression -> String
-ppBinOp parentE leftE rightE = concat
-  [ (if prec parentE < prec leftE then parens else id) (ppExpr leftE)
-  , op
-  , (if prec parentE < prec rightE then parens else id) (ppExpr rightE)
-  ]
+ppBinOp parentE leftE rightE = concat [ ppBinOp' leftE, op, ppBinOp' rightE ]
   where
+    ppBinOp' :: Expression -> String
+    ppBinOp' e | prec e < prec parentE = ppExpr e
+    ppBinOp' e | prec e == prec parentE && isAssoc e && isAssoc parentE = ppExpr e
+    ppBinOp' e | otherwise = parens (ppExpr e)
+
     op :: String
     op = case parentE of
       MultExp   _ _ -> " * "
