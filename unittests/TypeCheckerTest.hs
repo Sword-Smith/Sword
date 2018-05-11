@@ -9,28 +9,26 @@ import IntermediateLanguageDefinition
 
 import TypeChecker
 
-import Test.HUnit hiding (Test)
-import Test.Framework
-import Test.Framework.Providers.HUnit
+import Test.Hspec
+import Test.QuickCheck
 
-tests :: [Test]
-tests = fundamentalContracts
+tests :: Spec
+tests = do
+  it "basic transfer contracts" $ do
+    typeChecker transferContract
+      `shouldSatisfy` isRight
 
-fundamentalContracts :: [Test]
-fundamentalContracts =
-  [
-    testCase "Transfer -- this should not be able to fail" $
-    assertBool "Transfer contract" $ isRight $ typeChecker transferContract
-    ,
-    testCase "Scaled transfer with valid input" $
-    scaleContract 10 (Lit (IntVal 22)) transferContract @?= head (rights [typeChecker $ scaleContract 10 (Lit (IntVal 22)) transferContract])
-    ,
-    testCase "Scaled transfer with invalid input" $
-    assertBool "" $ isLeft $ typeChecker $ scaleContract 10 (Lit (BoolVal False)) transferContract
-    ,
-    testCase "Translate transfer valid input" $
-    translateContract (Now) transferContract @?= head (rights [typeChecker $ translateContract (Now) transferContract])
-  ]
+  it "scaled transfer with valid input" $ do
+    scaleContract 10 (Lit (IntVal 22)) transferContract
+      `shouldBe` head (rights [typeChecker $ scaleContract 10 (Lit (IntVal 22)) transferContract])
+
+  it "Scaled transfer with invalid input" $ do
+    typeChecker (scaleContract 10 (Lit (BoolVal False)) transferContract)
+      `shouldSatisfy` isLeft
+
+  it "Translate transfer valid input" $
+    translateContract Now transferContract
+      `shouldBe` head (rights [typeChecker $ translateContract Now transferContract])
 
 transferContract :: Contract
 transferContract = Transfer {

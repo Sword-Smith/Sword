@@ -1,25 +1,20 @@
-module DaggerParserPropTest where
+module DaggerParserPropTest (tests, prop_ppp_identity) where
 
 import DaggerParser
 import DaggerLanguageDefinition
 import DaggerGen
 
+import Test.Hspec
 import Test.QuickCheck
 
---import Test.Framework
---import Test.Framework.Providers.QuickCheck
---tests :: [Test]
---tests = testCase "Parser/Pretty-Printer identity" prop_identity2
+tests :: Spec
+tests = do
+  it "is the inverse of a pretty-printer" $ do
+    property prop_ppp_identity
 
-prop_ppp_identity :: Contract -> Bool
+prop_ppp_identity :: Contract -> Property
 prop_ppp_identity contract =
-  case parseWrap (daggerPP contract) of
-    Left _ -> False
-    Right contract2 -> contract == contract2
-
-prop_ppp_identity2 :: Contract -> Property
-prop_ppp_identity2 contract =
-  counterexample errmsg (prop_ppp_identity contract)
-  where
-    errmsg :: String
-    errmsg = "Pretty-printed:\n" ++ daggerPP contract
+  counterexample ("Pretty-printed:\n" ++ daggerPP contract) $
+    case parseWrap (daggerPP contract) of
+      Left _ -> False
+      Right contract2 -> contract == contract2

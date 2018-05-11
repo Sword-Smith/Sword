@@ -43,3 +43,4 @@ tests:
       - HUnit
       - QuickCheck
       - containers
+      - hspec

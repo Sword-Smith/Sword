@@ -3,27 +3,6 @@ module DaggerGen where
 import DaggerLanguageDefinition
 import Test.QuickCheck
 
-{-
-newtype Foo = Foo Int deriving Show
-
-fooGen :: Gen Foo
-fooGen = do
-  i <- arbitrary
-  return (Foo i)
-
-instance Arbitrary Foo where
-  arbitrary = fooGen
---  arbitrary = Foo <$> arbitrary
-
--}
-
-{-
-newtype RandomAddress = RandomAddress { getRandomAddress :: Address } deriving Show
-
-instance Arbitrary RandomAddress where
-  arbitrary = RandomAddress <$> addressGen
--}
-
 addressGen :: Gen Address
 addressGen = ("0x" ++) <$> vectorOf 40 hexChar
   where
@@ -55,30 +34,53 @@ instance Arbitrary Contract where
     Transfer _ _ _ -> []
 
 instance Arbitrary Time where
-  arbitrary = return Now
-  -- TODO
+  arbitrary = oneof
+    [ return Now
+    , do Positive i <- arbitrary
+         constructor <- elements [Seconds, Minutes, Hours, Days, Weeks]
+         return (constructor i)
+    ]
 
-expressionGen :: Int -> Gen Expression
-expressionGen 0 = Lit <$> arbitrary
-expressionGen n = oneof [ Lit <$> arbitrary
-                    , MultExp <$> expressionGen (n `div` 2) <*> expressionGen (n `div` 2)
-                    , SubtExp <$> expressionGen (n `div` 2) <*> expressionGen (n `div` 2)
-                    , AddiExp <$> expressionGen (n `div` 2) <*> expressionGen (n `div` 2)
-                    , DiviExp <$> expressionGen (n `div` 2) <*> expressionGen (n `div` 2)
-                    , NotExp <$> expressionGen (n - 1)
-                    , IfExp <$> expressionGen (n `div` 3) <*> expressionGen (n `div` 3) <*> expressionGen (n `div` 3) 
-                    ]
+genSplit :: Int -> Gen (Int, Int)
+genSplit n = do
+  i <- choose (0, n)
+  return (i, n - i)
+
+exprGen :: Int -> Gen Expression
+exprGen 0 = Lit <$> arbitrary
+exprGen n = oneof $
+  [ Lit <$> arbitrary
+  , NotExp <$> exprGen (n - 1)
+  , IfExp <$> exprGen (n `div` 3) <*> exprGen (n `div` 3) <*> exprGen (n `div` 3)
+  ] ++ map binOpGen
+  [ MinExp, MaxExp, MultExp, DiviExp, AddiExp, SubtExp
+  , LtExp, GtExp, EqExp, GtOrEqExp, LtOrEqExp, AndExp, OrExp
+  ]
+  where
+    binOpGen :: (Expression -> Expression -> Expression) -> Gen Expression
+    binOpGen op = do
+      (n1, n2) <- genSplit (n - 1)
+      op <$> exprGen n1 <*> exprGen n2
 
 instance Arbitrary Expression where
-  arbitrary = sized expressionGen
+  arbitrary = sized exprGen
   shrink e = case e of
-    Lit _ -> []
-    MultExp e1 e2 -> [e1, e2]
-    SubtExp e1 e2 -> [e1, e2]
-    AddiExp e1 e2 -> [e1, e2]
-    DiviExp e1 e2 -> [e1, e2]
-    NotExp e -> [e]
-    IfExp e1 e2 e3 -> [e1, e2, e3]
+    Lit _           -> []
+    MinExp    e1 e2 -> [e1, e2]
+    MaxExp    e1 e2 -> [e1, e2]
+    MultExp   e1 e2 -> [e1, e2]
+    DiviExp   e1 e2 -> [e1, e2]
+    AddiExp   e1 e2 -> [e1, e2]
+    SubtExp   e1 e2 -> [e1, e2]
+    LtExp     e1 e2 -> [e1, e2]
+    GtExp     e1 e2 -> [e1, e2]
+    EqExp     e1 e2 -> [e1, e2]
+    GtOrEqExp e1 e2 -> [e1, e2]
+    LtOrEqExp e1 e2 -> [e1, e2]
+    NotExp e        -> [e]
+    AndExp    e1 e2 -> [e1, e2]
+    OrExp     e1 e2 -> [e1, e2]
+    IfExp  e1 e2 e3 -> [e1, e2, e3]
 
 intValGen = IntVal <$> (getNonNegative <$> arbitrary)
 boolValGen = BoolVal <$> arbitrary
@@ -116,25 +118,86 @@ daggerPPH contract indent = case contract of
 -- lowerPrec (MultExp _ _) (SubtExp _ _) = True
 -- lowerPrec = undefined
 
+parens :: String -> String
+parens = ("(" ++) . (++ ")")
+
+prec :: Expression -> Int
+prec e = case e of
+  Lit _         -> 0
+  MinExp    _ _ -> 0
+  MaxExp    _ _ -> 0
+
+  MultExp   _ _ -> 1
+  DiviExp   _ _ -> 1
+  AddiExp   _ _ -> 2
+  SubtExp   _ _ -> 2
+
+  LtExp     _ _ -> 3
+  GtExp     _ _ -> 3
+  EqExp     _ _ -> 3 -- ?
+  GtOrEqExp _ _ -> 3
+  LtOrEqExp _ _ -> 3
+  NotExp _      -> 4
+  AndExp    _ _ -> 5
+  OrExp     _ _ -> 6
+  IfExp   _ _ _ -> 7
+
+ppBinOp :: Expression -> Expression -> Expression -> String
+ppBinOp parentE leftE rightE = concat
+  [ (if prec parentE < prec leftE then parens else id) (ppExpr leftE)
+  , op
+  , (if prec parentE < prec rightE then parens else id) (ppExpr rightE)
+  ]
+  where
+    op :: String
+    op = case parentE of
+      MultExp   _ _ -> " * "
+      DiviExp   _ _ -> " / "
+      AddiExp   _ _ -> " + "
+      SubtExp   _ _ -> " - "
+      LtExp     _ _ -> " < "
+      GtExp     _ _ -> " > "
+      EqExp     _ _ -> " = "
+      GtOrEqExp _ _ -> " >= "
+      LtOrEqExp _ _ -> " <= "
+      AndExp    _ _ -> " and "
+      OrExp     _ _ -> " or "
+
 ppExpr :: Expression -> String
 ppExpr e = case e of
-  Lit lit -> ppLit lit
-  MultExp e1 e2 -> concat [ "(", ppExpr e1 ++ " * " ++ ppExpr e2, ")" ]
-  SubtExp e1 e2 -> concat [ "(", ppExpr e1 ++ " - " ++ ppExpr e2, ")" ]
-  AddiExp e1 e2 -> concat [ "(", ppExpr e1 ++ " + " ++ ppExpr e2, ")" ]
-  DiviExp e1 e2 -> concat [ "(", ppExpr e1 ++ " / " ++ ppExpr e2, ")" ]
-  NotExp e1 -> concat [ "(", "not " ++ ppExpr e1, ")" ]
-  IfExp e1 e2 e3 -> concat [ "(if (", ppExpr e1, ") then ", ppExpr e2, " else ", ppExpr e3, ")" ]
-  
-ppLit :: Literal -> String
-ppLit lit = case lit of
-  IntVal i -> show i
-  BoolVal b -> if b then "true" else "false"
-  Observable obsType addr key -> concat [ "obs(", ppObsType obsType, ", ", addr, ", ", key, ")" ]
-    where
-      ppObsType :: ObservableType -> String
-      ppObsType OBool = "bool"
-      ppObsType OInteger = "int"
+  Lit (IntVal i)  -> show i
+  Lit (BoolVal b) -> if b then "true" else "false"
+  Lit (Observable obsType addr key) -> concat
+    [ "obs(", ppObsType obsType, ", ", addr, ", ", key, ")" ]
+
+  MinExp  e1 e2   -> "in(" ++ ppExpr e1 ++ ", " ++ ppExpr e2 ++ ")"
+  MaxExp  e1 e2   -> "ax(" ++ ppExpr e1 ++ ", " ++ ppExpr e2 ++ ")"
+
+  MultExp   e1 e2 -> ppBinOp e e1 e2
+  DiviExp   e1 e2 -> ppBinOp e e1 e2
+  AddiExp   e1 e2 -> ppBinOp e e1 e2
+  SubtExp   e1 e2 -> ppBinOp e e1 e2
+  LtExp     e1 e2 -> ppBinOp e e1 e2
+  GtExp     e1 e2 -> ppBinOp e e1 e2
+  EqExp     e1 e2 -> ppBinOp e e1 e2
+  GtOrEqExp e1 e2 -> ppBinOp e e1 e2
+  LtOrEqExp e1 e2 -> ppBinOp e e1 e2
+  AndExp    e1 e2 -> ppBinOp e e1 e2
+  OrExp     e1 e2 -> ppBinOp e e1 e2
+
+  NotExp e1 -> "not " ++ ppExpr e1
+  IfExp e1 e2 e3 -> concat
+    [ "if (", ppExpr e1, ") then ", ppExpr e2, " else ", ppExpr e3 ]
+
+ppObsType :: ObservableType -> String
+ppObsType OBool = "bool"
+ppObsType OInteger = "int"
 
 ppTime :: Time -> String
-ppTime Now = "now"
+ppTime t = case t of
+  Now -> "now"
+  Seconds s -> "seconds(" ++ show s ++ ")"
+  Minutes m -> "minutes(" ++ show m ++ ")"
+  Hours   h -> "hours("   ++ show h ++ ")"
+  Days    d -> "days("    ++ show d ++ ")"
+  Weeks   w -> "weeks("   ++ show w ++ ")"

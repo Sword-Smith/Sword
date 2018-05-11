@@ -34,20 +34,20 @@ data Time = Now
 data MemExp = MemExp Time Expression deriving (Show, Eq)
 
 data Expression = Lit Literal
+                | MinExp Expression Expression
+                | MaxExp Expression Expression
                 | MultExp Expression Expression
-                | SubtExp Expression Expression
-                | AddiExp Expression Expression
                 | DiviExp Expression Expression
+                | AddiExp Expression Expression
+                | SubtExp Expression Expression
                 | LtExp Expression Expression
                 | GtExp Expression Expression
                 | EqExp Expression Expression
                 | GtOrEqExp Expression Expression
                 | LtOrEqExp Expression Expression
-                | OrExp Expression Expression
-                | AndExp Expression Expression
-                | MinExp Expression Expression
-                | MaxExp Expression Expression
                 | NotExp Expression
+                | AndExp Expression Expression
+                | OrExp Expression Expression
                 | IfExp Expression Expression Expression
                 deriving (Show, Eq)
 
