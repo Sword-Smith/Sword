@@ -170,8 +170,8 @@ ppExpr e = case e of
   Lit (Observable obsType addr key) -> concat
     [ "obs(", ppObsType obsType, ", ", addr, ", ", key, ")" ]
 
-  MinExp  e1 e2   -> "in(" ++ ppExpr e1 ++ ", " ++ ppExpr e2 ++ ")"
-  MaxExp  e1 e2   -> "ax(" ++ ppExpr e1 ++ ", " ++ ppExpr e2 ++ ")"
+  MinExp  e1 e2   -> "min(" ++ ppExpr e1 ++ ", " ++ ppExpr e2 ++ ")"
+  MaxExp  e1 e2   -> "max(" ++ ppExpr e1 ++ ", " ++ ppExpr e2 ++ ")"
 
   MultExp   e1 e2 -> ppBinOp e e1 e2
   DiviExp   e1 e2 -> ppBinOp e e1 e2
