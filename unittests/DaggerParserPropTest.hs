@@ -3,6 +3,7 @@ module DaggerParserPropTest (tests, prop_ppp_identity) where
 import DaggerParser
 import DaggerLanguageDefinition
 import DaggerGen
+import DaggerPP
 
 import Test.Hspec
 import Test.QuickCheck
