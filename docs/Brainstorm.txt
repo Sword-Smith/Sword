@@ -1,0 +1,56 @@
+Brainstorm
+
+  Færdige:
+    - CreationTimestamp skal gemmes i activate() og ikke når
+      kontrakten lægges på e-Guirlanden.
+    - Implementere "zero"-kontrakt.
+
+  Påbegyndt:
+    - Finde årsag til fejl i translate-kode.
+      (Relateret til margin-problemet.)
+    - Refaktorisere IntermediateCompiler, så den ikke
+      kører hen over koden tre gange.
+
+  Andre:
+    - Lege med Truffle. (Vent til T&M spørger andre danske
+      Firmo-udviklere.)
+    - Implementere "let" og variable.
+    - Forbedre 'Gen Contract'.
+    - Halvåbne intervaller i tiden: Når der er gået 0 sekunder
+      for en kontrakt som ikke indeholder en translate, så vil
+      den endnu ikke overføre beløbet. Det skal den.
+    - Overflow-afprøvning: Lav test med to observables der
+      forårsager overflow. 
+    - Hvordan udskifter man parter i kontrakter? (ERC-standard?)
+    - Oplåsning af private keys gælder pt. kun i 5 minutter.
+      Hvordan ændres denne tid?
+    - updateExecutedWord: Konstant optimering. (3 instruktioner kan
+      slås sammen til 1 ved compile-time-udregning.)
+
+  Problem: Sender ikke den korrekte margin tilbage i branches som sender
+    forskellige beløb. Eksempel:
+
+      if true within days(1)
+        then transfer(DKK, me, you)              # maxAmount = 1
+        else scale(2, 2, transfer(DKK, me, you)) # maxAmount = 2
+
+    DC-balance i DKK vil være 1 efter eksekvering af TC0, men den vil
+    forsøge at sende 2 tilbage når TC1 evalueres. Her er to løsnings-
+    forslag:
+
+      1) Før self-destruct kaldes, kan DC-kontrakten tjekke sine balancer
+         i samtlige token-valutaer og sende det overskydende tilbage. Her
+         bruges ERC20-kaldet balanceOf(DCAddress). Fordel: Ingen storage.
+         Ulemper: Mange kald til ERC20-kontrakter, overskydende marginer
+         sendes først tilbage når hele kontrakten afsluttes. En balance
+         kan have N ophavsmænd.
+
+      2) Marginen gemmes løbende i storage. Hver gang en TC kaldes, skal
+         marginen opdateres. Så skal hele ActivateMap gemmes i storage.
+         Ulempe: Det koster meget i storage.
+
+      3) Vi kan lade marginen være summen af maxAmount for alle
+         transferCalls.
+         Ulempe: Marginerne er for store.
+         Fordel: Simpelt og billigt!
+         
