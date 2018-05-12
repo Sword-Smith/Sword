@@ -124,7 +124,6 @@ evmCompile (IntermediateContract tcs iMemExps activateMap) =
 getConstructor :: [TransferCall] -> [EvmOpcode]
 getConstructor tcs =
   (getCheckNoValue "Constructor_Header" ) ++
-  saveTimestampToStorage ++
   setExecutedWord tcs
 
 -- Checks that no value (ether) is sent when executing contract method
@@ -556,6 +555,7 @@ getActivate am = [JUMPDESTFROM "activate_method"]
                  ++ ( concatMap activateMapElementToTransferFromCall $ Map.assocs am )
                  -- set activate bit to 0x01 (true)
                  ++ [ PUSH1 0x01, PUSH4 $ getStorageAddress Activated, SSTORE ]
+                 ++ saveTimestampToStorage
 
 activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
 activateMapElementToTransferFromCall ((tokenAddress, fromAddress), amount) =
