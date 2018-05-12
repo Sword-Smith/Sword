@@ -54,3 +54,33 @@ Brainstorm
          Ulempe: Marginerne er for store.
          Fordel: Simpelt og billigt!
          
+      4) Vi kan indføre en ny datastruktur, som beskriver hvilke beløb,
+         der skal betales tilbage, når memExp evalueres til en
+         sandhedsværdi. Denne struktur kan beskrives som et map fra en
+         liste af tupler bestående af memory expression-ID og boolske
+         værdier til en værdi, som er en liste af tilbagebetalinger, der
+         skal foretages, såfremt en given liste af memory expressions er
+         evalueret til hhv. sande/falske værdier.
+         For vores kanoniske eksempel ser listen således ud:
+
+         Data.Map fromList [([(0, true)], (me, DKK, 1))]
+
+         Hvis memExp0 evalueres til sand, skal adressen "me" modtage 1
+         DKK.
+
+         En mere avanceret liste kunne se således ud:
+         Data.Map fromList [
+           ([(0, true)], (me, DKK, 1)),
+           ([(0, true), (1, false), (3, false)], (you, GBP, 2))
+         ]
+
+         Denne nye datastruktur kan måske kaldes reductionMarginRefund
+         og kan nok genereres samme sted som activateMap genereres.
+
+         Problemet er her, at vi pt. vistnok ikke har gemt informationen,
+         om et givent memExp er evalueret til falsk. Det kan være, at vi
+         bliver nødt til at gemme to bits for hvert memExp: 1 for at
+         indikere, at det er evalueret til sandt; et for at indikere,
+         at det er evalueret til falsk og tom for at indikere, at det
+         endnu ikke er evalueret.
+
