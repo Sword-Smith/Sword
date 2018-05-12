@@ -216,7 +216,7 @@ getExecuteIMemExp (IMemExp beginTime endTime count iExp) =
                                 , TIMESTAMP
                                 , SUB
                                 , PUSH32 $ integer2w256 beginTime
-                                , EVM_LT
+                                , EVM_GT
                                 , JUMPITO $ "memExp_end" ++ show count ]
 
         checkIfTimeHasPassed = [ PUSH4 $ getStorageAddress CreationTimestamp,
