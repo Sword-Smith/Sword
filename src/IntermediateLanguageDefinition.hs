@@ -18,10 +18,16 @@ data TransferCall = TransferCall { _maxAmount    :: Integer,
 -- DEVNOTE:
 -- We start by attempting to implement the evaluation of IMemExp values.
 -- Later we try to find out how to read them when tcalls are executed.
--- The 1st integer represents time, the second is a unique identifier.
-data IMemExp = IMemExp Integer Integer IntermediateExpression deriving (Show, Eq)
+data IMemExp = IMemExp { _IMemExpBegin  :: Integer
+                       , _IMemExpEnd    :: Integer
+                       , _IMemExpIdent  :: Integer
+                       , _IMemExp       :: IntermediateExpression
+                       } deriving (Show, Eq)
 
-data IMemExpRef = IMemExpRef Integer Integer Bool deriving (Show, Eq)
+data IMemExpRef = IMemExpRef { _IMemExpRefEnd    :: Integer
+                             , _IMemExpRefIdent  :: Integer
+                             , _IMemExpRefBranch :: Bool
+                             } deriving (Show, Eq)
 
 data IntermediateExpression = ILitExp ILiteral
                             | IMultExp IntermediateExpression IntermediateExpression

@@ -193,18 +193,13 @@ getActivateCheck =
   , JUMPITO "global_throw" ]
 
 getExecute :: [IMemExp] -> [TransferCall] -> [EvmOpcode]
-getExecute mes tcs = (getExecuteIMemExps mes)
-                     ++ (getExecuteTCs tcs)
-
-getExecuteIMemExps :: [IMemExp] -> [EvmOpcode]
-getExecuteIMemExps (iMemExp:iMemExps) = (getExecuteIMemExp iMemExp) ++ (getExecuteIMemExps iMemExps)
-getExecuteIMemExps [] = []
+getExecute mes tcs = concatMap getExecuteIMemExp mes ++ getExecuteTCs tcs
 
 -- This sets the relevant bits in the memory expression word in storage
 -- Here the IMemExp should be evaluated. But only iff it is NOT true atm.
 -- And also only iff current time is less than time in the IMemExp
 getExecuteIMemExp :: IMemExp -> [EvmOpcode]
-getExecuteIMemExp (IMemExp time count iExp) =
+getExecuteIMemExp (IMemExp beginTime endTime count iExp) =
   let
     checkIfExpShouldBeEvaluated =
       let
@@ -215,17 +210,26 @@ getExecuteIMemExp (IMemExp time count iExp) =
                                  EXP,
                                  AND,
                                  JUMPITO $ "memExp_end" ++ show count ]
+
+        checkIfTimeHasStarted = [ PUSH4 $ getStorageAddress CreationTimestamp
+                                , SLOAD
+                                , TIMESTAMP
+                                , SUB
+                                , PUSH32 $ integer2w256 beginTime
+                                , EVM_LT
+                                , JUMPITO $ "memExp_end" ++ show count ]
+
         checkIfTimeHasPassed = [ PUSH4 $ getStorageAddress CreationTimestamp,
                                  SLOAD,
                                  TIMESTAMP,
                                  SUB,
-                                 PUSH32 $ integer2w256 time,
+                                 PUSH32 $ integer2w256 endTime,
                                  EVM_LT,
                                  -- If contract time is less than elapsed time, don't evaluate,
                                  -- jump to end of memory expression evaluation.
                                  JUMPITO $ "memExp_end" ++ show count ]
-      in
-      checkIfMemExpIsTrue ++ checkIfTimeHasPassed
+
+      in checkIfMemExpIsTrue ++ checkIfTimeHasStarted ++ checkIfTimeHasPassed
 
     evaulateExpression = evalState (compIExp iExp) (CompileEnv 0 count 0x0 "mem_exp")
     checkEvalResult    = [ ISZERO,
@@ -420,7 +424,7 @@ getExecuteTCsHH tc transferCounter =
             --   }
             -- }
             -- JUMPDESTFROM "PASS"
-            checkIfTCIsInChosenBranch (IMemExpRef time count branch) =
+            checkIfTCIsInChosenBranch (IMemExpRef endTime count branch) =
               let
                 checkIfMemExpIsSet =
                   [PUSH4 $ getStorageAddress MemoryExpressionRefs,
@@ -448,7 +452,7 @@ getExecuteTCsHH tc transferCounter =
                                         SLOAD,
                                         TIMESTAMP,
                                         SUB,
-                                        PUSH32 $ integer2w256 time,
+                                        PUSH32 $ integer2w256 endTime,
                                         EVM_GT,
                                         -- If time > elapsed time, skip the call, don't flip execute bit
                                         JUMPITO $ "method_end" ++ (show transferCounter)]

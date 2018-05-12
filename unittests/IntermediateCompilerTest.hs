@@ -20,6 +20,7 @@ tests = do
   test4
   test5
   test6
+  timeTranslationIMemExpTest
 
 test0 :: Spec
 test0 = do
@@ -120,13 +121,13 @@ test4 = do
       ]
 
     memExps =
-      [ IMemExp 1 6 (IGtExp (IMultExp (ILitExp (IIntVal 1)) (ILitExp (IIntVal 1))) (ILitExp (IIntVal 1)))
-      , IMemExp 2 3 (IGtExp (IMultExp (ILitExp (IIntVal 2)) (ILitExp (IIntVal 2))) (ILitExp (IIntVal 2)))
-      , IMemExp 3 0 (IGtExp (IMultExp (ILitExp (IIntVal 3)) (ILitExp (IIntVal 3))) (ILitExp (IIntVal 3)))
-      , IMemExp 4 2 (IGtExp (IMultExp (ILitExp (IIntVal 4)) (ILitExp (IIntVal 4))) (ILitExp (IIntVal 4)))
-      , IMemExp 5 1 (IGtExp (IMultExp (ILitExp (IIntVal 5)) (ILitExp (IIntVal 5))) (ILitExp (IIntVal 5)))
-      , IMemExp 6 5 (IGtExp (IMultExp (ILitExp (IIntVal 6)) (ILitExp (IIntVal 6))) (ILitExp (IIntVal 6)))
-      , IMemExp 7 4 (IGtExp (IMultExp (ILitExp (IIntVal 7)) (ILitExp (IIntVal 7))) (ILitExp (IIntVal 7)))
+      [ IMemExp 0 1 6 (IGtExp (IMultExp (ILitExp (IIntVal 1)) (ILitExp (IIntVal 1))) (ILitExp (IIntVal 1)))
+      , IMemExp 0 2 3 (IGtExp (IMultExp (ILitExp (IIntVal 2)) (ILitExp (IIntVal 2))) (ILitExp (IIntVal 2)))
+      , IMemExp 0 3 0 (IGtExp (IMultExp (ILitExp (IIntVal 3)) (ILitExp (IIntVal 3))) (ILitExp (IIntVal 3)))
+      , IMemExp 0 4 2 (IGtExp (IMultExp (ILitExp (IIntVal 4)) (ILitExp (IIntVal 4))) (ILitExp (IIntVal 4)))
+      , IMemExp 0 5 1 (IGtExp (IMultExp (ILitExp (IIntVal 5)) (ILitExp (IIntVal 5))) (ILitExp (IIntVal 5)))
+      , IMemExp 0 6 5 (IGtExp (IMultExp (ILitExp (IIntVal 6)) (ILitExp (IIntVal 6))) (ILitExp (IIntVal 6)))
+      , IMemExp 0 7 4 (IGtExp (IMultExp (ILitExp (IIntVal 7)) (ILitExp (IIntVal 7))) (ILitExp (IIntVal 7)))
       ]
 
     activateMap =
@@ -166,3 +167,45 @@ test6 = do
                                  , (("0x1234567890123456789012345678901234567897","0x1234567890123456789012345678901234567897"),1)
                                  , (("0x1234567890123456789012345678901234567898","0x1234567890123456789012345678901234567898"),1)
                                  ]
+
+timeTranslationIMemExpTest :: Spec
+timeTranslationIMemExpTest = do
+  it "translates time properly" $ do
+    intermediateCompile contract `shouldBe` intermediateContract
+  where
+    obsAddr, fooAddr, barAddr, bazAddr :: Address
+    obsAddr = "0x1111111111111111111111111111111111111111"
+    fooAddr = "0x2222222222222222222222222222222222222222"
+    barAddr = "0x3333333333333333333333333333333333333333"
+    bazAddr = "0x4444444444444444444444444444444444444444"
+
+    contract :: Contract
+    contract = parse' $ "translate(minutes(2), if (obs(bool, " ++ obsAddr ++ ", 0)) within minutes(2) " ++
+                        "then transfer(" ++ fooAddr ++ ", " ++ barAddr ++ ", " ++ bazAddr ++ ") " ++
+                        "else scale(2, 2, transfer(" ++ fooAddr ++ ", " ++ barAddr ++ ", " ++ bazAddr ++ ")))"
+
+    intermediateContract :: IntermediateContract
+    intermediateContract = IntermediateContract transfers memExps activateMap
+    transfers =
+      [ TransferCall {_maxAmount = 1,
+                      _amount = ILitExp (IIntVal 1),
+                      _delay = 120,
+                      _tokenAddress = fooAddr,
+                      _from = barAddr,
+                      _to = bazAddr,
+                      _memExpRefs = [ IMemExpRef 240 0 True ] }
+      , TransferCall {_maxAmount = 2,
+                      _amount = IMultExp (ILitExp (IIntVal 1)) (ILitExp (IIntVal 2)),
+                      _delay = 120,
+                      _tokenAddress = fooAddr,
+                      _from = barAddr,
+                      _to = bazAddr,
+                      _memExpRefs = [ IMemExpRef 240 0 False ] }
+      ]
+
+    memExps =
+      [ IMemExp 120 240 0 (ILitExp (IObservable obsAddr "0"))
+      ]
+
+    activateMap =
+      Map.fromList [ ((fooAddr, barAddr),2) ]

@@ -24,11 +24,18 @@ newCounter = do
 -- scale multiplies both _maxAmount integer and the _amount expression
 scale :: Integer -> Expression -> TransferCall -> ICompileGet TransferCall
 scale maxFactor factorExp transferCall = do
-  return $ transferCall { _maxAmount = _maxAmount transferCall * maxFactor, _amount = IMultExp (_amount transferCall) (iCompileExp factorExp)}
+  return $ transferCall { _maxAmount = _maxAmount transferCall * maxFactor
+                        , _amount = IMultExp (_amount transferCall) (iCompileExp factorExp)
+                        }
 
 translate :: Integer -> TransferCall -> ICompileGet TransferCall
 translate seconds transferCall = do
-  return $ transferCall { _delay = _delay transferCall + seconds }
+  return $ transferCall { _delay      = _delay transferCall + seconds
+                        , _memExpRefs = map delay (_memExpRefs transferCall)
+                        }
+    where
+      delay :: IMemExpRef -> IMemExpRef
+      delay iMemExpRef = iMemExpRef { _IMemExpRefEnd = _IMemExpRefEnd iMemExpRef + seconds }
 
 addMemExpRefCondition :: Time -> Integer -> Bool -> TransferCall -> ICompileGet TransferCall
 addMemExpRefCondition time counter condition transferCall = do
@@ -65,9 +72,9 @@ iCompileExp (IfExp e1 e2 e3)              = IIfExp (iCompileExp e1) (iCompileExp
 
 -- Run through the AST and return a list of transfer calls
 getTransferCalls :: Contract -> ICompileGet [TransferCall]
-getTransferCalls (Transfer sym from to) = do
-  return $ [TransferCall 1 (ILitExp (IIntVal 1)) 0 sym from to []]
-getTransferCalls (Scale maxFactor factorExp contract ) = do
+getTransferCalls (Transfer sym from to) =
+  return [TransferCall 1 (ILitExp (IIntVal 1)) 0 sym from to []]
+getTransferCalls (Scale maxFactor factorExp contract) = do
   tcalls <- getTransferCalls contract
   mapM (scale maxFactor factorExp) tcalls
 getTransferCalls (Both contractA contractB) = do
@@ -93,23 +100,29 @@ getTransferCalls (IfWithin (MemExp time _) contractA contractB) = do
 -- If this is done, then getActivateMap should be included as well. Perhaps a big,
 -- bad monad?
 getMemoryExpressions :: Contract -> ICompileGet [IMemExp]
-getMemoryExpressions (Transfer _ _ _) = do
+getMemoryExpressions (Transfer _ _ _) =
   return []
-getMemoryExpressions (Scale _ _ contract ) = do
-  memExps <- getMemoryExpressions contract
-  return memExps
+getMemoryExpressions (Scale _ _ contract) =
+  getMemoryExpressions contract
 getMemoryExpressions (Both contractA contractB) = do
   memExpsA <- getMemoryExpressions contractA
   memExpsB <- getMemoryExpressions contractB
   return $ memExpsA ++ memExpsB
-getMemoryExpressions (Translate _ contract) = do
+getMemoryExpressions (Translate time contract) = do
   memExps <- getMemoryExpressions contract
-  return memExps
+  return $ map (\iMemExp -> iMemExp {
+                   _IMemExpBegin = time2Seconds time + _IMemExpBegin iMemExp
+                 , _IMemExpEnd   = time2Seconds time + _IMemExpEnd iMemExp
+                 }) memExps
 getMemoryExpressions (IfWithin (MemExp time exp0) contractA contractB) = do
   memExpsA <- getMemoryExpressions contractA
   memExpsB <- getMemoryExpressions contractB
-  counter <- newCounter
-  return $ (IMemExp (time2Seconds time) counter (iCompileExp exp0)) : (memExpsA ++ memExpsB)
+  ident <- newCounter
+  return $ IMemExp { _IMemExpBegin = 0
+                   , _IMemExpEnd   = time2Seconds time
+                   , _IMemExpIdent = ident
+                   , _IMemExp      = iCompileExp exp0
+                   } : (memExpsA ++ memExpsB)
 
 -- Find out how large amount each party must commit
 -- as margin. This is equivalent to the largest amount
