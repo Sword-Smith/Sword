@@ -19,7 +19,9 @@ data Contract = Transfer { tokenAddress_ :: Address,
                   memExp_ :: MemExp,
                   contractA_ :: Contract,
                   contractB_ :: Contract
-                  } deriving (Show, Eq)
+                  }
+              | Zero
+              deriving (Show, Eq)
 
 -- DEVFIX: The value of time units should be natural numbers, not integers
 -- Cf. Benjamin Egelund et al.

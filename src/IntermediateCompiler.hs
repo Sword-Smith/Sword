@@ -91,6 +91,8 @@ getTransferCalls (IfWithin (MemExp time _) contractA contractB) = do
   contAConds <- mapM (addMemExpRefCondition time counter True) contA
   contBConds <- mapM (addMemExpRefCondition time counter False) contB
   return $ contAConds ++ contBConds
+getTransferCalls Zero =
+  return []
 
 -- Run through the AST and return a list of memory expressions
 -- This MUST happen in the same order as it does in the getTransferCalls function!
@@ -123,6 +125,8 @@ getMemoryExpressions (IfWithin (MemExp time exp0) contractA contractB) = do
                    , _IMemExpIdent = ident
                    , _IMemExp      = iCompileExp exp0
                    } : (memExpsA ++ memExpsB)
+getMemoryExpressions Zero =
+  return []
 
 -- Find out how large amount each party must commit
 -- as margin. This is equivalent to the largest amount
@@ -144,6 +148,8 @@ getActivateMap (Translate _ contract) =
   getActivateMap contract
 getActivateMap (IfWithin (MemExp _ _) contractA contractB) =
   Map.unionWith (max) (getActivateMap contractA) (getActivateMap contractB)
+getActivateMap Zero =
+  Map.empty
 
 
 time2Seconds :: Time -> Integer

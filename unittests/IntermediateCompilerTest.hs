@@ -6,6 +6,7 @@ import IntermediateCompiler
 import IntermediateLanguageDefinition
 
 import DaggerParserTest hiding (tests)
+import DaggerTestHelpers
 
 import Test.Hspec
 
@@ -21,6 +22,7 @@ tests = do
   test5
   test6
   timeTranslationIMemExpTest
+  zeroContractCodeTest
 
 test0 :: Spec
 test0 = do
@@ -173,16 +175,11 @@ timeTranslationIMemExpTest = do
   it "translates time properly" $ do
     intermediateCompile contract `shouldBe` intermediateContract
   where
-    obsAddr, fooAddr, barAddr, bazAddr :: Address
-    obsAddr = "0x1111111111111111111111111111111111111111"
-    fooAddr = "0x2222222222222222222222222222222222222222"
-    barAddr = "0x3333333333333333333333333333333333333333"
-    bazAddr = "0x4444444444444444444444444444444444444444"
-
     contract :: Contract
-    contract = parse' $ "translate(minutes(2), if (obs(bool, " ++ obsAddr ++ ", 0)) within minutes(2) " ++
-                        "then transfer(" ++ fooAddr ++ ", " ++ barAddr ++ ", " ++ bazAddr ++ ") " ++
-                        "else scale(2, 2, transfer(" ++ fooAddr ++ ", " ++ barAddr ++ ", " ++ bazAddr ++ ")))"
+    contract = makeContract defaultAddressMap $
+      "translate(minutes(2), if (obs(bool, O, 0)) within minutes(2) " ++
+      "then transfer(T, A, B) " ++
+      "else scale(2, 2, transfer(T, A, B)))"
 
     intermediateContract :: IntermediateContract
     intermediateContract = IntermediateContract transfers memExps activateMap
@@ -190,16 +187,16 @@ timeTranslationIMemExpTest = do
       [ TransferCall {_maxAmount = 1,
                       _amount = ILitExp (IIntVal 1),
                       _delay = 120,
-                      _tokenAddress = fooAddr,
-                      _from = barAddr,
-                      _to = bazAddr,
+                      _tokenAddress = tokAddr,
+                      _from = oneAddr,
+                      _to = twoAddr,
                       _memExpRefs = [ IMemExpRef 240 0 True ] }
       , TransferCall {_maxAmount = 2,
                       _amount = IMultExp (ILitExp (IIntVal 1)) (ILitExp (IIntVal 2)),
                       _delay = 120,
-                      _tokenAddress = fooAddr,
-                      _from = barAddr,
-                      _to = bazAddr,
+                      _tokenAddress = tokAddr,
+                      _from = oneAddr,
+                      _to = twoAddr,
                       _memExpRefs = [ IMemExpRef 240 0 False ] }
       ]
 
@@ -208,4 +205,40 @@ timeTranslationIMemExpTest = do
       ]
 
     activateMap =
-      Map.fromList [ ((fooAddr, barAddr),2) ]
+      Map.fromList [ ((tokAddr, oneAddr),2) ]
+
+zeroContractCodeTest :: Spec
+zeroContractCodeTest = do
+  it "translates zero contracts into no TCs" $ do
+    intermediateCompile Zero `shouldBe` emptyContract
+
+  it "translates an if-within that contains a zero contract" $ do
+    intermediateCompile contract `shouldBe` intermediateContract
+
+  where
+    emptyContract :: IntermediateContract
+    emptyContract = IntermediateContract [] [] Map.empty
+
+    contract :: Contract
+    contract = makeContract defaultAddressMap $
+      "if obs(bool, O, 0) within seconds(10) " ++
+      "then transfer(T, A, B) else zero"
+
+    intermediateContract :: IntermediateContract
+    intermediateContract = IntermediateContract transfers memExps activateMap
+
+    transfers =
+      [ TransferCall { _maxAmount = 1
+                     , _amount = ILitExp (IIntVal 1)
+                     , _delay = 0
+                     , _tokenAddress = tokAddr
+                     , _from = oneAddr
+                     , _to = twoAddr
+                     , _memExpRefs = [ IMemExpRef { _IMemExpRefEnd = 10, _IMemExpRefIdent = 0, _IMemExpRefBranch = True } ]
+                     }
+      ]
+
+    memExps = [ IMemExp {_IMemExpBegin = 0, _IMemExpEnd = 10, _IMemExpIdent = 0, _IMemExp = ILitExp (IObservable obsAddr "0")}]
+
+    activateMap = Map.fromList [((tokAddr, oneAddr), 1)]
+

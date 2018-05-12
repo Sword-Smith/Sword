@@ -24,7 +24,7 @@ contractParser = do
 
 contractParserH :: GenParser Char st Contract
 contractParserH = do
-    contract <- transferTranslateParser <|> scaleParser <|> bothParser <|> ifWithinParser
+    contract <- transferTranslateParser <|> scaleParser <|> bothParser <|> ifWithinParser <|> zeroParser
     return contract
 
 transferTranslateParser :: GenParser Char st Contract
@@ -88,6 +88,9 @@ ifWithinParser = do
   symbol "else"
   contractB <- contractParserH
   return $ IfWithin (MemExp time exp0) contractA contractB
+
+zeroParser :: GenParser Char st Contract
+zeroParser = symbol "zero" >> return Zero
 
 -- Handle expressions
 getExpression :: GenParser Char st Expression

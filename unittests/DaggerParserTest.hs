@@ -12,8 +12,46 @@ tests = do
   parser_unittest2
   parser_unittest3
   parser_unittest4
+  zeroContractTest
 
 -- TESTS!
+
+zeroContractTest :: Spec
+zeroContractTest = do
+  it "parses a zero contract" $ do
+    parse' "zero" `shouldBe` Zero
+
+  it "parses a nested zero contract" $ do
+    parse' "both(zero, zero)" `shouldBe` Both Zero Zero
+
+  it "parses an if-within that contains a zero contract" $ do
+    parse' src1 `shouldBe` ast1
+    parse' src2 `shouldBe` ast2
+
+  where
+    obsAddr = "0x1111111111111111111111111111111111111111"
+    tokAddr = "0x2222222222222222222222222222222222222222"
+    oneAddr = "0x3333333333333333333333333333333333333333"
+    twoAddr = "0x4444444444444444444444444444444444444444"
+
+    src1 = "if obs(bool, " ++ obsAddr ++ ", 0) within seconds(10) "
+        ++ "then transfer(" ++ tokAddr ++ ", " ++ oneAddr ++ ", " ++ twoAddr ++ ") "
+        ++ "else zero"
+
+    src2 = "if obs(bool, " ++ obsAddr ++ ", 0) within seconds(10) "
+        ++ "then zero "
+        ++ "else transfer(" ++ tokAddr ++ ", " ++ oneAddr ++ ", " ++ twoAddr ++ ")"
+
+    ast1 = IfWithin { memExp_ = MemExp (Seconds 10) (Lit (Observable OBool obsAddr "0"))
+                    , contractA_ = Transfer { tokenAddress_ = tokAddr
+                                            , from_ = oneAddr
+                                            , to_ = twoAddr
+                                            }
+                    , contractB_ = Zero
+                    }
+
+    ast2 = ast1 { contractA_ = contractB_ ast1, contractB_ = contractA_ ast1 }
+
 -- DEVFIX: We should also test that the parser fails if wrong format address is given
 parser_unittest0 :: Spec
 parser_unittest0 =
