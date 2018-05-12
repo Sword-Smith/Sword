@@ -2,11 +2,7 @@ name: daggerc
 version: "0.1"
 category: Language
 
-dependencies:
-
 library:
-  build-tools:
-
   source-dirs: src
   dependencies:
     - base >= 4.9.1.0
