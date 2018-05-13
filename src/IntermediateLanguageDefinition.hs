@@ -4,7 +4,11 @@ import DaggerLanguageDefinition
 
 import qualified Data.Map.Strict as Map
 
-data IntermediateContract = IntermediateContract [TransferCall] [IMemExp] ActivateMap deriving (Show, Eq)
+data IntermediateContract =
+     IntermediateContract { getTransferCalls :: [TransferCall]
+                          , getMemExps       :: [IMemExp]
+                          , getActivateMap   :: ActivateMap
+                          } deriving (Show, Eq)
 
 data TransferCall = TransferCall { _maxAmount    :: Integer,
                                    _amount       :: IntermediateExpression,

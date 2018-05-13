@@ -4,12 +4,12 @@ Brainstorm
     - CreationTimestamp skal gemmes i activate() og ikke når
       kontrakten lægges på e-Guirlanden.
     - Implementere "zero"-kontrakt.
+    - Refaktorisere IntermediateCompiler, så den ikke
+      kører hen over koden tre gange.
 
   Påbegyndt:
     - Finde årsag til fejl i translate-kode.
       (Relateret til margin-problemet.)
-    - Refaktorisere IntermediateCompiler, så den ikke
-      kører hen over koden tre gange.
 
   Andre:
     - Lege med Truffle. (Vent til T&M spørger andre danske
