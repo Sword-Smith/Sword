@@ -40,3 +40,4 @@ tests:
       - QuickCheck
       - containers
       - hspec
+      - mtl

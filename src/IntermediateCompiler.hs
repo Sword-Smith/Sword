@@ -46,7 +46,9 @@ intermediateCompile :: Contract -> IntermediateContract
 intermediateCompile c =
   IntermediateContract (evalState (getTransferCalls c) (ICompileEnv 0))
                        (evalState (getMemoryExpressions c) (ICompileEnv 0))
-                       (getActivateMap c)
+                       am
+  where
+    (am, _) = evalState (getActivateMap c []) (ICompileEnv 0)
 
 -- DEVNOTE: This does NOT need to run in a state monad
 -- The type of the observable is dropped since this is past the type checker stage
@@ -128,6 +130,12 @@ getMemoryExpressions (IfWithin (MemExp time exp0) contractA contractB) = do
 getMemoryExpressions Zero =
   return []
 
+-- getMarginRefundMap :: Contract -> ActivateMap -> ICompileGet (ActivateMap, MarginRefundMap)
+-- getMarginRefundMap (Transfer tokenAddress from _) am =
+--   return $ (Map.fromList [((tokenAddress, from), 1)])
+-- getMarginRefundMap (Scale maxFactor _ contract) =
+--   return (Map.map (* maxFactor) (getMarginRefundMap)))
+
 -- Find out how large amount each party must commit
 -- as margin. This is equivalent to the largest amount
 -- each party can possibly lose.
@@ -137,20 +145,31 @@ getMemoryExpressions Zero =
 -- be fixed through memoization or dynamic programming
 -- where the tree is traversed buttom-up instead of
 -- top-down.
-getActivateMap :: Contract -> ActivateMap
-getActivateMap (Transfer tokenAddress from _) =
-  Map.fromList [((tokenAddress, from), 1)]
-getActivateMap (Scale maxFactor _ contract ) =
-  Map.map (* maxFactor) (getActivateMap contract)
-getActivateMap (Both contractA contractB) =
-  Map.unionWith (+) (getActivateMap contractA) (getActivateMap contractB)
-getActivateMap (Translate _ contract) =
-  getActivateMap contract
-getActivateMap (IfWithin (MemExp _ _) contractA contractB) =
-  Map.unionWith (max) (getActivateMap contractA) (getActivateMap contractB)
-getActivateMap Zero =
-  Map.empty
-
+getActivateMap :: Contract -> MarginRefundPath -> ICompileGet (ActivateMap, MarginRefundMap)
+getActivateMap (Transfer tokenAddress from _) _ =
+  return $ (Map.fromList [((tokenAddress, from), 1)], Map.empty)
+getActivateMap (Scale maxFactor _ contract ) mrp = do
+  (am, mrm) <- getActivateMap contract mrp
+  return $ (Map.map (* maxFactor) am, mrm)
+getActivateMap (Both contractA contractB) mrp = do
+  (amA, mrmA) <- getActivateMap contractA mrp
+  (amB, mrmB) <- getActivateMap contractB mrp
+  return $ ((Map.unionWith (+) amA amB), (Map.union mrmA mrmB))
+getActivateMap (Translate _ contract) mrp = do
+  (am, mrm) <- getActivateMap contract mrp
+  return $ (am, mrm)
+getActivateMap (IfWithin (MemExp _ _) contractA contractB) mrp = do
+  i <- newCounter
+  (amA, mrmA) <- getActivateMap contractA (mrp ++ [(i, True)])
+  (amB, mrmB) <- getActivateMap contractB (mrp ++ [(i, False)])
+  let uwM      = Map.unionWith (max) amA amB
+  let iwTrue   = map (\((a,b), c) -> (a,b,c)) $ Map.toList $ Map.filter (\val -> val > 0) $ Map.differenceWith (\x y -> if x - y > 0 then Just (x - y) else Nothing ) amB amA
+  let iwFalse  = map (\((a,b), c) -> (a,b,c)) $ Map.toList $ Map.filter (\val -> val > 0) $ Map.differenceWith (\x y -> if x - y > 0 then Just (x - y) else Nothing ) amA amB
+  return $ (
+    uwM,
+    Map.filter (\val -> not (null val)) $ Map.insert (mrp ++ [(i, True)]) iwTrue $ Map.insert ( mrp ++ [(i, False)]) iwFalse $ Map.union mrmA mrmB )
+getActivateMap Zero _ =
+  return $ (Map.empty, Map.empty)
 
 time2Seconds :: Time -> Integer
 time2Seconds Now = 0

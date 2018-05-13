@@ -8,6 +8,7 @@ import IntermediateLanguageDefinition
 import DaggerParserTest hiding (tests)
 import DaggerTestHelpers
 
+import Control.Monad.State.Lazy
 import Test.Hspec
 
 import qualified Data.Map.Strict as Map
@@ -147,20 +148,25 @@ test4 = do
 test5 :: Spec
 test5 = do
   it "getActivateMapSimple" $ do
-    getActivateMap (parse' src) `shouldBe` activateMap
+    evalState (getActivateMap (parse' src) []) (ICompileEnv 0) `shouldBe` activateMap
     where
       src = "both( if true within seconds(1) then scale(1, 1, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) else scale(7, 7, transfer(0xdddddddddddddddddddddddddddddddddddddddd,0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee,0xffffffffffffffffffffffffffffffffffffffff)),  if true within seconds(2) then scale(17, 17, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) else if true within seconds(3) then scale(53, 53, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) else scale(101, 101, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) )"
-      activateMap = Map.fromList [ (("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),102),
+      activateMap = (
+        Map.fromList
+          [ (("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),102),
                                    (("0xdddddddddddddddddddddddddddddddddddddddd","0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),7)
-                                 ]
+          ]
+        , Map.fromList [([(0,False)],[("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",1)]),([(0,True)],[("0xdddddddddddddddddddddddddddddddddddddddd","0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",7)]),([(1,False),(2,True)],[("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",48)]),([(1,True)],[("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",84)])])
 
 -- Test that the getActivateMap works for the canonical IW source code
 test6 :: Spec
 test6 = do
   it "getActivateMapCanonicalIw" $ do
-    getActivateMap (parse' canonical_iw_source) `shouldBe` activateMap
+    evalState (getActivateMap (parse' canonical_iw_source) []) (ICompileEnv 0) `shouldBe` activateMap
     where
-      activateMap = Map.fromList [ (("0x1234567890123456789012345678901234567891","0x1234567890123456789012345678901234567891"),1)
+      activateMap =
+        (
+          Map.fromList [ (("0x1234567890123456789012345678901234567891","0x1234567890123456789012345678901234567891"),1)
                                  , (("0x1234567890123456789012345678901234567892","0x1234567890123456789012345678901234567892"),1)
                                  , (("0x1234567890123456789012345678901234567893","0x1234567890123456789012345678901234567893"),1)
                                  , (("0x1234567890123456789012345678901234567894","0x1234567890123456789012345678901234567894"),1)
@@ -169,6 +175,7 @@ test6 = do
                                  , (("0x1234567890123456789012345678901234567897","0x1234567890123456789012345678901234567897"),1)
                                  , (("0x1234567890123456789012345678901234567898","0x1234567890123456789012345678901234567898"),1)
                                  ]
+        , Map.fromList [([(0,False)],[("0x1234567890123456789012345678901234567891","0x1234567890123456789012345678901234567891",1),("0x1234567890123456789012345678901234567892","0x1234567890123456789012345678901234567892",1),("0x1234567890123456789012345678901234567893","0x1234567890123456789012345678901234567893",1),("0x1234567890123456789012345678901234567894","0x1234567890123456789012345678901234567894",1),("0x1234567890123456789012345678901234567895","0x1234567890123456789012345678901234567895",1)]),([(0,False),(5,False)],[("0x1234567890123456789012345678901234567896","0x1234567890123456789012345678901234567896",1)]),([(0,False),(5,False),(6,False)],[("0x1234567890123456789012345678901234567897","0x1234567890123456789012345678901234567897",1)]),([(0,False),(5,False),(6,True)],[("0x1234567890123456789012345678901234567898","0x1234567890123456789012345678901234567898",1)]),([(0,False),(5,True)],[("0x1234567890123456789012345678901234567897","0x1234567890123456789012345678901234567897",1),("0x1234567890123456789012345678901234567898","0x1234567890123456789012345678901234567898",1)]),([(0,True)],[("0x1234567890123456789012345678901234567896","0x1234567890123456789012345678901234567896",1),("0x1234567890123456789012345678901234567897","0x1234567890123456789012345678901234567897",1),("0x1234567890123456789012345678901234567898","0x1234567890123456789012345678901234567898",1)]),([(0,True),(1,False)],[("0x1234567890123456789012345678901234567891","0x1234567890123456789012345678901234567891",1),("0x1234567890123456789012345678901234567892","0x1234567890123456789012345678901234567892",1)]),([(0,True),(1,False),(3,False)],[("0x1234567890123456789012345678901234567893","0x1234567890123456789012345678901234567893",1),("0x1234567890123456789012345678901234567894","0x1234567890123456789012345678901234567894",1)]),([(0,True),(1,False),(3,True)],[("0x1234567890123456789012345678901234567895","0x1234567890123456789012345678901234567895",1)]),([(0,True),(1,False),(3,True),(4,False)],[("0x1234567890123456789012345678901234567893","0x1234567890123456789012345678901234567893",1)]),([(0,True),(1,False),(3,True),(4,True)],[("0x1234567890123456789012345678901234567894","0x1234567890123456789012345678901234567894",1)]),([(0,True),(1,True)],[("0x1234567890123456789012345678901234567893","0x1234567890123456789012345678901234567893",1),("0x1234567890123456789012345678901234567894","0x1234567890123456789012345678901234567894",1),("0x1234567890123456789012345678901234567895","0x1234567890123456789012345678901234567895",1)]),([(0,True),(1,True),(2,False)],[("0x1234567890123456789012345678901234567891","0x1234567890123456789012345678901234567891",1)]),([(0,True),(1,True),(2,True)],[("0x1234567890123456789012345678901234567892","0x1234567890123456789012345678901234567892",1)])])
 
 timeTranslationIMemExpTest :: Spec
 timeTranslationIMemExpTest = do
