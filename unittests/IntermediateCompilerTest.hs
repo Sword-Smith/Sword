@@ -21,6 +21,7 @@ tests = do
   test4
   test5
   test6
+  basicTransferTest
   timeTranslationIMemExpTest
   zeroContractCodeTest
 
@@ -242,7 +243,24 @@ zeroContractCodeTest = do
 
     activateMap = Map.fromList [((tokAddr, oneAddr), 1)]
 
--- intermediate_unittest0 = TestCase $ assertEqual "Basic transfer" (IntermediateContract [TransferCall {_maxAmount = 1, _delay = 0, _tokenAddress = "0x1234567890123456789012345678901234567890", _to = "0x1234567890123456789012345678901234567890", _from = "0x1234567890123456789012345678901234567890"}]) (intermediateCompile Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567890", to_ = "0x1234567890123456789012345678901234567890", from_ = "0x1234567890123456789012345678901234567890"})
+basicTransferTest :: Spec
+basicTransferTest = do
+  it "compiles a basic transfer" $ do
+    intermediateCompile transfer `shouldBe` transferIC
+
+  where
+    transfer :: Contract
+    transfer = Transfer { tokenAddress_ = tokAddr, to_ = oneAddr, from_ = twoAddr }
+
+    transferIC :: IntermediateContract
+    transferIC = IntermediateContract [TransferCall { _maxAmount = 1
+                                                    , _amount = ILitExp (IIntVal 1)
+                                                    , _delay = 0
+                                                    , _tokenAddress = tokAddr
+                                                    , _to = oneAddr
+                                                    , _from = twoAddr
+                                                    , _memExpRefs = []
+                                                    }] [] (Map.fromList [((tokAddr, twoAddr), 1)])
 
 -- intermediate_unittest1 = TestCase $ assertEqual "scale transfer" (IntermediateContract [TransferCall {_maxAmount = 123, _delay = 0, _tokenAddress = "0x1234567890123456789012345678901234567890", _to = "0x1234567890123456789012345678901234567890", _from = "0x1234567890123456789012345678901234567890"}]) (intermediateCompile $ Scale {scaleFactor_ = 123, contract_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567890", to_ = "0x1234567890123456789012345678901234567890", from_ = "0x1234567890123456789012345678901234567890"}})
 
