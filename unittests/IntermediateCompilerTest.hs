@@ -90,7 +90,7 @@ canonicalNestedIfWithinTest = do
                                      , IMemExpRef {_IMemExpRefEnd = 2, _IMemExpRefIdent = 1, _IMemExpRefBranch = False}
                                      , IMemExpRef {_IMemExpRefEnd = 4, _IMemExpRefIdent = 3, _IMemExpRefBranch = True}
                                      , IMemExpRef {_IMemExpRefEnd = 5, _IMemExpRefIdent = 4, _IMemExpRefBranch = True} ] }
-              , TransferCall { _maxAmount = 1, _amount = ILitExp (IIntVal 1), _delay = 0
+      , TransferCall { _maxAmount = 1, _amount = ILitExp (IIntVal 1), _delay = 0
                      , _tokenAddress = "0x1234567890123456789012345678901234567894"
                      , _from = "0x1234567890123456789012345678901234567894"
                      , _to = "0x1234567890123456789012345678901234567894"
