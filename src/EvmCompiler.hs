@@ -96,18 +96,18 @@ getFunctionSignature funDecl = read $ "0x" ++ take 8 (keccak256 funDecl)
 -- Check that there are not more than 2^8 transfercalls
 -- Wrapper for intermediateToOpcodesH
 intermediateToOpcodes :: IntermediateContract -> String
-intermediateToOpcodes (IntermediateContract tcs iMemExps activateMap) =
+intermediateToOpcodes (IntermediateContract tcs iMemExps activateMap marginRefundMap) =
   let
     intermediateToOpcodesH :: IntermediateContract -> String
     intermediateToOpcodesH = asmToMachineCode . eliminatePseudoInstructions . evmCompile
   in
     if length(tcs) > 256
     then undefined
-    else intermediateToOpcodesH (IntermediateContract tcs iMemExps activateMap)
+    else intermediateToOpcodesH (IntermediateContract tcs iMemExps activateMap marginRefundMap)
 
 -- Given an IntermediateContract, returns the EvmOpcodes representing the binary
 evmCompile :: IntermediateContract -> [EvmOpcode]
-evmCompile (IntermediateContract tcs iMemExps activateMap) =
+evmCompile (IntermediateContract tcs iMemExps activateMap _marginRefundMap) =
   let
     constructor      = getConstructor tcs
     codecopy         = getCodeCopy constructor (jumpTable ++ checkIfActivated ++ execute ++ activate)

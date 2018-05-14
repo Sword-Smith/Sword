@@ -15,9 +15,10 @@ import qualified Data.Map.Strict as Map
 type MemExpId = Integer
 
 data ScopeEnv =
-     ScopeEnv { _maxFactor   :: Integer
-              , _scaleFactor :: IntermediateExpression -> IntermediateExpression
-              , _delayTerm   :: Integer
+     ScopeEnv { _maxFactor        :: Integer
+              , _scaleFactor      :: IntermediateExpression -> IntermediateExpression
+              , _delayTerm        :: Integer
+              , _marginRefundPath :: MarginRefundPath
               }
 
 type ICompiler a = ReaderT ScopeEnv (State MemExpId) a
@@ -26,10 +27,11 @@ initialScope :: ScopeEnv
 initialScope = ScopeEnv { _maxFactor   = 1
                         , _scaleFactor = id
                         , _delayTerm   = 0
+                        , _marginRefundPath = []
                         }
 
 emptyContract :: IntermediateContract
-emptyContract = IntermediateContract [] [] Map.empty
+emptyContract = IntermediateContract [] [] Map.empty Map.empty
 
 newMemExpId :: ICompiler MemExpId
 newMemExpId = get <* modify (+ 1)
@@ -50,17 +52,17 @@ intermediateCompile contract =
 
 intermediateCompileM :: Contract -> ICompiler IntermediateContract
 intermediateCompileM (Transfer token from to) = do
-  ScopeEnv maxFactor scaleFactor delayTerm <- ask
+  ScopeEnv maxFactor scaleFactor delayTerm _marginRefundPath <- ask
   let transferCall = TransferCall { _maxAmount     = maxFactor
                                   , _amount        = scaleFactor (ILitExp (IIntVal 1))
                                   , _delay         = delayTerm
                                   , _tokenAddress  = token
                                   , _from          = from
                                   , _to            = to
-                                  , _memExpRefs    = [] -- FIXME
+                                  , _memExpRefs    = [] -- FIXME: Still calculated the old way.
                                   }
   let activateMap = Map.fromList [((token, from), maxFactor)]
-  return (IntermediateContract [transferCall] [] activateMap)
+  return (IntermediateContract [transferCall] [] activateMap Map.empty)
 
 intermediateCompileM (Scale maxFactor factorExp contract) = do
   local adjustScale $ intermediateCompileM contract
@@ -73,11 +75,12 @@ intermediateCompileM (Scale maxFactor factorExp contract) = do
                }
 
 intermediateCompileM (Both contractA contractB) = do
-  IntermediateContract tcs1 mes1 am1 <- intermediateCompileM contractA
-  IntermediateContract tcs2 mes2 am2 <- intermediateCompileM contractB
+  IntermediateContract tcs1 mes1 am1 mrm1 <- intermediateCompileM contractA
+  IntermediateContract tcs2 mes2 am2 mrm2 <- intermediateCompileM contractB
   return $ IntermediateContract (tcs1 ++ tcs2)
                                 (mes1 ++ mes2)
                                 (Map.unionWith (+) am1 am2)
+                                (Map.union mrm1 mrm2)
 
 intermediateCompileM (Translate time contract) = do
   local adjustDelay $ intermediateCompileM contract
@@ -87,28 +90,49 @@ intermediateCompileM (Translate time contract) = do
       scopeEnv { _delayTerm = toSeconds time + _delayTerm scopeEnv }
 
 intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
-  IntermediateContract tcs1 mes1 am1 <- intermediateCompileM contractA
-  IntermediateContract tcs2 mes2 am2 <- intermediateCompileM contractB
-
   memExpId <- newMemExpId
+  marginRefundPath <- reader _marginRefundPath
+
+  icA <- local (adjustMarginRefundPath (memExpId, True)) $ intermediateCompileM contractA
+  let IntermediateContract tcs1 mes1 am1 mrm1 = icA
+
+  icB <- local (adjustMarginRefundPath (memExpId, False)) $ intermediateCompileM contractB
+  let IntermediateContract tcs2 mes2 am2 mrm2 = icB
+
   delay <- reader _delayTerm
-  let delay' = toSeconds time + delay
-  let tcs1' = map (addMemExpRefCondition delay' memExpId True)  tcs1
-      tcs2' = map (addMemExpRefCondition delay' memExpId False) tcs2
+  let delayEnd = toSeconds time + delay
       me0 = IMemExp { _IMemExpBegin = delay
-                    , _IMemExpEnd   = delay'
+                    , _IMemExpEnd   = delayEnd
                     , _IMemExpIdent = memExpId
                     , _IMemExp      = iCompileExp memExp
                     }
+      mref0 = IMemExpRef delayEnd memExpId
+      tcs1' = map (addMemExpRefCondition $ mref0 True)  tcs1
+      tcs2' = map (addMemExpRefCondition $ mref0 False) tcs2
+
+  -- MarginRefundMap
+  let marginRefundMap = Map.filter (not . null) $
+                          Map.insert (marginRefundPath ++ [(memExpId, True)])  (iw am2 am1) $
+                          Map.insert (marginRefundPath ++ [(memExpId, False)]) (iw am1 am2) $
+                          Map.union mrm1 mrm2
 
   return $ IntermediateContract (tcs1' ++ tcs2')
                                 (me0 : mes1 ++ mes2)
                                 (Map.unionWith max am1 am2)
+                                marginRefundMap
 
   where
-    addMemExpRefCondition :: Integer -> MemExpId -> Bool -> TransferCall -> TransferCall
-    addMemExpRefCondition delay memExpId branch transferCall =
-      transferCall { _memExpRefs = IMemExpRef delay memExpId branch : _memExpRefs transferCall }
+    addMemExpRefCondition :: IMemExpRef -> TransferCall -> TransferCall
+    addMemExpRefCondition mref transferCall =
+      transferCall { _memExpRefs = mref : _memExpRefs transferCall }
+
+    adjustMarginRefundPath :: (MemExpId, Bool) -> ScopeEnv -> ScopeEnv
+    adjustMarginRefundPath (memExpId, branch) scopeEnv =
+      scopeEnv { _marginRefundPath = _marginRefundPath scopeEnv ++ [(memExpId, branch)] }
+
+    iw :: ActivateMap -> ActivateMap -> [(Address, Address, Integer)]
+    iw am1 am2 = map (\((a,b), c) -> (a,b,c)) $ Map.toList $ Map.filter (> 0) $
+      Map.differenceWith (\x y -> if x - y > 0 then Just (x - y) else Nothing) am1 am2
 
 intermediateCompileM Zero = return emptyContract
 
