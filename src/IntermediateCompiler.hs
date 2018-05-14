@@ -31,7 +31,7 @@ initialScope = ScopeEnv { _maxFactor        = 1
                         , _scaleFactor      = id
                         , _delayTerm        = 0
                         , _marginRefundPath = []
-                        , _memExpRs        = []
+                        , _memExpRs         = []
                         }
 
 emptyContract :: IntermediateContract
