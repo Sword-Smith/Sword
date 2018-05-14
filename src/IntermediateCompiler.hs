@@ -140,7 +140,7 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
     -- RC and margin is present in the LC, the entire margin can be
     -- returned, hence the Map.differenceWith.
     iw :: ActivateMap -> ActivateMap -> [(Address, Address, Integer)]
-    iw am1 am2 = map (\((a,b), c) -> (a,b,c)) $ Map.toList $ Map.filter (> 0) $
+    iw am1 am2 = map (\((a,b), c) -> (a,b,c)) $ Map.toList $
       Map.differenceWith (\x y -> if x - y > 0 then Just (x - y) else Nothing) am1 am2
 
 intermediateCompileM Zero = return emptyContract
