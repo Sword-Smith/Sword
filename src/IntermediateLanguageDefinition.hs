@@ -67,9 +67,3 @@ type MarginRefundMapElement = ([(Integer, Bool)], [(Address, Address, Integer)])
 type MarginRefundPath = [(Integer, Bool)]
 
 type ActivateMapElement = ((Address, Address), Integer)
-
-type MarginRefundMap = Map.Map [(Integer, Bool)] [(Address, Address, Integer)]
-
-type MarginRefundMapElement = ([(Integer, Bool)], [(Address, Address, Integer)])
-
-type MarginRefundPath = [(Integer, Bool)]

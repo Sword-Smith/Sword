@@ -8,7 +8,6 @@ import IntermediateLanguageDefinition
 import DaggerParserTest hiding (tests)
 import DaggerTestHelpers
 
-import Control.Monad.State.Lazy
 import Test.Hspec
 
 import qualified Data.Map.Strict as Map
