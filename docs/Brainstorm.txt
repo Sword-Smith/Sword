@@ -26,6 +26,8 @@ Brainstorm
       Hvordan ændres denne tid?
     - updateExecutedWord: Konstant optimering. (3 instruktioner kan
       slås sammen til 1 ved compile-time-udregning.)
+    - Tilføje margin-refund-logik til EVM compileren. Pt. er den
+      kun implementeret i intermediate compileren.
 
   Problem: Sender ikke den korrekte margin tilbage i branches som sender
     forskellige beløb. Eksempel:
