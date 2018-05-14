@@ -19,15 +19,19 @@ data ScopeEnv =
               , _scaleFactor      :: IntermediateExpression -> IntermediateExpression
               , _delayTerm        :: Integer
               , _marginRefundPath :: MarginRefundPath
+              , _memExpRs        :: [IMemExpRef]
               }
 
 type ICompiler a = ReaderT ScopeEnv (State MemExpId) a
 
+-- The marginRefundPath and memExpRs could be combined to reduce
+-- the number of fields in this recored by one.
 initialScope :: ScopeEnv
-initialScope = ScopeEnv { _maxFactor   = 1
-                        , _scaleFactor = id
-                        , _delayTerm   = 0
+initialScope = ScopeEnv { _maxFactor        = 1
+                        , _scaleFactor      = id
+                        , _delayTerm        = 0
                         , _marginRefundPath = []
+                        , _memExpRs        = []
                         }
 
 emptyContract :: IntermediateContract
@@ -52,14 +56,14 @@ intermediateCompile contract =
 
 intermediateCompileM :: Contract -> ICompiler IntermediateContract
 intermediateCompileM (Transfer token from to) = do
-  ScopeEnv maxFactor scaleFactor delayTerm _marginRefundPath <- ask
+  ScopeEnv maxFactor scaleFactor delayTerm _marginRefundPath memExpRes <- ask
   let transferCall = TransferCall { _maxAmount     = maxFactor
                                   , _amount        = scaleFactor (ILitExp (IIntVal 1))
                                   , _delay         = delayTerm
                                   , _tokenAddress  = token
                                   , _from          = from
                                   , _to            = to
-                                  , _memExpRefs    = [] -- FIXME: Still calculated the old way.
+                                  , _memExpRefs    = memExpRes
                                   }
   let activateMap = Map.fromList [((token, from), maxFactor)]
   return (IntermediateContract [transferCall] [] activateMap Map.empty)
@@ -96,22 +100,20 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
   -- adjustMarginRefundPath sets the environment up for the recursive call.
   -- In the two monads, only the marginRefundPath and the memExpID is changed in
   -- this recursive call.
-  icA <- local (adjustMarginRefundPath (memExpId, True)) $ intermediateCompileM contractA
-  let IntermediateContract tcs1 mes1 am1 mrm1 = icA
-
-  icB <- local (adjustMarginRefundPath (memExpId, False)) $ intermediateCompileM contractB
-  let IntermediateContract tcs2 mes2 am2 mrm2 = icB
-
   delay <- reader _delayTerm
   let delayEnd = toSeconds time + delay
+
+  icA <- local (adjustMarginRefundPathAndIMemExpRef (memExpId, True) delayEnd) $ intermediateCompileM contractA
+  let IntermediateContract tcs1 mes1 am1 mrm1 = icA
+
+  icB <- local (adjustMarginRefundPathAndIMemExpRef (memExpId, False) delayEnd) $ intermediateCompileM contractB
+  let IntermediateContract tcs2 mes2 am2 mrm2 = icB
+
       me0 = IMemExp { _IMemExpBegin = delay
                     , _IMemExpEnd   = delayEnd
                     , _IMemExpIdent = memExpId
                     , _IMemExp      = iCompileExp memExp
                     }
-      mref0 = IMemExpRef delayEnd memExpId
-      tcs1' = map (addMemExpRefCondition $ mref0 True)  tcs1
-      tcs2' = map (addMemExpRefCondition $ mref0 False) tcs2
 
   -- MarginRefundMap
   let marginRefundMap = Map.filter (not . null) $
@@ -119,19 +121,16 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
                           Map.insert (marginRefundPath ++ [(memExpId, False)]) (iw am1 am2) $
                           Map.union mrm1 mrm2
 
-  return $ IntermediateContract (tcs1' ++ tcs2')
+  return $ IntermediateContract (tcs1 ++ tcs2)
                                 (me0 : mes1 ++ mes2)
                                 (Map.unionWith max am1 am2)
                                 marginRefundMap
 
   where
-    addMemExpRefCondition :: IMemExpRef -> TransferCall -> TransferCall
-    addMemExpRefCondition mref transferCall =
-      transferCall { _memExpRefs = mref : _memExpRefs transferCall }
-
-    adjustMarginRefundPath :: (MemExpId, Bool) -> ScopeEnv -> ScopeEnv
-    adjustMarginRefundPath (memExpId, branch) scopeEnv =
-      scopeEnv { _marginRefundPath = _marginRefundPath scopeEnv ++ [(memExpId, branch)] }
+    adjustMarginRefundPathAndIMemExpRef :: (MemExpId, Bool) -> Integer -> ScopeEnv -> ScopeEnv
+    adjustMarginRefundPathAndIMemExpRef (memExpId, branch) delayEnd scopeEnv =
+      scopeEnv { _marginRefundPath = _marginRefundPath scopeEnv ++ [(memExpId, branch)]
+               , _memExpRs = _memExpRs scopeEnv ++ [IMemExpRef delayEnd memExpId branch] }
 
     -- A boolean condition of True (left child) having a req. margin of
     -- 10 and the right child having a margin of 7 will mean that 3 may
