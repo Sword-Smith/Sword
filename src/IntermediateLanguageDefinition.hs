@@ -4,7 +4,12 @@ import DaggerLanguageDefinition
 
 import qualified Data.Map.Strict as Map
 
-data IntermediateContract = IntermediateContract [TransferCall] [IMemExp] ActivateMap deriving (Show, Eq)
+data IntermediateContract =
+     IntermediateContract { getTransferCalls   :: [TransferCall]
+                          , getMemExps         :: [IMemExp]
+                          , getActivateMap     :: ActivateMap
+                          , getMarginRefundMap :: MarginRefundMap
+                          } deriving (Show, Eq)
 
 data TransferCall = TransferCall { _maxAmount    :: Integer,
                                    _amount       :: IntermediateExpression,
@@ -62,3 +67,9 @@ type MarginRefundMapElement = ([(Integer, Bool)], [(Address, Address, Integer)])
 type MarginRefundPath = [(Integer, Bool)]
 
 type ActivateMapElement = ((Address, Address), Integer)
+
+type MarginRefundMap = Map.Map [(Integer, Bool)] [(Address, Address, Integer)]
+
+type MarginRefundMapElement = ([(Integer, Bool)], [(Address, Address, Integer)])
+
+type MarginRefundPath = [(Integer, Bool)]
