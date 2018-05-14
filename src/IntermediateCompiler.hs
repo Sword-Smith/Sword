@@ -93,6 +93,9 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
   memExpId <- newMemExpId
   marginRefundPath <- reader _marginRefundPath
 
+  -- adjustMarginRefundPath sets the environment up for the recursive call.
+  -- In the two monads, only the marginRefundPath and the memExpID is changed in
+  -- this recursive call.
   icA <- local (adjustMarginRefundPath (memExpId, True)) $ intermediateCompileM contractA
   let IntermediateContract tcs1 mes1 am1 mrm1 = icA
 
@@ -130,6 +133,12 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
     adjustMarginRefundPath (memExpId, branch) scopeEnv =
       scopeEnv { _marginRefundPath = _marginRefundPath scopeEnv ++ [(memExpId, branch)] }
 
+    -- A boolean condition of True (left child) having a req. margin of
+    -- 10 and the right child having a margin of 7 will mean that 3 may
+    -- be released if right child is chosen.
+    -- Hence the subtraction. If no margin is present in the
+    -- RC and margin is present in the LC, the entire margin can be
+    -- returned, hence the Map.differenceWith.
     iw :: ActivateMap -> ActivateMap -> [(Address, Address, Integer)]
     iw am1 am2 = map (\((a,b), c) -> (a,b,c)) $ Map.toList $ Map.filter (> 0) $
       Map.differenceWith (\x y -> if x - y > 0 then Just (x - y) else Nothing) am1 am2
