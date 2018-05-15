@@ -4,6 +4,10 @@ import DaggerLanguageDefinition
 
 import qualified Data.Map.Strict as Map
 
+type MemExpId = Integer
+type Branch = Bool
+type MemExpPath = [(MemExpId, Branch)]
+
 data IntermediateContract =
      IntermediateContract { getTransferCalls   :: [TransferCall]
                           , getMemExps         :: [IMemExp]
@@ -11,14 +15,15 @@ data IntermediateContract =
                           , getMarginRefundMap :: MarginRefundMap
                           } deriving (Show, Eq)
 
-data TransferCall = TransferCall { _maxAmount    :: Integer,
-                                   _amount       :: IntermediateExpression,
-                                   _delay        :: Integer,
-                                   _tokenAddress :: Address,
-                                   _from         :: Address,
-                                   _to           :: Address,
-                                   _memExpRefs   :: [IMemExpRef]
-} deriving (Show, Eq)
+data TransferCall =
+     TransferCall { _maxAmount    :: Integer
+                  , _amount       :: IntermediateExpression
+                  , _delay        :: Integer
+                  , _tokenAddress :: Address
+                  , _from         :: Address
+                  , _to           :: Address
+                  , _memExpPath   :: MemExpPath
+                  } deriving (Show, Eq)
 
 -- DEVNOTE:
 -- We start by attempting to implement the evaluation of IMemExp values.
@@ -28,11 +33,6 @@ data IMemExp = IMemExp { _IMemExpBegin  :: Integer
                        , _IMemExpIdent  :: Integer
                        , _IMemExp       :: IntermediateExpression
                        } deriving (Show, Eq)
-
-data IMemExpRef = IMemExpRef { _IMemExpRefEnd    :: Integer
-                             , _IMemExpRefIdent  :: Integer
-                             , _IMemExpRefBranch :: Bool
-                             } deriving (Show, Eq)
 
 data IntermediateExpression = ILitExp ILiteral
                             | IMultExp IntermediateExpression IntermediateExpression

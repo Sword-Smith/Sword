@@ -72,59 +72,42 @@ canonicalNestedIfWithinTest = do
                      , _tokenAddress = "0x1234567890123456789012345678901234567891"
                      , _from = "0x1234567890123456789012345678901234567891"
                      , _to = "0x1234567890123456789012345678901234567891"
-                     , _memExpRefs = [ IMemExpRef {_IMemExpRefEnd = 1, _IMemExpRefIdent = 0, _IMemExpRefBranch = True}
-                                     , IMemExpRef {_IMemExpRefEnd = 2, _IMemExpRefIdent = 1, _IMemExpRefBranch = True}
-                                     , IMemExpRef {_IMemExpRefEnd = 3, _IMemExpRefIdent = 2, _IMemExpRefBranch = True} ] }
+                     , _memExpPath = [ (0, True), (1, True), (2, True) ] }
       , TransferCall { _maxAmount = 1, _amount = ILitExp (IIntVal 1), _delay = 0
                      , _tokenAddress = "0x1234567890123456789012345678901234567892"
                      , _from = "0x1234567890123456789012345678901234567892"
                      , _to = "0x1234567890123456789012345678901234567892"
-                     , _memExpRefs = [ IMemExpRef {_IMemExpRefEnd = 1, _IMemExpRefIdent = 0, _IMemExpRefBranch = True}
-                                     , IMemExpRef {_IMemExpRefEnd = 2, _IMemExpRefIdent = 1, _IMemExpRefBranch = True}
-                                     , IMemExpRef {_IMemExpRefEnd = 3, _IMemExpRefIdent = 2, _IMemExpRefBranch = False} ] }
+                     , _memExpPath = [ (0, True), (1, True), (2, False) ] }
       , TransferCall { _maxAmount = 1, _amount = ILitExp (IIntVal 1), _delay = 0
                      , _tokenAddress = "0x1234567890123456789012345678901234567893"
                      , _from = "0x1234567890123456789012345678901234567893"
                      , _to = "0x1234567890123456789012345678901234567893"
-                     , _memExpRefs = [ IMemExpRef {_IMemExpRefEnd = 1, _IMemExpRefIdent = 0, _IMemExpRefBranch = True}
-                                     , IMemExpRef {_IMemExpRefEnd = 2, _IMemExpRefIdent = 1, _IMemExpRefBranch = False}
-                                     , IMemExpRef {_IMemExpRefEnd = 4, _IMemExpRefIdent = 3, _IMemExpRefBranch = True}
-                                     , IMemExpRef {_IMemExpRefEnd = 5, _IMemExpRefIdent = 4, _IMemExpRefBranch = True} ] }
+                     , _memExpPath = [ (0, True), (1, False), (3, True), (4, True) ] }
       , TransferCall { _maxAmount = 1, _amount = ILitExp (IIntVal 1), _delay = 0
                      , _tokenAddress = "0x1234567890123456789012345678901234567894"
                      , _from = "0x1234567890123456789012345678901234567894"
                      , _to = "0x1234567890123456789012345678901234567894"
-                     , _memExpRefs = [ IMemExpRef {_IMemExpRefEnd = 1, _IMemExpRefIdent = 0, _IMemExpRefBranch = True}
-                                     , IMemExpRef {_IMemExpRefEnd = 2, _IMemExpRefIdent = 1, _IMemExpRefBranch = False}
-                                     , IMemExpRef {_IMemExpRefEnd = 4, _IMemExpRefIdent = 3, _IMemExpRefBranch = True}
-                                     , IMemExpRef {_IMemExpRefEnd = 5, _IMemExpRefIdent = 4, _IMemExpRefBranch = False} ] }
+                     , _memExpPath = [ (0, True), (1, False), (3, True), (4, False) ] }
       , TransferCall { _maxAmount = 1, _amount = ILitExp (IIntVal 1), _delay = 0
                      , _tokenAddress = "0x1234567890123456789012345678901234567895"
                      , _from = "0x1234567890123456789012345678901234567895"
                      , _to = "0x1234567890123456789012345678901234567895"
-                     , _memExpRefs = [ IMemExpRef {_IMemExpRefEnd = 1, _IMemExpRefIdent = 0, _IMemExpRefBranch = True}
-                                     , IMemExpRef {_IMemExpRefEnd = 2, _IMemExpRefIdent = 1, _IMemExpRefBranch = False}
-                                     , IMemExpRef {_IMemExpRefEnd = 4, _IMemExpRefIdent = 3, _IMemExpRefBranch = False} ] }
+                     , _memExpPath = [ (0, True), (1, False), (3, False) ] }
       , TransferCall { _maxAmount = 1, _amount = ILitExp (IIntVal 1), _delay = 0
                      , _tokenAddress = "0x1234567890123456789012345678901234567896"
                      , _from = "0x1234567890123456789012345678901234567896"
                      , _to = "0x1234567890123456789012345678901234567896"
-                     , _memExpRefs = [ IMemExpRef {_IMemExpRefEnd = 1, _IMemExpRefIdent = 0, _IMemExpRefBranch = False}
-                                     , IMemExpRef {_IMemExpRefEnd = 6, _IMemExpRefIdent = 5, _IMemExpRefBranch = True} ] }
+                     , _memExpPath = [ (0, False), (5, True) ] }
       , TransferCall { _maxAmount = 1, _amount = ILitExp (IIntVal 1), _delay = 0
                      , _tokenAddress = "0x1234567890123456789012345678901234567897"
                      , _from = "0x1234567890123456789012345678901234567897"
                      , _to = "0x1234567890123456789012345678901234567897"
-                     , _memExpRefs = [ IMemExpRef {_IMemExpRefEnd = 1, _IMemExpRefIdent = 0, _IMemExpRefBranch = False}
-                                     , IMemExpRef {_IMemExpRefEnd = 6, _IMemExpRefIdent = 5, _IMemExpRefBranch = False}
-                                     , IMemExpRef {_IMemExpRefEnd = 7, _IMemExpRefIdent = 6, _IMemExpRefBranch = True} ] }
+                     , _memExpPath = [ (0, False), (5, False), (6, True) ] }
       , TransferCall { _maxAmount = 1, _amount = ILitExp (IIntVal 1), _delay = 0
                      , _tokenAddress = "0x1234567890123456789012345678901234567898"
                      , _from = "0x1234567890123456789012345678901234567898"
                      , _to = "0x1234567890123456789012345678901234567898"
-                     , _memExpRefs = [ IMemExpRef {_IMemExpRefEnd = 1, _IMemExpRefIdent = 0, _IMemExpRefBranch = False}
-                                     , IMemExpRef {_IMemExpRefEnd = 6, _IMemExpRefIdent = 5, _IMemExpRefBranch = False}
-                                     , IMemExpRef {_IMemExpRefEnd = 7, _IMemExpRefIdent = 6, _IMemExpRefBranch = False} ] }
+                     , _memExpPath = [ (0, False), (5, False), (6, False) ] }
       ]
 
     memExps =
@@ -244,14 +227,14 @@ timeTranslationIMemExpTest = do
                       _tokenAddress = tokAddr,
                       _from = oneAddr,
                       _to = twoAddr,
-                      _memExpRefs = [ IMemExpRef 240 0 True ] }
+                      _memExpPath = [ (0, True) ] }
       , TransferCall {_maxAmount = 2,
                       _amount = IMultExp (ILitExp (IIntVal 1)) (ILitExp (IIntVal 2)),
                       _delay = 120,
                       _tokenAddress = tokAddr,
                       _from = oneAddr,
                       _to = twoAddr,
-                      _memExpRefs = [ IMemExpRef 240 0 False ] }
+                      _memExpPath = [ (0, False) ] }
       ]
 
     memExps =
@@ -287,7 +270,7 @@ zeroContractCodeTest = do
                      , _tokenAddress = tokAddr
                      , _from = oneAddr
                      , _to = twoAddr
-                     , _memExpRefs = [ IMemExpRef { _IMemExpRefEnd = 10, _IMemExpRefIdent = 0, _IMemExpRefBranch = True } ]
+                     , _memExpPath = [ (0, True) ]
                      }
       ]
 
@@ -313,5 +296,5 @@ basicTransferTest = do
                                                     , _tokenAddress = tokAddr
                                                     , _to = oneAddr
                                                     , _from = twoAddr
-                                                    , _memExpRefs = []
+                                                    , _memExpPath = []
                                                     }] [] (Map.fromList [((tokAddr, twoAddr), 1)]) Map.empty

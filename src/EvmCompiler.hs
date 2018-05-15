@@ -192,7 +192,7 @@ getActivateCheck =
   , JUMPITO "global_throw" ]
 
 getExecute :: [IMemExp] -> [TransferCall] -> [EvmOpcode]
-getExecute mes tcs = concatMap getExecuteIMemExp mes ++ getExecuteTCs tcs
+getExecute mes tcs = concatMap getExecuteIMemExp mes ++ getExecuteTCs mes tcs
 
 -- This sets the relevant bits in the memory expression word in storage
 -- Here the IMemExp should be evaluated. But only iff it is NOT true atm.
@@ -250,22 +250,22 @@ getExecuteIMemExp (IMemExp beginTime endTime count iExp) =
 
 
 -- Returns the code for executing all tcalls that function gets
-getExecuteTCs :: [TransferCall] -> [EvmOpcode]
-getExecuteTCs tcs =
+getExecuteTCs :: [IMemExp] -> [TransferCall] -> [EvmOpcode]
+getExecuteTCs mes tcs =
   let
     selfdestruct = [ JUMPDESTFROM "selfdestruct",
                      CALLER,
                      SELFDESTRUCT,
                      STOP ]
   in
-    (getExecuteTCsH tcs 0) ++
+    (getExecuteTCsH mes tcs 0) ++
       -- Prevent selfdestruct from running after each call
     [STOP] ++
     selfdestruct
 
-getExecuteTCsH :: [TransferCall] -> Integer -> [EvmOpcode]
-getExecuteTCsH (tc:tcs) i = (getExecuteTCsHH tc i) ++ (getExecuteTCsH tcs (i + 1))
-getExecuteTCsH [] _ = []
+getExecuteTCsH :: [IMemExp] -> [TransferCall] -> Integer -> [EvmOpcode]
+getExecuteTCsH mes (tc:tcs) i = (getExecuteTCsHH mes tc i) ++ (getExecuteTCsH mes tcs (i + 1))
+getExecuteTCsH _ [] _ = []
 
 -- Compile intermediate expression into EVM opcodes
 -- THIS IS THE ONLY PLACE IN THE COMPILER WHERE EXPRESSION ARE HANDLED
@@ -368,8 +368,8 @@ compILit (IObservable address key) memOffset _ =
     functionCall
     ++ moveResToStack
 
-getExecuteTCsHH :: TransferCall -> Integer -> [EvmOpcode]
-getExecuteTCsHH tc transferCounter =
+getExecuteTCsHH :: [IMemExp] -> TransferCall -> Integer -> [EvmOpcode]
+getExecuteTCsHH mes tc transferCounter =
   let
     checkIfCallShouldBeMade =
       let
@@ -395,7 +395,7 @@ getExecuteTCsHH tc transferCounter =
                                      AND,
                                      ISZERO,
                                      JUMPITO $ "method_end" ++ (show (transferCounter)) ]
-        checkIfTCIsInChosenBranches memExps =
+        checkIfTCIsInChosenBranches memExpPath =
           let
             -- A transferCall contains a list of IMemExpRefs
             -- Here, the value of the IMemExps are checked. The values
@@ -423,18 +423,18 @@ getExecuteTCsHH tc transferCounter =
             --   }
             -- }
             -- JUMPDESTFROM "PASS"
-            checkIfTCIsInChosenBranch (IMemExpRef endTime count branch) =
+            checkIfTCIsInChosenBranch (memExpId, branch) =
               let
                 checkIfMemExpIsSet =
                   [PUSH4 $ getStorageAddress MemoryExpressionRefs,
                    SLOAD,
-                   PUSH1 $ fromInteger count,
+                   PUSH1 $ fromInteger memExpId,
                    PUSH1 0x2,
                    EXP,
                    AND,
                    ISZERO,
                    -- jump to else_branch if membit == 0
-                   JUMPITO $ "outer_else_branch_" ++ show count ++ "_" ++ show transferCounter]
+                   JUMPITO $ "outer_else_branch_" ++ show memExpId ++ "_" ++ show transferCounter]
 
                 checkIfBranchIsTrue0 =
                   if branch then
@@ -444,23 +444,24 @@ getExecuteTCsHH tc transferCounter =
                     [PUSH1 0x0, JUMPTO $ "transfer_back_to_from_address" ++ show transferCounter]
 
                 passThisCheck =
-                  [JUMPTO $ "pass_this_memExp_check" ++ show count ++ "_" ++ show transferCounter]
+                  [JUMPTO $ "pass_this_memExp_check" ++ show memExpId ++ "_" ++ show transferCounter]
                 jdOuterElse =
-                  [JUMPDESTFROM $ "outer_else_branch_" ++ show count ++ "_" ++ show transferCounter]
-                checkIfMemTimeHasPassed = [PUSH4 $ getStorageAddress CreationTimestamp,
-                                        SLOAD,
-                                        TIMESTAMP,
-                                        SUB,
-                                        PUSH32 $ integer2w256 endTime,
-                                        EVM_GT,
-                                        -- If time > elapsed time, skip the call, don't flip execute bit
-                                        JUMPITO $ "method_end" ++ (show transferCounter)]
+                  [JUMPDESTFROM $ "outer_else_branch_" ++ show memExpId ++ "_" ++ show transferCounter]
+                checkIfMemTimeHasPassed = [ PUSH4 $ getStorageAddress CreationTimestamp
+                                          , SLOAD
+                                          , TIMESTAMP
+                                          , SUB
+                                          , PUSH32 $ integer2w256 (_IMemExpEnd (getMemExpById memExpId mes))
+                                          , EVM_GT
+                                            -- If time > elapsed time, skip the call, don't flip execute bit
+                                          , JUMPITO $ "method_end" ++ (show transferCounter)
+                                          ]
                 checkIfBranchIsTrue1 =
                   if branch then
                     -- push 0x0 to tell transfer that no amount has been sent to recipient
                     [PUSH1 0x0, JUMPTO $ "transfer_back_to_from_address" ++ show transferCounter]
                   else
-                    [JUMPTO $ "pass_this_memExp_check" ++ show count ++ "_" ++ show transferCounter]
+                    [JUMPTO $ "pass_this_memExp_check" ++ show memExpId ++ "_" ++ show transferCounter]
 
               in
                 checkIfMemExpIsSet ++
@@ -469,13 +470,13 @@ getExecuteTCsHH tc transferCounter =
                 jdOuterElse ++
                 checkIfMemTimeHasPassed ++
                 checkIfBranchIsTrue1 ++
-                [JUMPDESTFROM $ "pass_this_memExp_check" ++ show count ++ "_" ++ show transferCounter]
+                [JUMPDESTFROM $ "pass_this_memExp_check" ++ show memExpId ++ "_" ++ show transferCounter]
           in
-            concatMap checkIfTCIsInChosenBranch memExps
+            concatMap checkIfTCIsInChosenBranch memExpPath
       in
         checkIfTimeHasPassed ++
         checkIfTCHasBeenExecuted ++
-        checkIfTCIsInChosenBranches (_memExpRefs tc)
+        checkIfTCIsInChosenBranches (_memExpPath tc)
 
     callTransferToTcRecipient =
       getFunctionCallEvm
@@ -571,6 +572,13 @@ activateMapElementToTransferFromCall ((tokenAddress, fromAddress), amount) =
         32 -- outSize
     moveResToStack = [ PUSH1 $ fromInteger 0, MLOAD ]
     throwIfReturnFalse = [ISZERO, JUMPITO "global_throw" ]
+
+getMemExpById :: MemExpId -> [IMemExp] -> IMemExp
+getMemExpById memExpId [] = error $ "Could not find IMemExp with ID " ++ show memExpId
+getMemExpById memExpId (me:mes) =
+  if memExpId == _IMemExpIdent me
+    then me
+    else getMemExpById memExpId mes
 
 -- We also need to add a check whether the transferFrom function call
 -- returns true or false. Only of all function calls return true, should
