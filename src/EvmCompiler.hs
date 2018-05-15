@@ -3,30 +3,37 @@ module EvmCompiler where
 import EvmCompilerHelper
 import EvmLanguageDefinition
 import IntermediateLanguageDefinition
+import IntermediateCompiler (emptyContract)
 
-import Control.Monad.State.Lazy
+import Control.Monad.State
+import Control.Monad.Reader
+
 import qualified Data.Map.Strict as Map
 import Data.Word
 
 -- State monad definitions
-data CompileEnv = CompileEnv { labelCount :: Integer,
-                               transferCallCount :: Integer,
-                               memOffset :: Integer,
-                               labelString :: [Char]
-                               } deriving Show
+data CompileEnv =
+     CompileEnv { labelCount        :: Integer
+                , transferCallCount :: Integer
+                , memOffset         :: Integer
+                , labelString       :: [Char]
+                } deriving Show
 
-type CompileGet a = State CompileEnv a
+type Compiler a = ReaderT IntermediateContract (State CompileEnv) a
 
--- Return a new, unique label. Argument can be anything but should be
--- descriptive since this will ease debugging.
-newLabel :: String -> CompileGet String
-newLabel desc = do
-  compileEnv <- get
-  let i = labelCount compileEnv
-  let j = transferCallCount compileEnv
-  let k = labelString compileEnv
-  put compileEnv { labelCount = i + 1 }
-  return $ desc ++ "_" ++ (show i) ++ "_" ++ (show j) ++ "_" ++ (show k)
+initialEnv :: CompileEnv
+initialEnv = CompileEnv { labelCount        = 0
+                        , transferCallCount = 0
+                        , memOffset         = 0
+                        , labelString       = "mem_exp"
+                        }
+
+runCompiler :: IntermediateContract -> CompileEnv -> Compiler a -> a
+runCompiler intermediateContract compileEnv m =
+  evalState (runReaderT m intermediateContract) compileEnv
+
+runExprCompiler :: CompileEnv -> Compiler a -> a
+runExprCompiler = runCompiler emptyContract
 
 -- ATM, "Executed" does not have an integer. If it should be able to handle more
 -- than 256 tcalls, it must take an integer also.
@@ -60,64 +67,66 @@ getOpcodeSize (JUMPITOA _) = 1 + 5 -- PUSH4 addr.; JUMP
 getOpcodeSize (JUMPTOA _)  = 1 + 5 -- PUSH4 addr.; JUMP
 getOpcodeSize _            = 1
 
-replaceLabel :: Label -> Integer -> [EvmOpcode] -> [EvmOpcode]
-replaceLabel label int insts =
-  let
-    replaceLabelH label i inst = case inst of
-      (JUMPTO  l)      -> if l == label then JUMPTOA  i else JUMPTO  l
-      (JUMPITO l)      -> if l == label then JUMPITOA i else JUMPITO l
-      (JUMPDESTFROM l) -> if l == label then JUMPDEST else JUMPDESTFROM l
-      otherInst -> otherInst
-  in
-    map (replaceLabelH label int) insts
+----------------------------------------------------------------------------
+-- Main method for this module. Returns binary.
+-- Check that there are not more than 2^8 transfercalls
+assemble :: IntermediateContract -> String
+assemble = asmToMachineCode . transformPseudoInstructions . evmCompile . checkTooManyTCs
+  where
+    checkTooManyTCs :: IntermediateContract -> IntermediateContract
+    checkTooManyTCs intermediateContract =
+      let numTransferCalls = length (getTransferCalls intermediateContract)
+      in if numTransferCalls > 256
+         then error $ "Too many Transfer Calls: " ++ show numTransferCalls
+         else intermediateContract
+
+-- Given an IntermediateContract, returns the EvmOpcodes representing the binary.
+-- The addresses of the constructor run are different from runs when DC is on BC.
+evmCompile :: IntermediateContract -> [EvmOpcode]
+evmCompile intermediateContract = -- @ IntermediateContract tcs iMemExps activateMap _marginRefundMap) =
+  linker (constructor ++ codecopy) ++
+  linker (jumpTable ++ checkIfActivated ++ execute ++ activate)
+  where
+    constructor = getConstructor (getTransferCalls intermediateContract)
+    codecopy    = getCodeCopy constructor (jumpTable ++ checkIfActivated ++ execute ++ activate)
+    jumpTable   = getJumpTable
+    checkIfActivated = getActivateCheck
+
+    -- execute also contains selfdestruct when contract is fully executed
+    execute  = runCompiler intermediateContract initialEnv getExecute
+    activate = getActivate (getActivateMap intermediateContract)
 
 linker :: [EvmOpcode] -> [EvmOpcode]
-linker insts =
-  let
+linker opcodes = linkerH 0 opcodes opcodes
+  where
     linkerH :: Integer -> [EvmOpcode] -> [EvmOpcode] -> [EvmOpcode]
-    linkerH inst_count insts_replaced (inst:insts) = case inst of
-      JUMPDESTFROM label -> linkerH (inst_count + 1) (replaceLabel label inst_count insts_replaced) insts
-      _                  -> linkerH (inst_count + getOpcodeSize(inst)) insts_replaced insts
-    linkerH _ insts_replaced [] = insts_replaced
-  in
-    linkerH 0 insts insts
+    linkerH _ relabeledOpcodes [] = relabeledOpcodes
+    linkerH instructionCount accOpcodes (opcode:opcodes) = case opcode of
+      JUMPDESTFROM label -> linkerH (instructionCount + 1) (replaceLabel label instructionCount accOpcodes) opcodes
+      _                  -> linkerH (instructionCount + n) accOpcodes                                       opcodes
+        where n = getOpcodeSize opcode
 
-eliminatePseudoInstructions :: [EvmOpcode] -> [EvmOpcode]
-eliminatePseudoInstructions (inst:insts) = case inst of
-  (JUMPTOA i)  -> (PUSH4 (fromInteger i)):JUMP:eliminatePseudoInstructions(insts)
-  (JUMPITOA i) -> (PUSH4 (fromInteger i)):JUMPI:eliminatePseudoInstructions(insts)
-  inst         -> inst:eliminatePseudoInstructions(insts)
-eliminatePseudoInstructions [] = []
+replaceLabel :: Label -> Integer -> [EvmOpcode] -> [EvmOpcode]
+replaceLabel label int = map replaceH
+  where
+    replaceH :: EvmOpcode -> EvmOpcode
+    replaceH opcode = case opcode of
+      JUMPTO       label' -> if label == label' then JUMPTOA  int else opcode
+      JUMPITO      label' -> if label == label' then JUMPITOA int else opcode
+      JUMPDESTFROM label' -> if label == label' then JUMPDEST     else opcode
+      _                   -> opcode
+
+transformPseudoInstructions :: [EvmOpcode] -> [EvmOpcode]
+transformPseudoInstructions = concatMap transformH
+  where
+    transformH :: EvmOpcode -> [EvmOpcode]
+    transformH opcode = case opcode of
+      JUMPTOA  i -> [ PUSH4 (fromInteger i), JUMP ]
+      JUMPITOA i -> [ PUSH4 (fromInteger i), JUMPI ]
+      _          -> [ opcode ]
 
 getFunctionSignature :: String -> Word32
 getFunctionSignature funDecl = read $ "0x" ++ take 8 (keccak256 funDecl)
-
--- Main method for this module. Returns binary.
--- Check that there are not more than 2^8 transfercalls
--- Wrapper for intermediateToOpcodesH
-intermediateToOpcodes :: IntermediateContract -> String
-intermediateToOpcodes (IntermediateContract tcs iMemExps activateMap marginRefundMap) =
-  let
-    intermediateToOpcodesH :: IntermediateContract -> String
-    intermediateToOpcodesH = asmToMachineCode . eliminatePseudoInstructions . evmCompile
-  in
-    if length(tcs) > 256
-    then undefined
-    else intermediateToOpcodesH (IntermediateContract tcs iMemExps activateMap marginRefundMap)
-
--- Given an IntermediateContract, returns the EvmOpcodes representing the binary
-evmCompile :: IntermediateContract -> [EvmOpcode]
-evmCompile (IntermediateContract tcs iMemExps activateMap _marginRefundMap) =
-  let
-    constructor      = getConstructor tcs
-    codecopy         = getCodeCopy constructor (jumpTable ++ checkIfActivated ++ execute ++ activate)
-    jumpTable        = getJumpTable
-    checkIfActivated = getActivateCheck
-    execute          = getExecute iMemExps tcs -- also contains selfdestruct when contract is fully executed
-    activate         = getActivate activateMap
-  in
-    -- The addresses of the constructor run are different from runs when DC is on BC
-    linker (constructor ++ codecopy) ++ linker (jumpTable ++ checkIfActivated ++ execute ++ activate)
 
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
@@ -191,8 +200,11 @@ getActivateCheck =
   , ISZERO
   , JUMPITO "global_throw" ]
 
-getExecute :: [IMemExp] -> [TransferCall] -> [EvmOpcode]
-getExecute mes tcs = concatMap getExecuteIMemExp mes ++ getExecuteTCs mes tcs
+getExecute :: Compiler [EvmOpcode]
+getExecute = do
+  memExpCode <- concatMap getExecuteIMemExp <$> reader getMemExps
+  transferCallCode <- getExecuteTransferCalls
+  return (memExpCode ++ transferCallCode)
 
 -- This sets the relevant bits in the memory expression word in storage
 -- Here the IMemExp should be evaluated. But only iff it is NOT true atm.
@@ -230,7 +242,7 @@ getExecuteIMemExp (IMemExp beginTime endTime count iExp) =
 
       in checkIfMemExpIsTrue ++ checkIfTimeHasStarted ++ checkIfTimeHasPassed
 
-    evaulateExpression = evalState (compIExp iExp) (CompileEnv 0 count 0x0 "mem_exp")
+    evaulateExpression = runExprCompiler initialEnv (compIExp iExp)
     checkEvalResult    = [ ISZERO,
                            JUMPITO $ "memExp_end" ++ show count ]
     updateMemExpWord   = [PUSH4 $ getStorageAddress MemoryExpressionRefs,
@@ -248,31 +260,46 @@ getExecuteIMemExp (IMemExp beginTime endTime count iExp) =
     updateMemExpWord ++
     [JUMPDESTFROM $ "memExp_end" ++ show count]
 
-
 -- Returns the code for executing all tcalls that function gets
-getExecuteTCs :: [IMemExp] -> [TransferCall] -> [EvmOpcode]
-getExecuteTCs mes tcs =
-  let
-    selfdestruct = [ JUMPDESTFROM "selfdestruct",
-                     CALLER,
-                     SELFDESTRUCT,
-                     STOP ]
-  in
-    (getExecuteTCsH mes tcs 0) ++
-      -- Prevent selfdestruct from running after each call
-    [STOP] ++
-    selfdestruct
+getExecuteTransferCalls :: Compiler [EvmOpcode]
+getExecuteTransferCalls = do
+  transferCalls <- reader getTransferCalls
+  opcodes <- loop 0 transferCalls
 
-getExecuteTCsH :: [IMemExp] -> [TransferCall] -> Integer -> [EvmOpcode]
-getExecuteTCsH mes (tc:tcs) i = (getExecuteTCsHH mes tc i) ++ (getExecuteTCsH mes tcs (i + 1))
-getExecuteTCsH _ [] _ = []
+  -- Prevent selfdestruct from running after each call
+  return $ opcodes ++ [STOP] ++ selfdestruct
+
+  where
+    loop :: Integer -> [TransferCall] -> Compiler [EvmOpcode]
+    loop _ [] = return []
+    loop i (tc:tcs) = do
+      opcodes1 <- getExecuteTransferCallsHH tc i
+      opcodes2 <- loop (i + 1) tcs
+      return (opcodes1 ++ opcodes2)
+
+    selfdestruct = [ JUMPDESTFROM "selfdestruct"
+                   , CALLER
+                   , SELFDESTRUCT
+                   , STOP
+                   ]
+
+-- Return a new, unique label. Argument can be anything but should be
+-- descriptive since this will ease debugging.
+newLabel :: String -> Compiler String
+newLabel desc = do
+  compileEnv <- get
+  let i = labelCount compileEnv
+  let j = transferCallCount compileEnv
+  let k = labelString compileEnv
+  put compileEnv { labelCount = i + 1 }
+  return $ desc ++ "_" ++ (show i) ++ "_" ++ (show j) ++ "_" ++ (show k)
 
 -- Compile intermediate expression into EVM opcodes
 -- THIS IS THE ONLY PLACE IN THE COMPILER WHERE EXPRESSION ARE HANDLED
-compIExp :: IntermediateExpression -> CompileGet [EvmOpcode]
+
+compIExp :: IntermediateExpression -> Compiler [EvmOpcode]
 compIExp (ILitExp ilit) = do
-  codeEnv <- get
-  let mo = memOffset codeEnv
+  mo <- gets memOffset
   uniqueLabel <- newLabel "observable"
   return $ compILit ilit mo uniqueLabel
 compIExp (IMultExp exp_1 exp_2) = do
@@ -368,8 +395,9 @@ compILit (IObservable address key) memOffset _ =
     functionCall
     ++ moveResToStack
 
-getExecuteTCsHH :: [IMemExp] -> TransferCall -> Integer -> [EvmOpcode]
-getExecuteTCsHH mes tc transferCounter =
+getExecuteTransferCallsHH :: TransferCall -> Integer -> Compiler [EvmOpcode]
+getExecuteTransferCallsHH tc transferCounter = do
+  mes <- reader getMemExps
   let
     checkIfCallShouldBeMade =
       let
@@ -489,7 +517,7 @@ getExecuteTCsHH mes tc transferCounter =
         0x20
         where
           getTransferAmount =
-            evalState (compIExp ( _amount tc)) (CompileEnv 0 transferCounter 0x44 "amount_exp")
+            runExprCompiler (CompileEnv 0 transferCounter 0x44 "amount_exp") (compIExp (_amount tc))
             ++ [ PUSH32 $ integer2w256 $ _maxAmount tc
                , DUP2
                , DUP2
@@ -541,7 +569,8 @@ getExecuteTCsHH mes tc transferCounter =
                            PUSH4 $ getStorageAddress Executed,
                            SSTORE ]
     functionEndLabel = [JUMPDESTFROM  $ "method_end" ++ (show transferCounter)]
-  in
+
+  return $
     checkIfCallShouldBeMade ++
     callTransferToTcRecipient ++
     checkIfTransferToTcSenderShouldBeMade ++

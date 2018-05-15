@@ -124,4 +124,4 @@ main = do
             Right astTC -> do
               putStrLn ("Writing to file " ++ binPath)
               writeAbiDef outdir bn
-              writeFile binPath (intermediateToOpcodes $ intermediateCompile astTC)
+              writeFile binPath (assemble $ intermediateCompile astTC)
