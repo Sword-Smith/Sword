@@ -31,7 +31,7 @@ typeChecker (Scale maxFac scaleFac contract) = do
     else
     Left $ "2nd argument to scale must be of type int, got: " ++ show t0
 
-getType :: Expression -> Either String ExpType
+getType :: Expr -> Either String ExpType
 getType (Lit literal) = do
   t0 <- getLiteral literal
   return t0

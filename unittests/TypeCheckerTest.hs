@@ -37,7 +37,7 @@ transferContract = Transfer {
     to_           = "0x123456789012345678901234567890123456789a"
 }
 
-scaleContract :: Integer -> Expression -> Contract -> Contract
+scaleContract :: Integer -> Expr -> Contract -> Contract
 scaleContract ms se c = Scale {
     maxFactor_   = ms,
     scaleFactor_ = se,

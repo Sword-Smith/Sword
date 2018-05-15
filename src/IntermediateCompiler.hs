@@ -13,9 +13,9 @@ import qualified Data.Map.Strict as Map
 -- unique identifiers to our memory expressions (type: MemExp)
 
 data ScopeEnv =
-     ScopeEnv { _maxFactor     :: Integer
-              , _scaleFactor   :: IntermediateExpression -> IntermediateExpression
-              , _delayTerm     :: Integer
+     ScopeEnv { _maxFactor         :: Integer
+              , _scaleFactor       :: Expr -> Expr
+              , _delayTerm         :: Integer
               , _currentMemExpPath :: MemExpPath
               }
 
@@ -54,7 +54,7 @@ intermediateCompileM :: Contract -> ICompiler IntermediateContract
 intermediateCompileM (Transfer token from to) = do
   ScopeEnv maxFactor scaleFactor delayTerm memExpPath <- ask
   let transferCall = TransferCall { _maxAmount     = maxFactor
-                                  , _amount        = scaleFactor (ILitExp (IIntVal 1))
+                                  , _amount        = scaleFactor (Lit (IntVal 1))
                                   , _delay         = delayTerm
                                   , _tokenAddress  = token
                                   , _from          = from
@@ -70,9 +70,8 @@ intermediateCompileM (Scale maxFactor factorExp contract) = do
   where
     adjustScale :: ScopeEnv -> ScopeEnv
     adjustScale scopeEnv =
-      scopeEnv { _maxFactor =  maxFactor * _maxFactor scopeEnv
-               , _scaleFactor = \iExp -> IMultExp (_scaleFactor scopeEnv iExp)
-                                                  (iCompileExp factorExp)
+      scopeEnv { _maxFactor   = maxFactor * _maxFactor scopeEnv
+               , _scaleFactor = \iExp -> MultExp (_scaleFactor scopeEnv iExp) factorExp
                }
 
 intermediateCompileM (Both contractA contractB) = do
@@ -108,7 +107,7 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
   let me0 = IMemExp { _IMemExpBegin = delay
                     , _IMemExpEnd   = delayEnd
                     , _IMemExpIdent = memExpId
-                    , _IMemExp      = iCompileExp memExp
+                    , _IMemExp      = memExp
                     }
 
   -- MarginRefundMap
@@ -139,24 +138,3 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
       Map.differenceWith (\x y -> if x - y > 0 then Just (x - y) else Nothing) am1 am2
 
 intermediateCompileM Zero = return emptyContract
-
-iCompileExp :: Expression -> IntermediateExpression
-iCompileExp e = case e of
-  Lit (IntVal i)  -> ILitExp (IIntVal i)
-  Lit (BoolVal b) -> ILitExp (IBoolVal b)
-  Lit (Observable _ addr key) -> ILitExp (IObservable addr key)
-  MultExp e1 e2 -> IMultExp (iCompileExp e1) (iCompileExp e2)
-  SubtExp e1 e2 -> ISubtExp (iCompileExp e1) (iCompileExp e2)
-  DiviExp e1 e2   -> IDiviExp (iCompileExp e1) (iCompileExp e2)
-  AddiExp e1 e2   -> IAddiExp (iCompileExp e1) (iCompileExp e2)
-  EqExp e1 e2     -> IEqExp   (iCompileExp e1) (iCompileExp e2)
-  LtExp e1 e2     -> ILtExp (iCompileExp e1) (iCompileExp e2)
-  GtExp e1 e2     -> IGtExp (iCompileExp e1) (iCompileExp e2)
-  GtOrEqExp e1 e2 -> IGtOrEqExp (iCompileExp e1) (iCompileExp e2)
-  LtOrEqExp e1 e2 -> ILtOrEqExp (iCompileExp e1) (iCompileExp e2)
-  OrExp e1 e2     -> IOrExp (iCompileExp e1) (iCompileExp e2)
-  AndExp e1 e2    -> IAndExp (iCompileExp e1) (iCompileExp e2)
-  MinExp e1 e2    -> IMinExp (iCompileExp e1) (iCompileExp e2)
-  MaxExp e1 e2    -> IMaxExp (iCompileExp e1) (iCompileExp e2)
-  NotExp e1       -> INotExp (iCompileExp e1)
-  IfExp e1 e2 e3 -> IIfExp (iCompileExp e1) (iCompileExp e2) (iCompileExp e3)

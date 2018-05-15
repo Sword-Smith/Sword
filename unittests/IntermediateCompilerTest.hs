@@ -14,10 +14,6 @@ import qualified Data.Map.Strict as Map
 
 tests :: Spec
 tests = do
-  test0
-  test1
-  test2
-  test3
   canonicalNestedIfWithinTest
   activateMapSimple
   marginRefundMapSimple
@@ -27,40 +23,6 @@ tests = do
   timeTranslationIMemExpTest
   zeroContractCodeTest
 
-test0 :: Spec
-test0 = do
-  it "iCompileExp mult" $ do
-    iCompileExp e `shouldBe` ie
-  where
-    e = MultExp (Lit( IntVal 7)) (Lit( IntVal 17))
-    ie = IMultExp (ILitExp( IIntVal 7)) (ILitExp( IIntVal 17))
-
-test1 :: Spec
-test1 = do
-  it "iCompileExp if" $ do
-    iCompileExp e `shouldBe` ie
-  where
-    e = (IfExp (Lit(BoolVal True)) (Lit(IntVal 32)) (Lit(IntVal 22)))
-    ie = IIfExp (ILitExp(IBoolVal True)) (ILitExp(IIntVal 32)) (ILitExp(IIntVal 22))
-
-test2 :: Spec
-test2 = do
-  it "iCompileExp div" $ do
-    iCompileExp e `shouldBe` ie
-  where
-    e = (DiviExp (Lit(IntVal 42)) (Lit(IntVal 2)))
-    ie = IDiviExp (ILitExp(IIntVal 42)) (ILitExp(IIntVal 2))
-
-test3 :: Spec
-test3 = do
-  it "nested iCompileExp mult" $ do
-    iCompileExp e `shouldBe` ie
-  where
-    e = (MaxExp (MultExp (Lit(IntVal 11)) (Lit(IntVal 22)))
-                (SubtExp (Lit(IntVal 44)) (Lit(IntVal 33))))
-    ie = IMaxExp (IMultExp (ILitExp(IIntVal 11)) (ILitExp(IIntVal 22)))
-                 (ISubtExp (ILitExp(IIntVal 44)) (ILitExp(IIntVal 33)))
-
 canonicalNestedIfWithinTest :: Spec
 canonicalNestedIfWithinTest = do
   it "canonical nested if-within" $ do
@@ -68,42 +30,42 @@ canonicalNestedIfWithinTest = do
   where
     intermediateContract = IntermediateContract transfers memExps activateMap marginRefundMap
     transfers =
-      [ TransferCall { _maxAmount = 1, _amount = ILitExp (IIntVal 1), _delay = 0
+      [ TransferCall { _maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0
                      , _tokenAddress = "0x1234567890123456789012345678901234567891"
                      , _from = "0x1234567890123456789012345678901234567891"
                      , _to = "0x1234567890123456789012345678901234567891"
                      , _memExpPath = [ (0, True), (1, True), (2, True) ] }
-      , TransferCall { _maxAmount = 1, _amount = ILitExp (IIntVal 1), _delay = 0
+      , TransferCall { _maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0
                      , _tokenAddress = "0x1234567890123456789012345678901234567892"
                      , _from = "0x1234567890123456789012345678901234567892"
                      , _to = "0x1234567890123456789012345678901234567892"
                      , _memExpPath = [ (0, True), (1, True), (2, False) ] }
-      , TransferCall { _maxAmount = 1, _amount = ILitExp (IIntVal 1), _delay = 0
+      , TransferCall { _maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0
                      , _tokenAddress = "0x1234567890123456789012345678901234567893"
                      , _from = "0x1234567890123456789012345678901234567893"
                      , _to = "0x1234567890123456789012345678901234567893"
                      , _memExpPath = [ (0, True), (1, False), (3, True), (4, True) ] }
-      , TransferCall { _maxAmount = 1, _amount = ILitExp (IIntVal 1), _delay = 0
+      , TransferCall { _maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0
                      , _tokenAddress = "0x1234567890123456789012345678901234567894"
                      , _from = "0x1234567890123456789012345678901234567894"
                      , _to = "0x1234567890123456789012345678901234567894"
                      , _memExpPath = [ (0, True), (1, False), (3, True), (4, False) ] }
-      , TransferCall { _maxAmount = 1, _amount = ILitExp (IIntVal 1), _delay = 0
+      , TransferCall { _maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0
                      , _tokenAddress = "0x1234567890123456789012345678901234567895"
                      , _from = "0x1234567890123456789012345678901234567895"
                      , _to = "0x1234567890123456789012345678901234567895"
                      , _memExpPath = [ (0, True), (1, False), (3, False) ] }
-      , TransferCall { _maxAmount = 1, _amount = ILitExp (IIntVal 1), _delay = 0
+      , TransferCall { _maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0
                      , _tokenAddress = "0x1234567890123456789012345678901234567896"
                      , _from = "0x1234567890123456789012345678901234567896"
                      , _to = "0x1234567890123456789012345678901234567896"
                      , _memExpPath = [ (0, False), (5, True) ] }
-      , TransferCall { _maxAmount = 1, _amount = ILitExp (IIntVal 1), _delay = 0
+      , TransferCall { _maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0
                      , _tokenAddress = "0x1234567890123456789012345678901234567897"
                      , _from = "0x1234567890123456789012345678901234567897"
                      , _to = "0x1234567890123456789012345678901234567897"
                      , _memExpPath = [ (0, False), (5, False), (6, True) ] }
-      , TransferCall { _maxAmount = 1, _amount = ILitExp (IIntVal 1), _delay = 0
+      , TransferCall { _maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0
                      , _tokenAddress = "0x1234567890123456789012345678901234567898"
                      , _from = "0x1234567890123456789012345678901234567898"
                      , _to = "0x1234567890123456789012345678901234567898"
@@ -111,13 +73,13 @@ canonicalNestedIfWithinTest = do
       ]
 
     memExps =
-      [ IMemExp { _IMemExpBegin = 0, _IMemExpEnd = 1, _IMemExpIdent = 0, _IMemExp = IGtExp (IMultExp (ILitExp (IIntVal 1)) (ILitExp (IIntVal 1))) (ILitExp (IIntVal 1)) }
-      , IMemExp { _IMemExpBegin = 0, _IMemExpEnd = 2, _IMemExpIdent = 1, _IMemExp = IGtExp (IMultExp (ILitExp (IIntVal 2)) (ILitExp (IIntVal 2))) (ILitExp (IIntVal 2)) }
-      , IMemExp { _IMemExpBegin = 0, _IMemExpEnd = 3, _IMemExpIdent = 2, _IMemExp = IGtExp (IMultExp (ILitExp (IIntVal 3)) (ILitExp (IIntVal 3))) (ILitExp (IIntVal 3)) }
-      , IMemExp { _IMemExpBegin = 0, _IMemExpEnd = 4, _IMemExpIdent = 3, _IMemExp = IGtExp (IMultExp (ILitExp (IIntVal 4)) (ILitExp (IIntVal 4))) (ILitExp (IIntVal 4)) }
-      , IMemExp { _IMemExpBegin = 0, _IMemExpEnd = 5, _IMemExpIdent = 4, _IMemExp = IGtExp (IMultExp (ILitExp (IIntVal 5)) (ILitExp (IIntVal 5))) (ILitExp (IIntVal 5)) }
-      , IMemExp { _IMemExpBegin = 0, _IMemExpEnd = 6, _IMemExpIdent = 5, _IMemExp = IGtExp (IMultExp (ILitExp (IIntVal 6)) (ILitExp (IIntVal 6))) (ILitExp (IIntVal 6)) }
-      , IMemExp { _IMemExpBegin = 0, _IMemExpEnd = 7, _IMemExpIdent = 6, _IMemExp = IGtExp (IMultExp (ILitExp (IIntVal 7)) (ILitExp (IIntVal 7))) (ILitExp (IIntVal 7)) }
+      [ IMemExp { _IMemExpBegin = 0, _IMemExpEnd = 1, _IMemExpIdent = 0, _IMemExp = GtExp (MultExp (Lit (IntVal 1)) (Lit (IntVal 1))) (Lit (IntVal 1)) }
+      , IMemExp { _IMemExpBegin = 0, _IMemExpEnd = 2, _IMemExpIdent = 1, _IMemExp = GtExp (MultExp (Lit (IntVal 2)) (Lit (IntVal 2))) (Lit (IntVal 2)) }
+      , IMemExp { _IMemExpBegin = 0, _IMemExpEnd = 3, _IMemExpIdent = 2, _IMemExp = GtExp (MultExp (Lit (IntVal 3)) (Lit (IntVal 3))) (Lit (IntVal 3)) }
+      , IMemExp { _IMemExpBegin = 0, _IMemExpEnd = 4, _IMemExpIdent = 3, _IMemExp = GtExp (MultExp (Lit (IntVal 4)) (Lit (IntVal 4))) (Lit (IntVal 4)) }
+      , IMemExp { _IMemExpBegin = 0, _IMemExpEnd = 5, _IMemExpIdent = 4, _IMemExp = GtExp (MultExp (Lit (IntVal 5)) (Lit (IntVal 5))) (Lit (IntVal 5)) }
+      , IMemExp { _IMemExpBegin = 0, _IMemExpEnd = 6, _IMemExpIdent = 5, _IMemExp = GtExp (MultExp (Lit (IntVal 6)) (Lit (IntVal 6))) (Lit (IntVal 6)) }
+      , IMemExp { _IMemExpBegin = 0, _IMemExpEnd = 7, _IMemExpIdent = 6, _IMemExp = GtExp (MultExp (Lit (IntVal 7)) (Lit (IntVal 7))) (Lit (IntVal 7)) }
       ]
 
     activateMap =
@@ -222,14 +184,14 @@ timeTranslationIMemExpTest = do
     intermediateContract = IntermediateContract transfers memExps activateMap marginRefundMap
     transfers =
       [ TransferCall {_maxAmount = 1,
-                      _amount = ILitExp (IIntVal 1),
+                      _amount = Lit (IntVal 1),
                       _delay = 120,
                       _tokenAddress = tokAddr,
                       _from = oneAddr,
                       _to = twoAddr,
                       _memExpPath = [ (0, True) ] }
       , TransferCall {_maxAmount = 2,
-                      _amount = IMultExp (ILitExp (IIntVal 1)) (ILitExp (IIntVal 2)),
+                      _amount = MultExp (Lit (IntVal 1)) (Lit (IntVal 2)),
                       _delay = 120,
                       _tokenAddress = tokAddr,
                       _from = oneAddr,
@@ -238,7 +200,7 @@ timeTranslationIMemExpTest = do
       ]
 
     memExps =
-      [ IMemExp 120 240 0 (ILitExp (IObservable obsAddr "0"))
+      [ IMemExp 120 240 0 (Lit (Observable OBool obsAddr "0"))
       ]
 
     activateMap =
@@ -265,7 +227,7 @@ zeroContractCodeTest = do
 
     transfers =
       [ TransferCall { _maxAmount = 1
-                     , _amount = ILitExp (IIntVal 1)
+                     , _amount = Lit (IntVal 1)
                      , _delay = 0
                      , _tokenAddress = tokAddr
                      , _from = oneAddr
@@ -274,7 +236,7 @@ zeroContractCodeTest = do
                      }
       ]
 
-    memExps = [ IMemExp {_IMemExpBegin = 0, _IMemExpEnd = 10, _IMemExpIdent = 0, _IMemExp = ILitExp (IObservable obsAddr "0")}]
+    memExps = [ IMemExp {_IMemExpBegin = 0, _IMemExpEnd = 10, _IMemExpIdent = 0, _IMemExp = Lit (Observable OBool obsAddr "0")}]
 
     activateMap = Map.fromList [((tokAddr, oneAddr), 1)]
 
@@ -291,7 +253,7 @@ basicTransferTest = do
 
     transferIC :: IntermediateContract
     transferIC = IntermediateContract [TransferCall { _maxAmount = 1
-                                                    , _amount = ILitExp (IIntVal 1)
+                                                    , _amount = Lit (IntVal 1)
                                                     , _delay = 0
                                                     , _tokenAddress = tokAddr
                                                     , _to = oneAddr

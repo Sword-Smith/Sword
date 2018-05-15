@@ -5,7 +5,7 @@ data Contract = Transfer { tokenAddress_ :: Address,
                            to_           :: Address
                          }
               | Scale { maxFactor_   :: Integer,
-                        scaleFactor_ :: Expression,
+                        scaleFactor_ :: Expr,
                         contract_    :: Contract
                       }
               | Both { contractA_ :: Contract,
@@ -33,25 +33,25 @@ data Time = Now
           | Weeks Integer deriving (Show, Eq)
 
 -- This should also have an identifier in the intermediate expression version
-data MemExp = MemExp Time Expression deriving (Show, Eq)
+data MemExp = MemExp Time Expr deriving (Show, Eq)
 
-data Expression = Lit Literal
-                | MinExp Expression Expression
-                | MaxExp Expression Expression
-                | MultExp Expression Expression
-                | DiviExp Expression Expression
-                | AddiExp Expression Expression
-                | SubtExp Expression Expression
-                | LtExp Expression Expression
-                | GtExp Expression Expression
-                | EqExp Expression Expression
-                | GtOrEqExp Expression Expression
-                | LtOrEqExp Expression Expression
-                | NotExp Expression
-                | AndExp Expression Expression
-                | OrExp Expression Expression
-                | IfExp Expression Expression Expression
-                deriving (Show, Eq)
+data Expr = Lit Literal
+          | MinExp Expr Expr
+          | MaxExp Expr Expr
+          | MultExp Expr Expr
+          | DiviExp Expr Expr
+          | AddiExp Expr Expr
+          | SubtExp Expr Expr
+          | LtExp Expr Expr
+          | GtExp Expr Expr
+          | EqExp Expr Expr
+          | GtOrEqExp Expr Expr
+          | LtOrEqExp Expr Expr
+          | NotExp Expr
+          | AndExp Expr Expr
+          | OrExp Expr Expr
+          | IfExp Expr Expr Expr
+          deriving (Show, Eq)
 
 data Literal = IntVal Integer
              | BoolVal Bool

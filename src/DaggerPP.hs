@@ -18,7 +18,7 @@ daggerPPH contract indent = case contract of
 parens :: String -> String
 parens = ("(" ++) . (++ ")")
 
-prec :: Expression -> Int
+prec :: Expr -> Int
 prec e = case e of
   Lit _         -> 0
   MinExp    _ _ -> 0
@@ -39,16 +39,16 @@ prec e = case e of
   OrExp     _ _ -> 6
   IfExp   _ _ _ -> 7
 
-isAssoc :: Expression -> Bool
+isAssoc :: Expr -> Bool
 isAssoc e = case e of
   MultExp _ _ -> True
   AddiExp _ _ -> True
   _ -> False
 
-ppBinOp :: Expression -> Expression -> Expression -> String
+ppBinOp :: Expr -> Expr -> Expr -> String
 ppBinOp parentE leftE rightE = concat [ ppBinOp' leftE, op, ppBinOp' rightE ]
   where
-    ppBinOp' :: Expression -> String
+    ppBinOp' :: Expr -> String
     ppBinOp' e | prec e < prec parentE = ppExpr e
     ppBinOp' e | prec e == prec parentE && isAssoc e && isAssoc parentE = ppExpr e
     ppBinOp' e | otherwise = parens (ppExpr e)
@@ -67,7 +67,7 @@ ppBinOp parentE leftE rightE = concat [ ppBinOp' leftE, op, ppBinOp' rightE ]
       AndExp    _ _ -> " and "
       OrExp     _ _ -> " or "
 
-ppExpr :: Expression -> String
+ppExpr :: Expr -> String
 ppExpr e = case e of
   Lit (IntVal i)  -> show i
   Lit (BoolVal b) -> if b then "true" else "false"

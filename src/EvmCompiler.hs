@@ -3,6 +3,7 @@ module EvmCompiler where
 import EvmCompilerHelper
 import EvmLanguageDefinition
 import IntermediateLanguageDefinition
+import DaggerLanguageDefinition
 import IntermediateCompiler (emptyContract)
 
 import Control.Monad.State
@@ -210,7 +211,7 @@ getExecute = do
 -- Here the IMemExp should be evaluated. But only iff it is NOT true atm.
 -- And also only iff current time is less than time in the IMemExp
 getExecuteIMemExp :: IMemExp -> [EvmOpcode]
-getExecuteIMemExp (IMemExp beginTime endTime count iExp) =
+getExecuteIMemExp (IMemExp beginTime endTime count exp) =
   let
     checkIfExpShouldBeEvaluated =
       let
@@ -242,7 +243,7 @@ getExecuteIMemExp (IMemExp beginTime endTime count iExp) =
 
       in checkIfMemExpIsTrue ++ checkIfTimeHasStarted ++ checkIfTimeHasPassed
 
-    evaulateExpression = runExprCompiler initialEnv (compIExp iExp)
+    evaulateExpression = runExprCompiler initialEnv (compileExp exp)
     checkEvalResult    = [ ISZERO,
                            JUMPITO $ "memExp_end" ++ show count ]
     updateMemExpWord   = [PUSH4 $ getStorageAddress MemoryExpressionRefs,
@@ -297,103 +298,63 @@ newLabel desc = do
 -- Compile intermediate expression into EVM opcodes
 -- THIS IS THE ONLY PLACE IN THE COMPILER WHERE EXPRESSION ARE HANDLED
 
-compIExp :: IntermediateExpression -> Compiler [EvmOpcode]
-compIExp (ILitExp ilit) = do
-  mo <- gets memOffset
-  uniqueLabel <- newLabel "observable"
-  return $ compILit ilit mo uniqueLabel
-compIExp (IMultExp exp_1 exp_2) = do
-  e1 <- compIExp exp_1
-  e2 <- compIExp exp_2
-  return $ e1 ++ e2 ++ [MUL]
-compIExp (ISubtExp exp_1 exp_2) = do
-  e2 <- compIExp exp_2
-  e1 <- compIExp exp_1
-  return $ e2 ++ e1 ++ [SUB]
-compIExp (IAddiExp exp_1 exp_2) = do
-  e1 <- compIExp exp_1
-  e2 <- compIExp exp_2
-  return $ e1 ++ e2 ++ [ADD]
-compIExp (IDiviExp exp_1 exp_2) = do
-  e2 <- compIExp exp_2
-  e1 <- compIExp exp_1
-  return $ e2 ++ e1 ++ [DIV]
-compIExp (IEqExp exp_1 exp_2) = do
-  e1 <- compIExp exp_1
-  e2 <- compIExp exp_2
-  return $ e1 ++ e2 ++ [EVM_EQ]
-compIExp (ILtExp exp_1 exp_2) = do
-  e2 <- compIExp exp_2
-  e1 <- compIExp exp_1
-  return $ e2 ++ e1 ++ [EVM_LT]
-compIExp (IGtExp exp_1 exp_2) = do
-  e2 <- compIExp exp_2
-  e1 <- compIExp exp_1
-  return $ e2 ++ e1 ++ [EVM_GT]
-compIExp (IGtOrEqExp exp_1 exp_2) = do
-  e2 <- compIExp exp_2
-  e1 <- compIExp exp_1
-  return $ e2 ++ e1 ++ [EVM_LT, ISZERO]
-compIExp (ILtOrEqExp exp_1 exp_2) = do
-  e2 <- compIExp exp_2
-  e1 <- compIExp exp_1
-  return $ e2 ++ e1 ++ [EVM_GT, ISZERO]
-compIExp (IOrExp exp_1 exp_2) = do
-  e2 <- compIExp exp_2
-  e1 <- compIExp exp_1
-  return $ e2 ++ e1 ++ [OR]
-compIExp (IAndExp exp_1 exp_2) = do
-  e2 <- compIExp exp_2
-  e1 <- compIExp exp_1
-  return $ e2 ++ e1 ++ [AND]
--- MinExp and MaxExp can also be written without jumps: x^((x^y)&-(x<y))
--- which is cheaper?
-compIExp (IMinExp exp_1 exp_2) = do
-  e2 <- compIExp exp_2
-  e1 <- compIExp exp_1
-  l0 <- newLabel "min_is_e1"
-  return $ e1 ++ e2 ++ [DUP2, DUP2, EVM_GT, JUMPITO l0, SWAP1, JUMPDESTFROM l0, POP]
-compIExp (IMaxExp exp_1 exp_2) = do
-  e2 <- compIExp exp_2
-  e1 <- compIExp exp_1
-  l0 <- newLabel "max_is_e1"
-  return $ e1 ++ e2 ++ [DUP2, DUP2, EVM_LT, JUMPITO l0, SWAP1, JUMPDESTFROM l0, POP]
-compIExp (INotExp exp_1) = do -- e1 is assumed boolean, and is to be checked in type checker.
-  e1 <- compIExp exp_1
-  return $ e1 ++ [ISZERO]
-compIExp (IIfExp exp_1 exp_2 exp_3) = do
-  e1        <- compIExp exp_1 -- places 0 or 1 in s[0]
-  e2        <- compIExp exp_2
-  e3        <- compIExp exp_3
-  if_label  <- newLabel "if"
-  end_label <- newLabel "end_if_else_exp"
-  return $
-    e1 ++
-    [JUMPITO if_label] ++
-    e3 ++
-    [JUMPTO end_label] ++
-    [JUMPDESTFROM if_label] ++
-    e2 ++
-    [JUMPDESTFROM end_label]
+(<++>) xs ys = (++) <$> xs <*> ys
 
-compILit :: ILiteral -> Integer -> String -> [EvmOpcode]
-compILit (IIntVal int) _ _ = [PUSH32 $ integer2w256 int]
-compILit (IBoolVal bool) _ _ = if bool then [PUSH1 0x1] else [PUSH1 0x0] -- 0x1 is true
-compILit (IObservable address key) memOffset _ =
-  let
-    functionCall =
-      getFunctionCallEvm
-        address
-        (getFunctionSignature "get(bytes32)")
-        (Word256 ( string2w256 key ) : [])
-        (fromInteger memOffset)
-        (fromInteger memOffset)
-        0x20
-    moveResToStack = [ PUSH1 $ fromInteger memOffset,
-                       MLOAD ]
-  in
-    functionCall
-    ++ moveResToStack
+compileExp :: Expr -> Compiler [EvmOpcode]
+compileExp e = case e of
+  Lit lit -> do mo <- gets memOffset
+                label <- newLabel "observable"
+                return $ compileLit lit mo label
+
+  -- MinExp and MaxExp can also be written without jumps: x^((x^y)&-(x<y))
+  -- which is cheaper?
+
+  MinExp e1 e2 -> compileExp e1 <++> compileExp e2 <++> do
+                    label <- newLabel "min_is_e1"
+                    return [DUP2, DUP2, EVM_GT, JUMPITO label, SWAP1, JUMPDESTFROM label, POP]
+
+  MaxExp e1 e2 -> compileExp e1 <++> compileExp e2 <++> do
+                    label <- newLabel "max_is_e1"
+                    return [DUP2, DUP2, EVM_LT, JUMPITO label, SWAP1, JUMPDESTFROM label, POP]
+
+  MultExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [MUL]
+  DiviExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [DIV]
+  AddiExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [ADD]
+  SubtExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [SUB]
+  EqExp     e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [EVM_EQ]
+  LtExp     e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [EVM_LT]
+  GtExp     e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [EVM_GT]
+  GtOrEqExp e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [EVM_LT, ISZERO]
+  LtOrEqExp e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [EVM_GT, ISZERO]
+  NotExp    e1    -> compileExp e1 <++> return [ISZERO]
+  AndExp    e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [AND]
+  OrExp     e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [OR]
+  IfExp     e1 e2 e3 -> do
+    code1 <- compileExp e1
+    code2 <- compileExp e2
+    code3 <- compileExp e3
+    ifLabel <- newLabel "if"
+    endLabel <- newLabel "end_if_else_exp"
+    return $ code1 ++ [JUMPITO ifLabel] ++
+             code3 ++ [JUMPTO endLabel] ++
+             [JUMPDESTFROM ifLabel] ++
+             code2 ++ [JUMPDESTFROM endLabel]
+
+compileLit :: Literal -> Integer -> String -> [EvmOpcode]
+compileLit lit mo label = case lit of
+  IntVal  i -> [ PUSH32 $ integer2w256 i ]
+  BoolVal b -> [ PUSH1 (if b then 0x1 else 0x0) ] -- 0x1 is true
+  Observable _ address key ->
+    let functionCall = getFunctionCallEvm
+                         address
+                         (getFunctionSignature "get(bytes32)")
+                         [Word256 (string2w256 key)]
+                         (fromInteger mo)
+                         (fromInteger mo)
+                         0x20
+        moveResToStack = [ PUSH1 $ fromInteger mo, MLOAD ]
+
+    in functionCall ++ moveResToStack
 
 getExecuteTransferCallsHH :: TransferCall -> Integer -> Compiler [EvmOpcode]
 getExecuteTransferCallsHH tc transferCounter = do
@@ -517,7 +478,7 @@ getExecuteTransferCallsHH tc transferCounter = do
         0x20
         where
           getTransferAmount =
-            runExprCompiler (CompileEnv 0 transferCounter 0x44 "amount_exp") (compIExp (_amount tc))
+            runExprCompiler (CompileEnv 0 transferCounter 0x44 "amount_exp") (compileExp (_amount tc))
             ++ [ PUSH32 $ integer2w256 $ _maxAmount tc
                , DUP2
                , DUP2

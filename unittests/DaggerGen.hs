@@ -47,7 +47,7 @@ genSplit n = do
   i <- choose (0, n)
   return (i, n - i)
 
-exprGen :: Int -> Gen Expression
+exprGen :: Int -> Gen Expr
 exprGen 0 = Lit <$> arbitrary
 exprGen n = oneof $
   [ Lit <$> arbitrary
@@ -58,12 +58,12 @@ exprGen n = oneof $
   , LtExp, GtExp, EqExp, GtOrEqExp, LtOrEqExp, AndExp, OrExp
   ]
   where
-    binOpGen :: (Expression -> Expression -> Expression) -> Gen Expression
+    binOpGen :: (Expr -> Expr -> Expr) -> Gen Expr
     binOpGen op = do
       (n1, n2) <- genSplit (n - 1)
       op <$> exprGen n1 <*> exprGen n2
 
-instance Arbitrary Expression where
+instance Arbitrary Expr where
   arbitrary = sized exprGen
   shrink e = case e of
     Lit _           -> []

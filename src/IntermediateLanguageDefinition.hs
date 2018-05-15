@@ -17,7 +17,7 @@ data IntermediateContract =
 
 data TransferCall =
      TransferCall { _maxAmount    :: Integer
-                  , _amount       :: IntermediateExpression
+                  , _amount       :: Expr
                   , _delay        :: Integer
                   , _tokenAddress :: Address
                   , _from         :: Address
@@ -31,32 +31,8 @@ data TransferCall =
 data IMemExp = IMemExp { _IMemExpBegin  :: Integer
                        , _IMemExpEnd    :: Integer
                        , _IMemExpIdent  :: Integer
-                       , _IMemExp       :: IntermediateExpression
+                       , _IMemExp       :: Expr
                        } deriving (Show, Eq)
-
-data IntermediateExpression = ILitExp ILiteral
-                            | IMultExp IntermediateExpression IntermediateExpression
-                            | ISubtExp IntermediateExpression IntermediateExpression
-                            | IAddiExp IntermediateExpression IntermediateExpression
-                            | IDiviExp IntermediateExpression IntermediateExpression
-                            | ILtExp IntermediateExpression IntermediateExpression
-                            | IGtExp IntermediateExpression IntermediateExpression
-                            | IEqExp IntermediateExpression IntermediateExpression
-                            | IGtOrEqExp IntermediateExpression IntermediateExpression
-                            | ILtOrEqExp IntermediateExpression IntermediateExpression
-                            | IOrExp IntermediateExpression IntermediateExpression
-                            | IAndExp IntermediateExpression IntermediateExpression
-                            | IMinExp IntermediateExpression IntermediateExpression
-                            | IMaxExp IntermediateExpression IntermediateExpression
-                            | INotExp IntermediateExpression
-                            | IIfExp IntermediateExpression IntermediateExpression IntermediateExpression
-                            deriving (Show, Eq)
-
--- Since the type checker runs before the intermediate compiler we
--- do not need to carry around the type of the observable anymore.
-data ILiteral = IIntVal Integer
-              | IBoolVal Bool
-              | IObservable Address String deriving (Show, Eq)
 
 type ActivateMap = Map.Map (Address, Address) Integer
 

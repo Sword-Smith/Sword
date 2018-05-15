@@ -61,7 +61,7 @@ scaleParser = do
     symbol "("
     maxFactor <- getInt
     symbol ","
-    factorExp <- getExpression
+    factorExp <- getExpr
     symbol ","
     contract <- contractParserH
     symbol ")"
@@ -80,7 +80,7 @@ bothParser = do
 ifWithinParser :: Parser Contract
 ifWithinParser = do
   symbol "if"
-  exp0 <- getExpression
+  exp0 <- getExpr
   symbol "within"
   time <- getTime
   symbol "then"
@@ -93,63 +93,63 @@ zeroParser :: Parser Contract
 zeroParser = symbol "zero" >> return Zero
 
 -- Handle expressions
-getExpression :: Parser Expression
-getExpression = ifExpOpt
+getExpr :: Parser Expr
+getExpr = ifExpOpt
 
-ifExpOpt :: Parser Expression
+ifExpOpt :: Parser Expr
 ifExpOpt = ifBranch <|> orExp
 
-ifBranch :: Parser Expression
+ifBranch :: Parser Expr
 ifBranch = do
   symbol "if"
   symbol "("
   e1 <- orExp
   symbol ")"
   symbol "then"
-  e2 <- getExpression
+  e2 <- getExpr
   symbol "else"
-  e3 <- getExpression
+  e3 <- getExpr
   return $ IfExp e1 e2 e3
 
-orExp :: Parser Expression
+orExp :: Parser Expr
 orExp = do
   tv <- andExp
   v  <- orExpOpt tv
   return v
 
-orExpOpt :: Expression -> Parser Expression
+orExpOpt :: Expr -> Parser Expr
 orExpOpt e0 = orBranch e0 <|> return e0
 
-orBranch :: Expression -> Parser Expression
+orBranch :: Expr -> Parser Expr
 orBranch e0 = do
   symbol "or"
   tv <- andExp
   v  <- orExpOpt $ OrExp e0 tv
   return v
 
-andExp :: Parser Expression
+andExp :: Parser Expr
 andExp = do
   tv <- eqExp
   v  <- andExpOpt tv
   return v
 
-andExpOpt :: Expression -> Parser Expression
+andExpOpt :: Expr -> Parser Expr
 andExpOpt inval = andBranch inval <|> return inval
 
-andBranch :: Expression -> Parser Expression
+andBranch :: Expr -> Parser Expr
 andBranch e0 = do
   symbol "and"
   tv <- eqExp
   v  <- andExpOpt $ AndExp e0 tv
   return v
 
-eqExp :: Parser Expression
+eqExp :: Parser Expr
 eqExp = do
   tv <- ltgtExp
   v  <- eqExpOpt tv
   return v
 
-eqExpOpt :: Expression -> Parser Expression
+eqExpOpt :: Expr -> Parser Expr
 eqExpOpt inval = eqBranch inval <|> return inval
 
 -- The eq operator is made non-associative here, I think
@@ -157,170 +157,170 @@ eqExpOpt inval = eqBranch inval <|> return inval
 -- since its type is (real, real) -> bool
 -- But expressions such as "x = y < z" are accepted by this parser.
 -- They should be caught by the type checker, though.
-eqBranch :: Expression -> Parser Expression
+eqBranch :: Expr -> Parser Expr
 eqBranch e0 = do
   symbol "="
   e1 <- ltgtExp
   return $ EqExp e0 e1
 
-ltgtExp :: Parser Expression
+ltgtExp :: Parser Expr
 ltgtExp = do
   tv <- plusExp
   v  <- ltgtExpOpt tv
   return v
 
-ltgtExpOpt :: Expression -> Parser Expression
+ltgtExpOpt :: Expr -> Parser Expr
 ltgtExpOpt inval = ltXXBranch inval <|>
                    gtXXBranch inval <|>
                    return inval
 
-ltXXBranch :: Expression -> Parser Expression
+ltXXBranch :: Expr -> Parser Expr
 ltXXBranch e0 = do
   symbol "<"
   v <- ltOrEqBranch e0 <|> ltBranch e0
   return v
 
-ltBranch :: Expression -> Parser Expression
+ltBranch :: Expr -> Parser Expr
 ltBranch e0 = do
   e1 <- plusExp
   return $ LtExp e0 e1
 
-ltOrEqBranch :: Expression -> Parser Expression
+ltOrEqBranch :: Expr -> Parser Expr
 ltOrEqBranch e0 = do
   symbol "="
   e1 <- plusExp
   return $ LtOrEqExp e0 e1
 
-gtXXBranch :: Expression -> Parser Expression
+gtXXBranch :: Expr -> Parser Expr
 gtXXBranch e0 = do
   symbol ">"
   v <- gtOrEqBranch e0 <|> gtBranch e0
   return v
 
-gtBranch :: Expression -> Parser Expression
+gtBranch :: Expr -> Parser Expr
 gtBranch e0 = do
   e1 <- plusExp
   return $ GtExp e0 e1
 
-gtOrEqBranch :: Expression -> Parser Expression
+gtOrEqBranch :: Expr -> Parser Expr
 gtOrEqBranch e0 = do
   symbol "="
   e1 <- plusExp
   return $ GtOrEqExp e0 e1
 
-plusExp :: Parser Expression
+plusExp :: Parser Expr
 plusExp = do
   tv <- mulExp
   v <- plusExpOpt tv
   return v
 
-plusExpOpt :: Expression -> Parser Expression
+plusExpOpt :: Expr -> Parser Expr
 plusExpOpt inval = do
   plusBranch inval <|> minusBranch inval <|> return inval
 
-plusBranch :: Expression -> Parser Expression
+plusBranch :: Expr -> Parser Expr
 plusBranch inval = do
   symbol "+"
   tv <- mulExp
   v <- plusExpOpt (AddiExp inval tv)
   return v
 
-minusBranch :: Expression -> Parser Expression
+minusBranch :: Expr -> Parser Expr
 minusBranch inval = do
   symbol "-"
   tv <- mulExp
   v <- plusExpOpt (SubtExp inval tv)
   return v
 
-mulExp :: Parser Expression
+mulExp :: Parser Expr
 mulExp = do
-  tv <- notExpression
+  tv <- notExpr
   v  <- mulExpOpt tv
   return v
 
-mulExpOpt :: Expression -> Parser Expression
+mulExpOpt :: Expr -> Parser Expr
 mulExpOpt inval = mulBranch inval <|> divBranch inval <|> return inval
 
-mulBranch :: Expression -> Parser Expression
+mulBranch :: Expr -> Parser Expr
 mulBranch inval = do
   symbol "*"
-  tv <- notExpression
+  tv <- notExpr
   v  <- mulExpOpt (MultExp inval tv)
   return v
 
-divBranch :: Expression -> Parser Expression
+divBranch :: Expr -> Parser Expr
 divBranch inval = do
   symbol "/"
-  tv <- notExpression
+  tv <- notExpr
   v <- mulExpOpt (DiviExp inval tv)
   return $ v
 
 -- This should be right associative
-notExpression :: Parser Expression
-notExpression = notBranch <|> bracketsExp
+notExpr :: Parser Expr
+notExpr = notBranch <|> bracketsExp
 
-notBranch :: Parser Expression
+notBranch :: Parser Expr
 notBranch = do
   symbol "not"
-  e0 <- notExpression
+  e0 <- notExpr
   return $ NotExp e0
 
-bracketsExp :: Parser Expression
+bracketsExp :: Parser Expr
 bracketsExp = leafExp <|> brackets
 
-brackets :: Parser Expression
+brackets :: Parser Expr
 brackets = do
   symbol "("
-  e0 <- getExpression
+  e0 <- getExpr
   symbol ")"
   return e0
 
-leafExp :: Parser Expression
+leafExp :: Parser Expr
 leafExp = booleanLeaf <|> integerLeaf <|> minMaxExp <|> observableLeaf
 
-booleanLeaf :: Parser Expression
+booleanLeaf :: Parser Expr
 booleanLeaf = trueLeaf <|> falseLeaf
 
-minMaxExp :: Parser Expression
+minMaxExp :: Parser Expr
 minMaxExp = do
   string "m"
   e0 <- minExp <|> maxExp
   return e0
 
-minExp :: Parser Expression
+minExp :: Parser Expr
 minExp = do
   symbol "in("
-  e0 <- getExpression
+  e0 <- getExpr
   symbol ","
-  e1 <- getExpression
+  e1 <- getExpr
   symbol ")"
   return $ MinExp e0 e1
 
-maxExp :: Parser Expression
+maxExp :: Parser Expr
 maxExp = do
   symbol "ax("
-  e0 <- getExpression
+  e0 <- getExpr
   symbol ","
-  e1 <- getExpression
+  e1 <- getExpr
   symbol ")"
   return $ MaxExp e0 e1
 
-trueLeaf :: Parser Expression
+trueLeaf :: Parser Expr
 trueLeaf = do
   symbol "true"
   return $ Lit $ BoolVal True
-falseLeaf :: Parser Expression
+falseLeaf :: Parser Expr
 falseLeaf = do
   symbol "false"
   return $ Lit $ BoolVal False
 
-integerLeaf :: Parser Expression
+integerLeaf :: Parser Expr
 integerLeaf = do
   int <- getInt
   return $ Lit $ IntVal int
 
 -- Parse observable expressions
-observableLeaf :: Parser Expression
+observableLeaf :: Parser Expr
 observableLeaf = do
   symbol "obs("
   t <- getObservableType
