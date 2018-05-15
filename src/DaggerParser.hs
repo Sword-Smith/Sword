@@ -14,26 +14,26 @@ parse' s =
     Right ast -> ast
 
 parseWrap :: String -> Either ParseError Contract
-parseWrap s = parse contractParser "Parse error: " s
+parseWrap = parse contractParser "Parse error: "
 
-contractParser :: GenParser Char st Contract
+contractParser :: Parser Contract
 contractParser = do
   spaces
   contract <- contractParserH
   return contract
 
-contractParserH :: GenParser Char st Contract
+contractParserH :: Parser Contract
 contractParserH = do
     contract <- transferTranslateParser <|> scaleParser <|> bothParser <|> ifWithinParser <|> zeroParser
     return contract
 
-transferTranslateParser :: GenParser Char st Contract
+transferTranslateParser :: Parser Contract
 transferTranslateParser = do
   string "trans"
   contract <- transferParser <|> translateParser
   return contract
 
-translateParser :: GenParser Char st Contract
+translateParser :: Parser Contract
 translateParser = do
   string "late"
   symbol "("
@@ -43,7 +43,7 @@ translateParser = do
   symbol ")"
   return $ Translate delay contract
 
-transferParser :: GenParser Char st Contract
+transferParser :: Parser Contract
 transferParser = do
     string "fer"
     symbol "("
@@ -55,7 +55,7 @@ transferParser = do
     symbol ")"
     return $ Transfer ta from to
 
-scaleParser :: GenParser Char st Contract
+scaleParser :: Parser Contract
 scaleParser = do
     string "scale"
     symbol "("
@@ -67,7 +67,7 @@ scaleParser = do
     symbol ")"
     return $ Scale maxFactor factorExp contract
 
-bothParser :: GenParser Char st Contract
+bothParser :: Parser Contract
 bothParser = do
   string "both"
   symbol "("
@@ -77,7 +77,7 @@ bothParser = do
   symbol ")"
   return $ Both contractA contractB
 
-ifWithinParser :: GenParser Char st Contract
+ifWithinParser :: Parser Contract
 ifWithinParser = do
   symbol "if"
   exp0 <- getExpression
@@ -89,17 +89,17 @@ ifWithinParser = do
   contractB <- contractParserH
   return $ IfWithin (MemExp time exp0) contractA contractB
 
-zeroParser :: GenParser Char st Contract
+zeroParser :: Parser Contract
 zeroParser = symbol "zero" >> return Zero
 
 -- Handle expressions
-getExpression :: GenParser Char st Expression
+getExpression :: Parser Expression
 getExpression = ifExpOpt
 
-ifExpOpt :: GenParser Char st Expression
+ifExpOpt :: Parser Expression
 ifExpOpt = ifBranch <|> orExp
 
-ifBranch :: GenParser Char st Expression
+ifBranch :: Parser Expression
 ifBranch = do
   symbol "if"
   symbol "("
@@ -111,45 +111,45 @@ ifBranch = do
   e3 <- getExpression
   return $ IfExp e1 e2 e3
 
-orExp :: GenParser Char st Expression
+orExp :: Parser Expression
 orExp = do
   tv <- andExp
   v  <- orExpOpt tv
   return v
 
-orExpOpt :: Expression -> GenParser Char st Expression
+orExpOpt :: Expression -> Parser Expression
 orExpOpt e0 = orBranch e0 <|> return e0
 
-orBranch :: Expression -> GenParser Char st Expression
+orBranch :: Expression -> Parser Expression
 orBranch e0 = do
   symbol "or"
   tv <- andExp
   v  <- orExpOpt $ OrExp e0 tv
   return v
 
-andExp :: GenParser Char st Expression
+andExp :: Parser Expression
 andExp = do
   tv <- eqExp
   v  <- andExpOpt tv
   return v
 
-andExpOpt :: Expression -> GenParser Char st Expression
+andExpOpt :: Expression -> Parser Expression
 andExpOpt inval = andBranch inval <|> return inval
 
-andBranch :: Expression -> GenParser Char st Expression
+andBranch :: Expression -> Parser Expression
 andBranch e0 = do
   symbol "and"
   tv <- eqExp
   v  <- andExpOpt $ AndExp e0 tv
   return v
 
-eqExp :: GenParser Char st Expression
+eqExp :: Parser Expression
 eqExp = do
   tv <- ltgtExp
   v  <- eqExpOpt tv
   return v
 
-eqExpOpt :: Expression -> GenParser Char st Expression
+eqExpOpt :: Expression -> Parser Expression
 eqExpOpt inval = eqBranch inval <|> return inval
 
 -- The eq operator is made non-associative here, I think
@@ -157,98 +157,98 @@ eqExpOpt inval = eqBranch inval <|> return inval
 -- since its type is (real, real) -> bool
 -- But expressions such as "x = y < z" are accepted by this parser.
 -- They should be caught by the type checker, though.
-eqBranch :: Expression -> GenParser Char st Expression
+eqBranch :: Expression -> Parser Expression
 eqBranch e0 = do
   symbol "="
   e1 <- ltgtExp
   return $ EqExp e0 e1
 
-ltgtExp :: GenParser Char st Expression
+ltgtExp :: Parser Expression
 ltgtExp = do
   tv <- plusExp
   v  <- ltgtExpOpt tv
   return v
 
-ltgtExpOpt :: Expression -> GenParser Char st Expression
+ltgtExpOpt :: Expression -> Parser Expression
 ltgtExpOpt inval = ltXXBranch inval <|>
                    gtXXBranch inval <|>
                    return inval
 
-ltXXBranch :: Expression -> GenParser Char st Expression
+ltXXBranch :: Expression -> Parser Expression
 ltXXBranch e0 = do
   symbol "<"
   v <- ltOrEqBranch e0 <|> ltBranch e0
   return v
 
-ltBranch :: Expression -> GenParser Char st Expression
+ltBranch :: Expression -> Parser Expression
 ltBranch e0 = do
   e1 <- plusExp
   return $ LtExp e0 e1
 
-ltOrEqBranch :: Expression -> GenParser Char st Expression
+ltOrEqBranch :: Expression -> Parser Expression
 ltOrEqBranch e0 = do
   symbol "="
   e1 <- plusExp
   return $ LtOrEqExp e0 e1
 
-gtXXBranch :: Expression -> GenParser Char st Expression
+gtXXBranch :: Expression -> Parser Expression
 gtXXBranch e0 = do
   symbol ">"
   v <- gtOrEqBranch e0 <|> gtBranch e0
   return v
 
-gtBranch :: Expression -> GenParser Char st Expression
+gtBranch :: Expression -> Parser Expression
 gtBranch e0 = do
   e1 <- plusExp
   return $ GtExp e0 e1
 
-gtOrEqBranch :: Expression -> GenParser Char st Expression
+gtOrEqBranch :: Expression -> Parser Expression
 gtOrEqBranch e0 = do
   symbol "="
   e1 <- plusExp
   return $ GtOrEqExp e0 e1
 
-plusExp :: GenParser Char st Expression
+plusExp :: Parser Expression
 plusExp = do
   tv <- mulExp
   v <- plusExpOpt tv
   return v
 
-plusExpOpt :: Expression -> GenParser Char st Expression
+plusExpOpt :: Expression -> Parser Expression
 plusExpOpt inval = do
   plusBranch inval <|> minusBranch inval <|> return inval
 
-plusBranch :: Expression -> GenParser Char st Expression
+plusBranch :: Expression -> Parser Expression
 plusBranch inval = do
   symbol "+"
   tv <- mulExp
   v <- plusExpOpt (AddiExp inval tv)
   return v
 
-minusBranch :: Expression -> GenParser Char st Expression
+minusBranch :: Expression -> Parser Expression
 minusBranch inval = do
   symbol "-"
   tv <- mulExp
   v <- plusExpOpt (SubtExp inval tv)
   return v
 
-mulExp :: GenParser Char st Expression
+mulExp :: Parser Expression
 mulExp = do
   tv <- notExpression
   v  <- mulExpOpt tv
   return v
 
-mulExpOpt :: Expression -> GenParser Char st Expression
+mulExpOpt :: Expression -> Parser Expression
 mulExpOpt inval = mulBranch inval <|> divBranch inval <|> return inval
 
-mulBranch :: Expression -> GenParser Char st Expression
+mulBranch :: Expression -> Parser Expression
 mulBranch inval = do
   symbol "*"
   tv <- notExpression
   v  <- mulExpOpt (MultExp inval tv)
   return v
 
-divBranch :: Expression -> GenParser Char st Expression
+divBranch :: Expression -> Parser Expression
 divBranch inval = do
   symbol "/"
   tv <- notExpression
@@ -256,38 +256,38 @@ divBranch inval = do
   return $ v
 
 -- This should be right associative
-notExpression :: GenParser Char st Expression
+notExpression :: Parser Expression
 notExpression = notBranch <|> bracketsExp
 
-notBranch :: GenParser Char st Expression
+notBranch :: Parser Expression
 notBranch = do
   symbol "not"
   e0 <- notExpression
   return $ NotExp e0
 
-bracketsExp :: GenParser Char st Expression
+bracketsExp :: Parser Expression
 bracketsExp = leafExp <|> brackets
 
-brackets :: GenParser Char st Expression
+brackets :: Parser Expression
 brackets = do
   symbol "("
   e0 <- getExpression
   symbol ")"
   return e0
 
-leafExp :: GenParser Char st Expression
+leafExp :: Parser Expression
 leafExp = booleanLeaf <|> integerLeaf <|> minMaxExp <|> observableLeaf
 
-booleanLeaf :: GenParser Char st Expression
+booleanLeaf :: Parser Expression
 booleanLeaf = trueLeaf <|> falseLeaf
 
-minMaxExp :: GenParser Char st Expression
+minMaxExp :: Parser Expression
 minMaxExp = do
   string "m"
   e0 <- minExp <|> maxExp
   return e0
 
-minExp :: GenParser Char st Expression
+minExp :: Parser Expression
 minExp = do
   symbol "in("
   e0 <- getExpression
@@ -296,7 +296,7 @@ minExp = do
   symbol ")"
   return $ MinExp e0 e1
 
-maxExp :: GenParser Char st Expression
+maxExp :: Parser Expression
 maxExp = do
   symbol "ax("
   e0 <- getExpression
@@ -305,22 +305,22 @@ maxExp = do
   symbol ")"
   return $ MaxExp e0 e1
 
-trueLeaf :: GenParser Char st Expression
+trueLeaf :: Parser Expression
 trueLeaf = do
   symbol "true"
   return $ Lit $ BoolVal True
-falseLeaf :: GenParser Char st Expression
+falseLeaf :: Parser Expression
 falseLeaf = do
   symbol "false"
   return $ Lit $ BoolVal False
 
-integerLeaf :: GenParser Char st Expression
+integerLeaf :: Parser Expression
 integerLeaf = do
   int <- getInt
   return $ Lit $ IntVal int
 
 -- Parse observable expressions
-observableLeaf :: GenParser Char st Expression
+observableLeaf :: Parser Expression
 observableLeaf = do
   symbol "obs("
   t <- getObservableType
@@ -331,32 +331,32 @@ observableLeaf = do
   symbol ")"
   return $ Lit $ Observable t address key
 
-getObservableType :: GenParser Char st ObservableType
+getObservableType :: Parser ObservableType
 getObservableType = getBool <|> getInteger
 
-getBool :: GenParser Char st ObservableType
+getBool :: Parser ObservableType
 getBool = do
   symbol "bool"
   return OBool
 
-getInteger :: GenParser Char st ObservableType
+getInteger :: Parser ObservableType
 getInteger = do
   symbol "int"
   return OInteger
 
 
 -- Handle time
-getTime :: GenParser Char st Time
+getTime :: Parser Time
 getTime = do
   time <- getNow <|> getSeconds0 <|> getSeconds1 <|> getMinutes <|> getHours <|> getDays <|> getWeeks
   return time
 
-getNow :: GenParser Char st Time
+getNow :: Parser Time
 getNow = do
   symbol "now"
   return Now
 
-getSeconds0 :: GenParser Char st Time
+getSeconds0 :: Parser Time
 getSeconds0 = do
   string "seconds"
   symbol "("
@@ -364,12 +364,12 @@ getSeconds0 = do
   symbol ")"
   return $ Seconds i
 
-getSeconds1 :: GenParser Char st Time
+getSeconds1 :: Parser Time
 getSeconds1 = do
   secs <- getInt
   return $ Seconds secs
 
-getMinutes :: GenParser Char st Time
+getMinutes :: Parser Time
 getMinutes = do
   string "minutes"
   symbol "("
@@ -377,7 +377,7 @@ getMinutes = do
   symbol ")"
   return $ Minutes i
 
-getHours :: GenParser Char st Time
+getHours :: Parser Time
 getHours = do
   string "hours"
   symbol "("
@@ -385,7 +385,7 @@ getHours = do
   symbol ")"
   return $ Hours i
 
-getDays :: GenParser Char st Time
+getDays :: Parser Time
 getDays = do
   string "days"
   symbol "("
@@ -393,7 +393,7 @@ getDays = do
   symbol ")"
   return $ Days i
 
-getWeeks :: GenParser Char st Time
+getWeeks :: Parser Time
 getWeeks = do
   string "weeks"
   symbol "("
@@ -403,30 +403,30 @@ getWeeks = do
 
 
 -- This is not used ATM
-getTokenSymbol :: GenParser Char st TokenSymbol
+getTokenSymbol :: Parser TokenSymbol
 getTokenSymbol = do
   ts <- many1 upper
   spaces
   return ts
 
-getAddress :: GenParser Char st Address
+getAddress :: Parser Address
 getAddress = do
     prefix <- symbol "0x"
     addr   <- ParSecCom.count 40 hexDigit
     spaces
     return $ prefix ++ addr
 
-getInt :: GenParser Char st Integer
+getInt :: Parser Integer
 getInt = do
   int <- read <$> many1 digit
   spaces
   return int
 
-symbol :: String -> GenParser Char st String
+symbol :: String -> Parser String
 symbol s = do
   ret <- string s
   spaces
   return ret
 
-eol :: GenParser Char st Char
+eol :: Parser Char
 eol = char '\n'
