@@ -6,7 +6,7 @@ data ExpType = BoolType
              | IntType deriving (Show, Eq)
 
 typeChecker :: Contract -> Either String Contract
-typeChecker (Transfer tokenAddress from to) = do
+typeChecker (Transfer tokenAddress from to) =
   return $ Transfer tokenAddress from to
 typeChecker (Both contractA contractB) = do
   cA <- typeChecker contractA
@@ -32,9 +32,8 @@ typeChecker (Scale maxFac scaleFac contract) = do
     Left $ "2nd argument to scale must be of type int, got: " ++ show t0
 
 getType :: Expr -> Either String ExpType
-getType (Lit literal) = do
-  t0 <- getLiteral literal
-  return t0
+getType (Lit literal) =
+  getLiteral literal
 getType (MultExp e0 e1) = do
   t0 <- getType e0
   t1 <- getType e1
@@ -80,55 +79,55 @@ getType (GtExp e0 e1) = do
 getType (EqExp e0 e1) = do
   t0 <- getType e0
   t1 <- getType e1
-  if (t0 == IntType && t1 == IntType) then
+  if t0 == IntType && t1 == IntType then
     return BoolType
   else
     Left $ "Error in EqExp expression! Expected int, int; got " ++ show t0 ++ ", " ++ show t1
 getType (GtOrEqExp e0 e1) = do
   t0 <- getType e0
   t1 <- getType e1
-  if (t0 == IntType && t1 == IntType) then
+  if t0 == IntType && t1 == IntType then
     return BoolType
   else
     Left $ "Error in GtOrEqExp expression! Expected int, int; got " ++ show t0 ++ ", " ++ show t1
 getType (LtOrEqExp e0 e1) = do
   t0 <- getType e0
   t1 <- getType e1
-  if (t0 == IntType && t1 == IntType) then
+  if t0 == IntType && t1 == IntType then
     return BoolType
   else
     Left $ "Error in LtOrEqExp expression! Expected int, int; got " ++ show t0 ++ ", " ++ show t1
 getType (OrExp e0 e1) = do
   t0 <- getType e0
   t1 <- getType e1
-  if (t0 == BoolType && t1 == BoolType) then
+  if t0 == BoolType && t1 == BoolType then
     return BoolType
   else
     Left $ "Error in OrExp expression! Expected bool, bool; got " ++ show t0 ++ ", " ++ show t1
 getType (AndExp e0 e1) = do
   t0 <- getType e0
   t1 <- getType e1
-  if (t0 == BoolType && t1 == BoolType) then
+  if t0 == BoolType && t1 == BoolType then
     return BoolType
   else
     Left $ "Error in AndExp expression! Expected bool, bool; got " ++ show t0 ++ ", " ++ show t1
 getType (MinExp e0 e1) = do
   t0 <- getType e0
   t1 <- getType e1
-  if (t0 == IntType && t1 == IntType) then
+  if t0 == IntType && t1 == IntType then
     return IntType
   else
     Left $ "Error in MinExp expression! Expected int, int; got " ++ show t0 ++ ", " ++ show t1
 getType (MaxExp e0 e1) = do
   t0 <- getType e0
   t1 <- getType e1
-  if (t0 == IntType && t1 == IntType) then
+  if t0 == IntType && t1 == IntType then
     return IntType
   else
     Left $ "Error in MaxExp expression! Expected int, int; got " ++ show t0 ++ ", " ++ show t1
 getType (NotExp e0) = do
   t0 <- getType e0
-  if (t0 == BoolType) then
+  if t0 == BoolType then
     return BoolType
   else
     Left $ "Error in NotExp expression! Expected bool; got " ++ show t0
@@ -136,7 +135,7 @@ getType (IfExp e0 e1 e2) = do
   t0 <- getType e0
   t1 <- getType e1
   t2 <- getType e2
-  if (t0 == BoolType && ((t1 == BoolType && t2 == BoolType) || (t1 == IntType && t2 == IntType))) then
+  if t0 == BoolType && ((t1 == BoolType && t2 == BoolType) || (t1 == IntType && t2 == IntType)) then
     return $ if t1 == BoolType then BoolType else IntType
   else
     if t0 /= BoolType

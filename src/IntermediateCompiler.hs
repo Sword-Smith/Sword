@@ -65,7 +65,7 @@ intermediateCompileM (Transfer token from to) = do
   let activateMap = Map.fromList [((token, from), maxFactor)]
   return (IntermediateContract [transferCall] [] activateMap Map.empty)
 
-intermediateCompileM (Scale maxFactor factorExp contract) = do
+intermediateCompileM (Scale maxFactor factorExp contract) =
   local adjustScale $ intermediateCompileM contract
   where
     adjustScale :: ScopeEnv -> ScopeEnv
@@ -82,7 +82,7 @@ intermediateCompileM (Both contractA contractB) = do
                                 (Map.unionWith (+) am1 am2)
                                 (Map.union mrm1 mrm2)
 
-intermediateCompileM (Translate time contract) = do
+intermediateCompileM (Translate time contract) =
   local adjustDelay $ intermediateCompileM contract
   where
     adjustDelay :: ScopeEnv -> ScopeEnv

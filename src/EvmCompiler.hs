@@ -17,7 +17,7 @@ data CompileEnv =
      CompileEnv { labelCount        :: Integer
                 , transferCallCount :: Integer
                 , memOffset         :: Integer
-                , labelString       :: [Char]
+                , labelString       :: String
                 } deriving Show
 
 type Compiler a = ReaderT IntermediateContract (State CompileEnv) a
@@ -53,10 +53,10 @@ getStorageAddress Executed               = 0x2
 getStorageAddress MemoryExpressionRefs   = 0x3
 
 asmToMachineCode :: [EvmOpcode] -> String
-asmToMachineCode opcodes = foldl (++) "" (map ppEvm opcodes)
+asmToMachineCode = concatMap ppEvm
 
 getSizeOfOpcodeList :: [EvmOpcode] -> Integer
-getSizeOfOpcodeList xs = foldl (+) 0 (map getOpcodeSize xs)
+getSizeOfOpcodeList = sum . map getOpcodeSize
 
 getOpcodeSize :: EvmOpcode -> Integer
 getOpcodeSize (PUSH1  _)   = 2
@@ -133,7 +133,7 @@ getFunctionSignature funDecl = read $ "0x" ++ take 8 (keccak256 funDecl)
 -- probably be called.
 getConstructor :: [TransferCall] -> [EvmOpcode]
 getConstructor tcs =
-  (getCheckNoValue "Constructor_Header" ) ++
+  getCheckNoValue "Constructor_Header" ++
   setExecutedWord tcs
 
 -- Checks that no value (ether) is sent when executing contract method
@@ -155,7 +155,7 @@ saveTimestampToStorage =  [TIMESTAMP,
 -- A setMemExpWord is not needed since that word is initialized to zero automatically
 setExecutedWord :: [TransferCall] -> [EvmOpcode]
 setExecutedWord []  = undefined
-setExecutedWord tcs = [ PUSH32 $ integer2w256 $ 2^length(tcs) - 1,
+setExecutedWord tcs = [ PUSH32 $ integer2w256 $ 2^length tcs - 1,
                         PUSH4 $ getStorageAddress Executed,
                         SSTORE ]
 
@@ -179,16 +179,16 @@ getJumpTable =
                        PUSH32 (0xffffffff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
                        AND,
                        DUP1,
-                       PUSH32 $ (getFunctionSignature "execute()" , 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
+                       PUSH32 (getFunctionSignature "execute()" , 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
                        EVM_EQ,
                        JUMPITO "execute_method",
-                       PUSH32 $ (getFunctionSignature "activate()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
+                       PUSH32 (getFunctionSignature "activate()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
                        EVM_EQ,
                        JUMPITO "activate_method",
                        JUMPDESTFROM "global_throw",
                        THROW]
   in
-    (getCheckNoValue "Contract_Header") ++ switchStatement
+    getCheckNoValue "Contract_Header" ++ switchStatement
 
 -- When calling execute(), PC must be set here
 -- to check if the DC is activated
@@ -293,7 +293,7 @@ newLabel desc = do
   let j = transferCallCount compileEnv
   let k = labelString compileEnv
   put compileEnv { labelCount = i + 1 }
-  return $ desc ++ "_" ++ (show i) ++ "_" ++ (show j) ++ "_" ++ (show k)
+  return $ desc ++ "_" ++ show i ++ "_" ++ show j ++ "_" ++ show k
 
 -- Compile intermediate expression into EVM opcodes
 -- THIS IS THE ONLY PLACE IN THE COMPILER WHERE EXPRESSION ARE HANDLED
@@ -372,7 +372,7 @@ getExecuteTransferCallsHH tc transferCounter = do
                                  PUSH32 $ integer2w256 $ _delay tc,
                                  EVM_LT,
                                  ISZERO,
-                                 JUMPITO $ "method_end" ++ (show (transferCounter))
+                                 JUMPITO $ "method_end" ++ show transferCounter
                                ]
         -- Skip tcall if method has been executed already
         -- This only works for less than 2^8 transfer calls
@@ -383,7 +383,7 @@ getExecuteTransferCallsHH tc transferCounter = do
                                      EXP,
                                      AND,
                                      ISZERO,
-                                     JUMPITO $ "method_end" ++ (show (transferCounter)) ]
+                                     JUMPITO $ "method_end" ++ show transferCounter ]
         checkIfTCIsInChosenBranches memExpPath =
           let
             -- A transferCall contains a list of IMemExpRefs
@@ -443,7 +443,7 @@ getExecuteTransferCallsHH tc transferCounter = do
                                           , PUSH32 $ integer2w256 (_IMemExpEnd (getMemExpById memExpId mes))
                                           , EVM_GT
                                             -- If time > elapsed time, skip the call, don't flip execute bit
-                                          , JUMPITO $ "method_end" ++ (show transferCounter)
+                                          , JUMPITO $ "method_end" ++ show transferCounter
                                           ]
                 checkIfBranchIsTrue1 =
                   if branch then
@@ -472,7 +472,7 @@ getExecuteTransferCallsHH tc transferCounter = do
         (_tokenAddress tc)
         (getFunctionSignature "transfer(address,uint256)")
         [ Word256 (address2w256 (_to tc))
-        , (RawEvm getTransferAmount) ]
+        , RawEvm getTransferAmount ]
         0
         0
         0x20
@@ -483,9 +483,9 @@ getExecuteTransferCallsHH tc transferCounter = do
                , DUP2
                , DUP2
                , EVM_GT
-               , JUMPITO $ "use_exp_res" ++ (show transferCounter)
+               , JUMPITO $ "use_exp_res" ++ show transferCounter
                , SWAP1
-               , JUMPDESTFROM $ "use_exp_res" ++ (show transferCounter)
+               , JUMPDESTFROM $ "use_exp_res" ++ show transferCounter
                , POP
                , DUP1 -- leaves transferred amount on stack for next call to transfer
                , PUSH1 0x24
@@ -497,7 +497,7 @@ getExecuteTransferCallsHH tc transferCounter = do
       , DUP1
       , PUSH1 0x0
       , EVM_EQ
-      , JUMPITO $ "skip_call_to_sender" ++ (show transferCounter) ]
+      , JUMPITO $ "skip_call_to_sender" ++ show transferCounter ]
       -- TODO: Here, we should call transfer to the
       -- TC originator (transfer back unspent margin)
       -- but we do not want to recalculate the amount
@@ -511,12 +511,12 @@ getExecuteTransferCallsHH tc transferCounter = do
         [ Word256 (address2w256 (_from tc))
         -- push amount of remaining margin to memory, DUP1 to ensure consistent
         -- stack whether this call is made or not
-        , (RawEvm [DUP1, PUSH1 0x24, MSTORE]) ]
+        , RawEvm [DUP1, PUSH1 0x24, MSTORE] ]
         0
         0
         0x20
     -- Flip correct bit from one to zero and call selfdestruct if all tcalls compl.
-    skipCallToTcSenderJumpDest = [ JUMPDESTFROM $ "skip_call_to_sender" ++ (show transferCounter)
+    skipCallToTcSenderJumpDest = [ JUMPDESTFROM $ "skip_call_to_sender" ++ show transferCounter
                                  , POP ] -- pop return amount from stack
     updateExecutedWord = [ PUSH4 $ getStorageAddress Executed,
                            SLOAD,
@@ -529,7 +529,7 @@ getExecuteTransferCallsHH tc transferCounter = do
                            JUMPITO "selfdestruct",
                            PUSH4 $ getStorageAddress Executed,
                            SSTORE ]
-    functionEndLabel = [JUMPDESTFROM  $ "method_end" ++ (show transferCounter)]
+    functionEndLabel = [JUMPDESTFROM  $ "method_end" ++ show transferCounter]
 
   return $
     checkIfCallShouldBeMade ++
@@ -543,7 +543,7 @@ getExecuteTransferCallsHH tc transferCounter = do
 -- This might have to take place within the state monad to get unique labels for each TransferFrom call
 getActivate :: ActivateMap -> [EvmOpcode]
 getActivate am = [JUMPDESTFROM "activate_method"]
-                 ++ ( concatMap activateMapElementToTransferFromCall $ Map.assocs am )
+                 ++ concatMap activateMapElementToTransferFromCall (Map.assocs am)
                  -- set activate bit to 0x01 (true)
                  ++ [ PUSH1 0x01, PUSH4 $ getStorageAddress Activated, SSTORE ]
                  ++ saveTimestampToStorage
@@ -560,7 +560,7 @@ activateMapElementToTransferFromCall ((tokenAddress, fromAddress), amount) =
         0 -- inMemOffset
         0 -- outMemOffset
         32 -- outSize
-    moveResToStack = [ PUSH1 $ fromInteger 0, MLOAD ]
+    moveResToStack = [ PUSH1 0, MLOAD ]
     throwIfReturnFalse = [ISZERO, JUMPITO "global_throw" ]
 
 getMemExpById :: MemExpId -> [IMemExp] -> IMemExp

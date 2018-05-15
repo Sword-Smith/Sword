@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, DeriveGeneric, DeriveAnyClass #-}
+{-# LANGUAGE OverloadedStrings, DeriveGeneric #-}
 module Main where
 
 import EvmCompiler as EVMC
@@ -86,7 +86,7 @@ writeAbiDef outdir bn = do
 
 -- (outdir, bn, fp)
 args2fileInfo :: [String] -> (String, String, String)
-args2fileInfo (fp:[]) =
+args2fileInfo [fp] =
   let
     fPath = head $ splitOn ".bahr" $ head $ splitOn ".dag" fp
     bn    = last $ splitOn "/" fPath
