@@ -31,9 +31,9 @@ test0 :: Spec
 test0 = do
   it "iCompileExp mult" $ do
     iCompileExp e `shouldBe` ie
-  where
-    e = MultExp (Lit( IntVal 7)) (Lit( IntVal 17))
-    ie = IMultExp (ILitExp( IIntVal 7)) (ILitExp( IIntVal 17))
+      where
+        e = MultExp (Lit( IntVal 7)) (Lit( IntVal 17))
+        ie = IMultExp (ILitExp( IIntVal 7)) (ILitExp( IIntVal 17))
 
 test1 :: Spec
 test1 = do

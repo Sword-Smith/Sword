@@ -61,10 +61,14 @@ data EvmOpcode = STOP
                | SSTORE
                | JUMP
                | JUMPI
-               | JUMPTO Label -- pseudo instruction: PUSH Addr(label); JUMP;
-               | JUMPITO Label -- pseudo instruction: PUSH Addr(label); JUMPI;
-               | JUMPTOA Integer --
-               | JUMPITOA Integer --
+               | FUNSTART Label -- pre-linker pseudo instruction: Same as JUMPDESTFROM Label.
+               | FUNCALL Label -- pre-linker pseudo instruction: PC, JUMPTO Label (store PC on stack, jump)
+               | FUNCALLA Integer -- post-linker pseudo instruction: PC, JUMPTOA i
+               | FUNRETURN -- post-linker pseudo instruction: a synonyme for JUMP;
+               | JUMPTO Label -- pre-linker pseudo instruction: PUSH Addr(label); JUMP;
+               | JUMPITO Label -- pre-linker pseudo instruction: PUSH Addr(label); JUMPI;
+               | JUMPTOA Integer -- (after linker) pseudo instruction
+               | JUMPITOA Integer -- (after linker) pseudo instruction
                | PC
                | MSIZE
                | GAS
