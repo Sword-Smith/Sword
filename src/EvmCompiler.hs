@@ -50,6 +50,9 @@ asmToMachineCode opcodes = foldl (++) "" (map ppEvm opcodes)
 getSizeOfOpcodeList :: [EvmOpcode] -> Integer
 getSizeOfOpcodeList xs = foldl (+) 0 (map getOpcodeSize xs)
 
+-- This function is called before the linker and before the
+-- elimination of pseudo instructions, so it must be able to
+-- also handle the pseudo instructions before and after linking
 getOpcodeSize :: EvmOpcode -> Integer
 getOpcodeSize (PUSH1  _)   = 2
 getOpcodeSize (PUSH4 _)    = 5
@@ -63,6 +66,7 @@ getOpcodeSize (JUMPTOA _)  = 1 + 5 -- PUSH4 addr.; JUMP
 getOpcodeSize (FUNCALL _)  = 4 + 6 -- PC; PUSH1 10, ADD, JUMPTO label; = PC; PUSH1, ADD, PUSH4 addr; JUMP; OPCODE -- addr(OPCODE)=µ[0]
 getOpcodeSize _            = 1
 
+-- Called as part of linker so must be able to handle pre-linker instructions.
 replaceLabel :: Label -> Integer -> [EvmOpcode] -> [EvmOpcode]
 replaceLabel label int insts =
   let
@@ -107,6 +111,7 @@ getFunctionSignature funDecl = read $ "0x" ++ take 8 (keccak256 funDecl)
 intermediateToOpcodes :: IntermediateContract -> String
 intermediateToOpcodes (IntermediateContract tcs iMemExps activateMap marginRefundMap) =
   let
+     -- linker is called as part of evmCompile
     intermediateToOpcodesH :: IntermediateContract -> String
     intermediateToOpcodesH = asmToMachineCode . eliminatePseudoInstructions . evmCompile
   in
