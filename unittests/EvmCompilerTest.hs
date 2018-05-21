@@ -46,53 +46,53 @@ simpleMCG0 = do
     concatMap ppEvm postPseudoInstructionElimination0 `shouldBe` postMachineCodeGeneration0
 
 funCallPreLinker1 :: [EvmOpcode]
-funCallPreLinker1 = [FUNSTART "mulRoutine" 2, MUL, FUNRETURN,  PUSH1 $ fromInteger 2, PUSH1 $fromInteger 3, FUNCALL "mulRoutine", STOP]
+funCallPreLinker1 = [FUNSTART "mulRoutine" 2, MUL, FUNRETURN, PUSH1 $ fromInteger 2, PUSH1 $fromInteger 3, FUNCALL "mulRoutine", STOP]
 
 funCallPostLinker1 :: [EvmOpcode]
 funCallPostLinker1 = [ FUNSTARTA 2, MUL, FUNRETURN, PUSH1 $ fromInteger 2, PUSH1 $ fromInteger 3, FUNCALLA 0, STOP]
 
 funCallPostPIElim1 :: [EvmOpcode]
-funCallPostPIElim1 = [ JUMPDEST, SWAP2, MUL, SWAP1, JUMP, PUSH1 $ fromInteger 2, PUSH1 $ fromInteger 3, PC, PUSH1 10, ADD, PUSH4 $ fromInteger 0, JUMP, STOP ]
+funCallPostPIElim1 = [ JUMPDEST, SWAP2, MUL, SWAP1, JUMP, PUSH1 $ fromInteger 2, PUSH1 $ fromInteger 3, PC, PUSH1 10, ADD, PUSH4 $ fromInteger 0, JUMP, JUMPDEST, STOP ]
 
-funCallPreLinker :: [EvmOpcode]
-funCallPreLinker = [ PUSH1 $ fromInteger 2, PUSH1 $fromInteger 3, FUNCALL "mulRoutine", STOP, FUNSTART "mulRoutine" 2, MUL, FUNRETURN ]
+funCallPreLinker0 :: [EvmOpcode]
+funCallPreLinker0 = [ PUSH1 $ fromInteger 2, PUSH1 $fromInteger 3, FUNCALL "mulRoutine", STOP, FUNSTART "mulRoutine" 2, MUL, FUNRETURN ]
 
-funCallPostLinker :: [EvmOpcode]
-funCallPostLinker = [ PUSH1 $ fromInteger 2, PUSH1 $ fromInteger 3, FUNCALLA 15, STOP, FUNSTARTA 2, MUL, FUNRETURN ]
+funCallPostLinker0 :: [EvmOpcode]
+funCallPostLinker0 = [ PUSH1 $ fromInteger 2, PUSH1 $ fromInteger 3, FUNCALLA 16, STOP, FUNSTARTA 2, MUL, FUNRETURN ]
 
-funCallPostPIElim :: [EvmOpcode]
-funCallPostPIElim = [ PUSH1 $ fromInteger 2, PUSH1 $ fromInteger 3, PC, PUSH1 10, ADD, PUSH4 $ fromInteger 15, JUMP, STOP, JUMPDEST, SWAP2, MUL, SWAP1, JUMP ]
+funCallPostPIElim0 :: [EvmOpcode]
+funCallPostPIElim0 = [ PUSH1 $ fromInteger 2, PUSH1 $ fromInteger 3, PC, PUSH1 10, ADD, PUSH4 $ fromInteger 16, JUMP, JUMPDEST, STOP, JUMPDEST, SWAP2, MUL, SWAP1, JUMP ]
 
 funCallLinker1 :: Spec
 funCallLinker1 = do
-  it "Linker test for function call" $ do
+  it "Linker test for function call 1" $ do
     linker funCallPreLinker1 `shouldBe` funCallPostLinker1
 
 funCallPIElim1 :: Spec
 funCallPIElim1 = do
-  it "Pseudo-instruction elimination test for function call" $ do
-    eliminatePseudoInstructions funCallPostLinker1 `shouldBe` funCallPostPIElim1
+  it "Pseudo-instruction elimination test for function call 1" $ do
+    (eliminatePseudoInstructions . linker) funCallPreLinker1 `shouldBe` funCallPostPIElim1
 
 funcCallMCG1 :: Spec
 funcCallMCG1 = do
-  it "Machine code generation of function call code" $ do
+  it "Machine code generation of function call code 1" $ do
     concatMap ppEvm funCallPostPIElim1 `shouldBe` funCallMC
     where
-      funCallMC = "5b910290566002600358600a0163000000005600"
+      funCallMC = "5b910290566002600358600a016300000000565b00"
 
 funCallLinker0 :: Spec
 funCallLinker0 = do
-  it "Linker test for function call" $ do
-    linker funCallPreLinker `shouldBe` funCallPostLinker
+  it "Linker test for function call 0" $ do
+    linker funCallPreLinker0 `shouldBe` funCallPostLinker0
 
 funCallPIElim0 :: Spec
 funCallPIElim0 = do
-  it "Pseudo-instruction elimination test for function call" $ do
-    eliminatePseudoInstructions funCallPostLinker `shouldBe` funCallPostPIElim
+  it "Pseudo-instruction elimination test for function call 0" $ do
+    (eliminatePseudoInstructions . linker) funCallPreLinker0  `shouldBe` funCallPostPIElim0
 
 funcCallMCG0 :: Spec
 funcCallMCG0 = do
-  it "Machine code generation of function call code" $ do
-    concatMap ppEvm funCallPostPIElim `shouldBe` funCallMC
+  it "Machine code generation of function call code 0" $ do
+    concatMap ppEvm funCallPostPIElim0 `shouldBe` funCallMC
     where
-      funCallMC = "6002600358600a01630000000f56005b91029056"
+      funCallMC = "6002600358600a016300000010565b005b91029056"
