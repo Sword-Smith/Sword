@@ -64,7 +64,7 @@ getOpcodeSize (JUMPTOA _)    = 1 + 5 -- PUSH4 addr.; JUMP
 getOpcodeSize (FUNSTART _ _) = 1 + 1 -- JUMPDEST; SWAPn
 -- PC stores in µ[0] PC before PC opcode, we want to store the address
 -- pointing to the OPCODE after the JUMP opcode. Therefore, we add 10 to byte code address
-getOpcodeSize (FUNCALL _)    = 4 + 6 -- PC; PUSH1 10, ADD, JUMPTO label; = PC; PUSH1, ADD, PUSH4 addr; JUMP; OPCODE -- addr(OPCODE)=µ[0]
+getOpcodeSize (FUNCALL _)    = 4 + 7 -- PC; PUSH1 10, ADD, JUMPTO label; JUMPDEST = PC; PUSH1, ADD, PUSH4 addr; JUMP; JUMPDEST; OPCODE -- addr(OPCODE)=µ[0]
 getOpcodeSize FUNRETURN      = 2 -- SWAP1; JUMP;
 getOpcodeSize _            = 1
 
@@ -99,7 +99,7 @@ eliminatePseudoInstructions :: [EvmOpcode] -> [EvmOpcode]
 eliminatePseudoInstructions (inst:insts) = case inst of
   (JUMPTOA i)  -> (PUSH4 (fromInteger i)):JUMP:eliminatePseudoInstructions(insts)
   (JUMPITOA i) -> (PUSH4 (fromInteger i)):JUMPI:eliminatePseudoInstructions(insts)
-  (FUNCALLA i) -> PC : PUSH1 (fromInteger 10) : ADD : (PUSH4 (fromInteger i)) : JUMP : eliminatePseudoInstructions(insts)
+  (FUNCALLA i) -> PC : PUSH1 (fromInteger 10) : ADD : (PUSH4 (fromInteger i)) : JUMP : JUMPDEST : eliminatePseudoInstructions(insts)
   (FUNSTARTA n) -> JUMPDEST:(getSwap n):eliminatePseudoInstructions(insts)
   FUNRETURN    -> SWAP1:JUMP:eliminatePseudoInstructions(insts)
   inst         -> inst:eliminatePseudoInstructions(insts)
