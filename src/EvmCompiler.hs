@@ -556,28 +556,22 @@ getExecuteTCsHH mes tc transferCounter =
         checkIfTCIsInChosenBranches (_memExpPath tc)
 
     callTransferToTcRecipient =
-      getFunctionCallEvm
-        (_tokenAddress tc)
-        (getFunctionSignature "transfer(address,uint256)")
-        [ Word256 (address2w256 (_to tc))
-        , (RawEvm getTransferAmount) ]
-        0
-        0
-        0x20
-        where
-          getTransferAmount =
-            evalState (compIExp ( _amount tc)) (CompileEnv 0 transferCounter 0x44 "amount_exp")
-            ++ [ PUSH32 $ integer2w256 $ _maxAmount tc
-               , DUP2
-               , DUP2
-               , EVM_GT
-               , JUMPITO $ "use_exp_res" ++ (show transferCounter)
-               , SWAP1
-               , JUMPDESTFROM $ "use_exp_res" ++ (show transferCounter)
-               , POP
-               , DUP1 -- leaves transferred amount on stack for next call to transfer
-               , PUSH1 0x24
-               , MSTORE ]
+      evalState (compIExp ( _amount tc)) (CompileEnv 0 transferCounter 0x00 "amount_exp")
+      ++ [ PUSH32 $ integer2w256 $ _maxAmount tc
+         , DUP2
+         , DUP2
+         , EVM_GT
+         , JUMPITO $ "use_exp_res" ++ (show transferCounter)
+         , SWAP1
+         , JUMPDESTFROM $ "use_exp_res" ++ (show transferCounter)
+         , POP]
+      --, DUP1 -- leaves transferred amount on stack for next call to transfer
+      ++ [ PUSH32 $ address2w256 (_to tc)
+         , PUSH32 $ address2w256 (_tokenAddress tc)
+         , DUP3 ]
+      ++ [ FUNCALL "transfer_subroutine" ]
+      ++ [ ISZERO, JUMPITO "global_throw" ]
+
     checkIfTransferToTcSenderShouldBeMade =
       [JUMPDESTFROM $ "transfer_back_to_from_address" ++ show transferCounter
       , PUSH32 (integer2w256 (_maxAmount tc))
