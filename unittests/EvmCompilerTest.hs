@@ -11,9 +11,12 @@ tests = do
   simpleLinker0
   simplePIElim0
   simpleMCG0
-  funCallLinker
-  funCallPIElim
-  funcCallMCG
+  funCallLinker0
+  funCallPIElim0
+  funcCallMCG0
+  funCallLinker1
+  funCallPIElim1
+  funcCallMCG1
 
 preLinker0 :: [EvmOpcode]
 preLinker0 = [JUMPTO "label0", POP, JUMPDESTFROM "label0"]
@@ -42,6 +45,15 @@ simpleMCG0 = do
   it "simple machine code generation" $ do
     concatMap ppEvm postPseudoInstructionElimination0 `shouldBe` postMachineCodeGeneration0
 
+funCallPreLinker1 :: [EvmOpcode]
+funCallPreLinker1 = [FUNSTART "mulRoutine" 2, MUL, FUNRETURN,  PUSH1 $ fromInteger 2, PUSH1 $fromInteger 3, FUNCALL "mulRoutine", STOP]
+
+funCallPostLinker1 :: [EvmOpcode]
+funCallPostLinker1 = [ FUNSTARTA 2, MUL, FUNRETURN, PUSH1 $ fromInteger 2, PUSH1 $ fromInteger 3, FUNCALLA 0, STOP]
+
+funCallPostPIElim1 :: [EvmOpcode]
+funCallPostPIElim1 = [ JUMPDEST, SWAP2, MUL, SWAP1, JUMP, PUSH1 $ fromInteger 2, PUSH1 $ fromInteger 3, PC, PUSH1 10, ADD, PUSH4 $ fromInteger 0, JUMP, STOP ]
+
 funCallPreLinker :: [EvmOpcode]
 funCallPreLinker = [ PUSH1 $ fromInteger 2, PUSH1 $fromInteger 3, FUNCALL "mulRoutine", STOP, FUNSTART "mulRoutine" 2, MUL, FUNRETURN ]
 
@@ -51,18 +63,35 @@ funCallPostLinker = [ PUSH1 $ fromInteger 2, PUSH1 $ fromInteger 3, FUNCALLA 15,
 funCallPostPIElim :: [EvmOpcode]
 funCallPostPIElim = [ PUSH1 $ fromInteger 2, PUSH1 $ fromInteger 3, PC, PUSH1 10, ADD, PUSH4 $ fromInteger 15, JUMP, STOP, JUMPDEST, SWAP2, MUL, SWAP1, JUMP ]
 
-funCallLinker :: Spec
-funCallLinker = do
+funCallLinker1 :: Spec
+funCallLinker1 = do
+  it "Linker test for function call" $ do
+    linker funCallPreLinker1 `shouldBe` funCallPostLinker1
+
+funCallPIElim1 :: Spec
+funCallPIElim1 = do
+  it "Pseudo-instruction elimination test for function call" $ do
+    eliminatePseudoInstructions funCallPostLinker1 `shouldBe` funCallPostPIElim1
+
+funcCallMCG1 :: Spec
+funcCallMCG1 = do
+  it "Machine code generation of function call code" $ do
+    concatMap ppEvm funCallPostPIElim1 `shouldBe` funCallMC
+    where
+      funCallMC = "5b910290566002600358600a0163000000005600"
+
+funCallLinker0 :: Spec
+funCallLinker0 = do
   it "Linker test for function call" $ do
     linker funCallPreLinker `shouldBe` funCallPostLinker
 
-funCallPIElim :: Spec
-funCallPIElim = do
+funCallPIElim0 :: Spec
+funCallPIElim0 = do
   it "Pseudo-instruction elimination test for function call" $ do
     eliminatePseudoInstructions funCallPostLinker `shouldBe` funCallPostPIElim
 
-funcCallMCG :: Spec
-funcCallMCG = do
+funcCallMCG0 :: Spec
+funcCallMCG0 = do
   it "Machine code generation of function call code" $ do
     concatMap ppEvm funCallPostPIElim `shouldBe` funCallMC
     where
