@@ -135,7 +135,8 @@ evmCompile :: IntermediateContract -> [EvmOpcode]
 evmCompile (IntermediateContract tcs iMemExps activateMap _marginRefundMap) =
   let
     constructor      = getConstructor tcs
-    codecopy         = getCodeCopy constructor (jumpTable ++ checkIfActivated ++ execute ++ activate)
+    body             = jumpTable ++ subroutines ++ checkIfActivated ++ execute ++ activate
+    codecopy         = getCodeCopy constructor body
     jumpTable        = getJumpTable
     subroutines      = getSubroutines -- TODO: If we want to do dynamic inclusion of obs getter, then specify here.
     checkIfActivated = getActivateCheck
@@ -143,7 +144,7 @@ evmCompile (IntermediateContract tcs iMemExps activateMap _marginRefundMap) =
     activate         = getActivate activateMap
   in
     -- The addresses of the constructor run are different from runs when DC is on BC
-    linker (constructor ++ codecopy) ++ linker (jumpTable ++ subroutines ++ checkIfActivated ++ execute ++ activate)
+    linker (constructor ++ codecopy) ++ linker body
 
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
