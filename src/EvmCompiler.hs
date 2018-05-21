@@ -222,6 +222,7 @@ getSubroutines = getTransferSubroutine
       ++ pushGasAmount
       ++ callInstruction
       ++ checkExitCode
+      ++ removeExtraArg
       ++ getReturnValueFromMemory
       ++ funEnd
       where
@@ -249,6 +250,7 @@ getSubroutines = getTransferSubroutine
         checkExitCode     =
          [ ISZERO
          , JUMPITO "global_throw" ]
+        removeExtraArg           = [ POP ]
         getReturnValueFromMemory =
           [ PUSH1 0x0
           , MLOAD ]
