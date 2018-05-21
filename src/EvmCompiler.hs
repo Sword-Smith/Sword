@@ -54,18 +54,18 @@ getSizeOfOpcodeList xs = foldl (+) 0 (map getOpcodeSize xs)
 -- elimination of pseudo instructions, so it must be able to
 -- also handle the pseudo instructions before and after linking
 getOpcodeSize :: EvmOpcode -> Integer
-getOpcodeSize (PUSH1  _)   = 2
-getOpcodeSize (PUSH4 _)    = 5
-getOpcodeSize (PUSH32 _)   = 33
-getOpcodeSize (JUMPITO _)  = 1 + 5 -- PUSH4 addr.; JUMPI
-getOpcodeSize (JUMPTO _)   = 1 + 5 -- PUSH4 addr.; JUMP
-getOpcodeSize (JUMPITOA _) = 1 + 5 -- PUSH4 addr.; JUMP
-getOpcodeSize (JUMPTOA _)  = 1 + 5 -- PUSH4 addr.; JUMP
+getOpcodeSize (PUSH1  _)     = 2
+getOpcodeSize (PUSH4 _)      = 5
+getOpcodeSize (PUSH32 _)     = 33
+getOpcodeSize (JUMPITO _)    = 1 + 5 -- PUSH4 addr.; JUMPI
+getOpcodeSize (JUMPTO _)     = 1 + 5 -- PUSH4 addr.; JUMP
+getOpcodeSize (JUMPITOA _)   = 1 + 5 -- PUSH4 addr.; JUMP
+getOpcodeSize (JUMPTOA _)    = 1 + 5 -- PUSH4 addr.; JUMP
 getOpcodeSize (FUNSTART _ _) = 1 + 1 -- JUMPDEST; SWAPn
 -- PC stores in µ[0] PC before PC opcode, we want to store the address
 -- pointing to the OPCODE after the JUMP opcode. Therefore, we add 10 to byte code address
-getOpcodeSize (FUNCALL _)  = 4 + 6 -- PC; PUSH1 10, ADD, JUMPTO label; = PC; PUSH1, ADD, PUSH4 addr; JUMP; OPCODE -- addr(OPCODE)=µ[0]
-getOpcodeSize FUNRETURN    = 2 -- SWAP1; JUMP;
+getOpcodeSize (FUNCALL _)    = 4 + 6 -- PC; PUSH1 10, ADD, JUMPTO label; = PC; PUSH1, ADD, PUSH4 addr; JUMP; OPCODE -- addr(OPCODE)=µ[0]
+getOpcodeSize FUNRETURN      = 2 -- SWAP1; JUMP;
 getOpcodeSize _            = 1
 
 -- Called as part of linker so must be able to handle pre-linker instructions.
