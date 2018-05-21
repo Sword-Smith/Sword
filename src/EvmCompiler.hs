@@ -88,7 +88,7 @@ linker insts =
     linkerH :: Integer -> [EvmOpcode] -> [EvmOpcode] -> [EvmOpcode]
     linkerH inst_count insts_replaced (inst:insts) = case inst of
       JUMPDESTFROM label -> linkerH (inst_count + 1) (replaceLabel label inst_count insts_replaced) insts
-      FUNSTART label _   -> linkerH (inst_count + 1) (replaceLabel label inst_count insts_replaced) insts
+      FUNSTART label _   -> linkerH (inst_count + 2) (replaceLabel label inst_count insts_replaced) insts
       _                  -> linkerH (inst_count + getOpcodeSize(inst)) insts_replaced insts
     linkerH _ insts_replaced [] = insts_replaced
   in
