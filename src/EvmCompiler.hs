@@ -137,12 +137,13 @@ evmCompile (IntermediateContract tcs iMemExps activateMap _marginRefundMap) =
     constructor      = getConstructor tcs
     codecopy         = getCodeCopy constructor (jumpTable ++ checkIfActivated ++ execute ++ activate)
     jumpTable        = getJumpTable
+    subroutines      = getSubroutines -- TODO: If we want to do dynamic inclusion of obs getter, then specify here.
     checkIfActivated = getActivateCheck
     execute          = getExecute iMemExps tcs -- also contains selfdestruct when contract is fully executed
     activate         = getActivate activateMap
   in
     -- The addresses of the constructor run are different from runs when DC is on BC
-    linker (constructor ++ codecopy) ++ linker (jumpTable ++ checkIfActivated ++ execute ++ activate)
+    linker (constructor ++ codecopy) ++ linker (jumpTable ++ subroutines ++ checkIfActivated ++ execute ++ activate)
 
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
@@ -204,6 +205,54 @@ getJumpTable =
                        THROW]
   in
     (getCheckNoValue "Contract_Header") ++ switchStatement
+
+getSubroutines :: [EvmOpcode]
+getSubroutines = getTransferSubroutine
+  where
+    getTransferSubroutine =
+      funStart
+      ++ storeFunctionSignature
+      ++ storeArguments
+      ++ pushOutSize
+      ++ pushOutOffset
+      ++ pushInSize
+      ++ pushInOffset
+      ++ pushValue
+      ++ pushCalleeAddress
+      ++ pushGasAmount
+      ++ callInstruction
+      ++ checkExitCode
+      ++ getReturnValueFromMemory
+      ++ funEnd
+      where
+        funStart               = [ FUNSTART "transfer_subroutine" 3 ]
+        storeFunctionSignature =
+          [ PUSH32 (getFunctionSignature "transfer(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+          , PUSH1 0 -- TODO: We always use 0 here, since we don't use memory other places. Use monad to keep track of memory usage.
+          , MSTORE ]
+        storeArguments =
+          [ PUSH1 0x04
+          , MSTORE
+          , PUSH1 0x24
+          , MSTORE ]
+        pushOutSize       = [ PUSH1 0x20 ]
+        pushOutOffset     = [ PUSH1 0x0 ]
+        pushInSize        = [ PUSH1 0x44 ]
+        pushInOffset      = [ PUSH1 0x0 ]
+        pushValue         = [ PUSH1 0x0 ]
+        pushCalleeAddress = [ DUP6 ]
+        pushGasAmount     =
+          [ PUSH1 0x32
+          , GAS
+          , SUB ]
+        callInstruction   = [ CALL ]
+        checkExitCode     =
+         [ ISZERO
+         , JUMPITO "global_throw" ]
+        getReturnValueFromMemory =
+          [ PUSH1 0x0
+          , MLOAD ]
+        funEnd = [FUNRETURN]
 
 -- When calling execute(), PC must be set here
 -- to check if the DC is activated

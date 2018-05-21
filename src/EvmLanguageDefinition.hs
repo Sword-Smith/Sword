@@ -83,6 +83,9 @@ data EvmOpcode = STOP
                | DUP1
                | DUP2
                | DUP3
+               | DUP4
+               | DUP5
+               | DUP6
                | SWAP1
                | SWAP2
                | SWAP3
