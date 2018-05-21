@@ -61,9 +61,11 @@ getOpcodeSize (JUMPITO _)  = 1 + 5 -- PUSH4 addr.; JUMPI
 getOpcodeSize (JUMPTO _)   = 1 + 5 -- PUSH4 addr.; JUMP
 getOpcodeSize (JUMPITOA _) = 1 + 5 -- PUSH4 addr.; JUMP
 getOpcodeSize (JUMPTOA _)  = 1 + 5 -- PUSH4 addr.; JUMP
+getOpcodeSize (FUNSTART _ _) = 1 + 1 -- JUMPDEST; SWAPn
 -- PC stores in µ[0] PC before PC opcode, we want to store the address
 -- pointing to the OPCODE after the JUMP opcode. Therefore, we add 10 to byte code address
 getOpcodeSize (FUNCALL _)  = 4 + 6 -- PC; PUSH1 10, ADD, JUMPTO label; = PC; PUSH1, ADD, PUSH4 addr; JUMP; OPCODE -- addr(OPCODE)=µ[0]
+getOpcodeSize FUNRETURN    = 2 -- SWAP1; JUMP;
 getOpcodeSize _            = 1
 
 -- Called as part of linker so must be able to handle pre-linker instructions.
@@ -74,7 +76,7 @@ replaceLabel label int insts =
       (JUMPTO  l)      -> if l == label then JUMPTOA  i else JUMPTO  l
       (JUMPITO l)      -> if l == label then JUMPITOA i else JUMPITO l
       (JUMPDESTFROM l) -> if l == label then JUMPDEST else JUMPDESTFROM l
-      (FUNSTART l)     -> if l == label then JUMPDEST else FUNSTART l
+      (FUNSTART l n)   -> if l == label then FUNSTARTA n else FUNSTART l n
       (FUNCALL l)      -> if l == label then FUNCALLA i else FUNCALL l
       otherInst -> otherInst
   in
@@ -86,7 +88,7 @@ linker insts =
     linkerH :: Integer -> [EvmOpcode] -> [EvmOpcode] -> [EvmOpcode]
     linkerH inst_count insts_replaced (inst:insts) = case inst of
       JUMPDESTFROM label -> linkerH (inst_count + 1) (replaceLabel label inst_count insts_replaced) insts
-      FUNSTART label     -> linkerH (inst_count + 1) (replaceLabel label inst_count insts_replaced) insts
+      FUNSTART label _   -> linkerH (inst_count + 1) (replaceLabel label inst_count insts_replaced) insts
       _                  -> linkerH (inst_count + getOpcodeSize(inst)) insts_replaced insts
     linkerH _ insts_replaced [] = insts_replaced
   in
@@ -98,8 +100,17 @@ eliminatePseudoInstructions (inst:insts) = case inst of
   (JUMPTOA i)  -> (PUSH4 (fromInteger i)):JUMP:eliminatePseudoInstructions(insts)
   (JUMPITOA i) -> (PUSH4 (fromInteger i)):JUMPI:eliminatePseudoInstructions(insts)
   (FUNCALLA i) -> PC : PUSH1 (fromInteger 10) : ADD : (PUSH4 (fromInteger i)) : JUMP : eliminatePseudoInstructions(insts)
-  FUNRETURN    -> JUMP:eliminatePseudoInstructions(insts)
+  (FUNSTARTA n) -> JUMPDEST:(getSwap n):eliminatePseudoInstructions(insts)
+  FUNRETURN    -> SWAP1:JUMP:eliminatePseudoInstructions(insts)
   inst         -> inst:eliminatePseudoInstructions(insts)
+  where
+      getSwap :: Integer -> EvmOpcode
+      getSwap n =
+        case n of
+          2 -> SWAP2
+          3 -> SWAP3
+          _ -> undefined -- Only 2 or 3 args is accepted atm
+
 eliminatePseudoInstructions [] = []
 
 getFunctionSignature :: String -> Word32

@@ -61,7 +61,10 @@ data EvmOpcode = STOP
                | SSTORE
                | JUMP
                | JUMPI
-               | FUNSTART Label -- pre-linker pseudo instruction: Same as JUMPDESTFROM Label.
+               -- The integer in FUNSTART and FUNSTARTA represents the number of args
+               -- that this function takes.
+               | FUNSTART Label Integer -- pre-linker pseudo instruction: JUMPDEST Label + SWAP logic
+               | FUNSTARTA Integer -- post-linker pseudo instruction: JUMPDEST + SWAP logic
                | FUNCALL Label -- pre-linker pseudo instruction: PC, JUMPTO Label (store PC on stack, jump)
                | FUNCALLA Integer -- post-linker pseudo instruction: PC, JUMPTOA i
                | FUNRETURN -- post-linker pseudo instruction: a synonyme for JUMP;

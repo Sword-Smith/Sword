@@ -43,13 +43,13 @@ simpleMCG0 = do
     concatMap ppEvm postPseudoInstructionElimination0 `shouldBe` postMachineCodeGeneration0
 
 funCallPreLinker :: [EvmOpcode]
-funCallPreLinker = [PUSH1 $ fromInteger 2, PUSH1 $fromInteger 3, FUNCALL "mulRoutine", STOP, FUNSTART "mulRoutine", MUL, FUNRETURN ]
+funCallPreLinker = [ PUSH1 $ fromInteger 2, PUSH1 $fromInteger 3, FUNCALL "mulRoutine", STOP, FUNSTART "mulRoutine" 2, MUL, FUNRETURN ]
 
 funCallPostLinker :: [EvmOpcode]
-funCallPostLinker = [PUSH1 $ fromInteger 2, PUSH1 $ fromInteger 3, FUNCALLA 15, STOP, JUMPDEST, MUL, FUNRETURN]
+funCallPostLinker = [ PUSH1 $ fromInteger 2, PUSH1 $ fromInteger 3, FUNCALLA 15, STOP, FUNSTARTA 2, MUL, FUNRETURN ]
 
 funCallPostPIElim :: [EvmOpcode]
-funCallPostPIElim = [PUSH1 $ fromInteger 2, PUSH1 $ fromInteger 3, PC, PUSH1 10, ADD, PUSH4 $ fromInteger 15, JUMP, STOP, JUMPDEST, MUL, JUMP]
+funCallPostPIElim = [ PUSH1 $ fromInteger 2, PUSH1 $ fromInteger 3, PC, PUSH1 10, ADD, PUSH4 $ fromInteger 15, JUMP, STOP, JUMPDEST, SWAP2, MUL, SWAP1, JUMP ]
 
 funCallLinker :: Spec
 funCallLinker = do
@@ -66,4 +66,4 @@ funcCallMCG = do
   it "Machine code generation of function call code" $ do
     concatMap ppEvm funCallPostPIElim `shouldBe` funCallMC
     where
-      funCallMC = "6002600358600a01630000000f56005b0256"
+      funCallMC = "6002600358600a01630000000f56005b91029056"
