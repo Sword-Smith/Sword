@@ -66,7 +66,7 @@ getOpcodeSize (FUNSTART _ _) = 1 + 1 -- JUMPDEST; SWAPn
 -- pointing to the OPCODE after the JUMP opcode. Therefore, we add 10 to byte code address
 getOpcodeSize (FUNCALL _)    = 4 + 7 -- PC; PUSH1 10, ADD, JUMPTO label; JUMPDEST = PC; PUSH1, ADD, PUSH4 addr; JUMP; JUMPDEST; OPCODE -- addr(OPCODE)=µ[0]
 getOpcodeSize FUNRETURN      = 2 -- SWAP1; JUMP;
-getOpcodeSize _            = 1
+getOpcodeSize _              = 1
 
 -- Called as part of linker so must be able to handle pre-linker instructions.
 replaceLabel :: Label -> Integer -> [EvmOpcode] -> [EvmOpcode]
