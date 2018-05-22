@@ -17,7 +17,8 @@ tests = do
   funCallLinker1
   funCallPIElim1
   funcCallMCG1
-  funcCallLinkerCount
+  funcCallLinkerCountFunstartSize
+  funcCallLinkerCountJumpdestSize
 
 preLinker0 :: [EvmOpcode]
 preLinker0 = [JUMPTO "label0", POP, JUMPDESTFROM "label0"]
@@ -98,10 +99,18 @@ funcCallMCG0 = do
     where
       funCallMC = "6002600358600a016300000010565b005b91029056"
 
-linkerCountTest :: [EvmOpcode]
-linkerCountTest = [PUSH1 2,PUSH1 3,FUNCALLA 16,STOP,FUNSTARTA 2,MUL,FUNRETURN,JUMPTOA 28,POP,JUMPDEST]
+linkerCountTestFunstartSize :: [EvmOpcode]
+linkerCountTestFunstartSize = [PUSH1 2,PUSH1 3,FUNCALLA 16,STOP,FUNSTARTA 2,MUL,FUNRETURN,JUMPTOA 28,POP,JUMPDEST]
 
-funcCallLinkerCount :: Spec
-funcCallLinkerCount = do
+funcCallLinkerCountFunstartSize :: Spec
+funcCallLinkerCountFunstartSize = do
   it "Linker counter test" $ do
-    linker (funCallPreLinker0 ++ preLinker0) `shouldBe` linkerCountTest
+    linker (funCallPreLinker0 ++ preLinker0) `shouldBe` linkerCountTestFunstartSize
+
+linkerCountTestJumpdestSize :: [EvmOpcode]
+linkerCountTestJumpdestSize = [JUMPTOA 7,POP,JUMPDEST,PUSH1 2,PUSH1 3,FUNCALLA 24,STOP,FUNSTARTA 2,MUL,FUNRETURN]
+
+funcCallLinkerCountJumpdestSize :: Spec
+funcCallLinkerCountJumpdestSize = do
+  it "Linker counter test" $ do
+    linker (preLinker0 ++ funCallPreLinker0) `shouldBe` linkerCountTestJumpdestSize
