@@ -208,15 +208,16 @@ getJumpTable =
     (getCheckNoValue "Contract_Header") ++ switchStatement
 
 getSubroutines :: [EvmOpcode]
-getSubroutines = getTransferSubroutine
+getSubroutines = getTransferSubroutine ++ getTransferFromSubroutine
   where
-    getTransferSubroutine =
-      funStart
-      ++ storeFunctionSignature
-      ++ storeArguments
+
+    getTransferFromSubroutine =
+      funStartTF
+      ++ storeFunctionSignature TransferFrom
+      ++ storeArgumentsTF -- transferFrom(_from, _to, _amount) = transferFrom(party, self, amount)
       ++ pushOutSize
       ++ pushOutOffset
-      ++ pushInSize
+      ++ pushInSizeTF
       ++ pushInOffset
       ++ pushValue
       ++ pushCalleeAddress
@@ -226,36 +227,70 @@ getSubroutines = getTransferSubroutine
       ++ removeExtraArg
       ++ getReturnValueFromMemory
       ++ funEnd
-      where
-        funStart               = [ FUNSTART "transfer_subroutine" 3 ]
-        storeFunctionSignature =
-          [ PUSH32 (getFunctionSignature "transfer(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-          , PUSH1 0 -- TODO: We always use 0 here, since we don't use memory other places. Use monad to keep track of memory usage.
-          , MSTORE ]
-        storeArguments =
-          [ PUSH1 0x04
-          , MSTORE
-          , PUSH1 0x24
-          , MSTORE ]
-        pushOutSize       = [ PUSH1 0x20 ]
-        pushOutOffset     = [ PUSH1 0x0 ]
-        pushInSize        = [ PUSH1 0x44 ]
-        pushInOffset      = [ PUSH1 0x0 ]
-        pushValue         = [ PUSH1 0x0 ]
-        pushCalleeAddress = [ DUP6 ]
-        pushGasAmount     =
-          [ PUSH1 0x32
-          , GAS
-          , SUB ]
-        callInstruction   = [ CALL ]
-        checkExitCode     =
-         [ ISZERO
-         , JUMPITO "global_throw" ]
-        removeExtraArg           = [ POP ]
-        getReturnValueFromMemory =
-          [ PUSH1 0x0
-          , MLOAD ]
-        funEnd = [FUNRETURN]
+
+    getTransferSubroutine =
+      funStartT
+      ++ storeFunctionSignature Transfer
+      ++ storeArgumentsT -- transfer(_to, _amount) = transfer(party, amount)
+      ++ pushOutSize
+      ++ pushOutOffset
+      ++ pushInSizeT
+      ++ pushInOffset
+      ++ pushValue
+      ++ pushCalleeAddress
+      ++ pushGasAmount
+      ++ callInstruction
+      ++ checkExitCode
+      ++ removeExtraArg
+      ++ getReturnValueFromMemory
+      ++ funEnd
+
+    funStartT               = [ FUNSTART "transfer_subroutine" 3 ]
+    funStartTF              = [ FUNSTART "transferFrom_subroutine" 3 ]
+    storeFunctionSignature :: FunctionSignature -> [EvmOpcode]
+    storeFunctionSignature Transfer  =
+      [ PUSH32 (getFunctionSignature "transfer(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+      , PUSH1 0 -- TODO: We always use 0 here, since we don't use memory other places. Use monad to keep track of memory usage.
+      , MSTORE ]
+    storeFunctionSignature TransferFrom  =
+      [ PUSH32 (getFunctionSignature "transferFrom(address,address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+      , PUSH1 0
+      , MSTORE ]
+    storeArgumentsT =
+      [ PUSH1 0x04
+      , MSTORE -- store recipient (_to) in mem
+      , PUSH1 0x24
+      , MSTORE -- store amount in mem
+      ]
+    storeArgumentsTF =
+      [ PUSH1 0x04
+      , MSTORE -- store sender (_from) in mem
+      , ADDRESS
+      , PUSH1 0x24
+      , MSTORE -- store own address (_to) in mem (recipient of transferFrom transaction)
+      , PUSH1 0x44
+      , MSTORE -- store amount in mem
+      ]
+    pushOutSize        = [ PUSH1 0x20 ]
+    pushOutOffset      = [ PUSH1 0x0 ]
+    pushInSizeTF       = [ PUSH1 0x64 ]
+    pushInSizeT        = [ PUSH1 0x44 ]
+    pushInOffset       = [ PUSH1 0x0 ]
+    pushValue          = [ PUSH1 0x0 ]
+    pushCalleeAddress  = [ DUP6 ]
+    pushGasAmount      =
+      [ PUSH1 0x32
+      , GAS
+      , SUB ]
+    callInstruction    = [ CALL ]
+    checkExitCode      =
+      [ ISZERO
+      , JUMPITO "global_throw" ]
+    removeExtraArg           = [ POP ]
+    getReturnValueFromMemory =
+      [ PUSH1 0x0
+      , MLOAD ]
+    funEnd = [FUNRETURN]
 
 -- When calling execute(), PC must be set here
 -- to check if the DC is activated
@@ -627,18 +662,15 @@ getActivate am = [JUMPDESTFROM "activate_method"]
 
 activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
 activateMapElementToTransferFromCall ((tokenAddress, fromAddress), amount) =
-  functionCallEvm ++ moveResToStack ++ throwIfReturnFalse
+  pushArgsToStack ++ subroutineCall ++ throwIfReturnFalse
   where
-    functionCallEvm =
-      getFunctionCallEvm
-        tokenAddress
-        (getFunctionSignature "transferFrom(address,address,uint256)")
-        [ Word256 (address2w256 fromAddress), OwnAddress, Word256 (integer2w256 amount) ]
-        0 -- inMemOffset
-        0 -- outMemOffset
-        32 -- outSize
-    moveResToStack = [ PUSH1 $ fromInteger 0, MLOAD ]
-    throwIfReturnFalse = [ISZERO, JUMPITO "global_throw" ]
+    pushArgsToStack =
+      [ PUSH32 $ address2w256 $ fromAddress
+      , PUSH32 $ address2w256 $ tokenAddress
+      , PUSH32 $ integer2w256 $ amount ]
+    subroutineCall =
+      [ FUNCALL "transferFrom_subroutine" ]
+    throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
 
 getMemExpById :: MemExpId -> [IMemExp] -> IMemExp
 getMemExpById memExpId [] = error $ "Could not find IMemExp with ID " ++ show memExpId

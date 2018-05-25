@@ -8,6 +8,10 @@ data CallArgument = Word256 Word256
                   | OwnAddress
                   | RawEvm [EvmOpcode]
 
+data FunctionSignature = Transfer
+                       | TransferFrom
+                       | Get
+
 type Label = String
 
 data EvmOpcode = STOP
