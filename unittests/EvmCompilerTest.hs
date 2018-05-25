@@ -19,6 +19,7 @@ tests = do
   funcCallMCG1
   funcCallLinkerCountFunstartSize
   funcCallLinkerCountJumpdestSize
+  funCallWithTwoArguments
 
 preLinker0 :: [EvmOpcode]
 preLinker0 = [JUMPTO "label0", POP, JUMPDESTFROM "label0"]
@@ -114,3 +115,13 @@ funcCallLinkerCountJumpdestSize :: Spec
 funcCallLinkerCountJumpdestSize = do
   it "Linker counter test" $ do
     linker (preLinker0 ++ funCallPreLinker0) `shouldBe` linkerCountTestJumpdestSize
+
+evmForFuncallWithTwoArgs = [PUSH1 4, PUSH1 3, FUNCALL "addRoutine", STOP, FUNSTART "addRoutine" 2, MUL, FUNRETURN]
+
+--
+linkedFuncallWithTwoArgs = [PUSH1 4,PUSH1 3,PC,PUSH1 10,ADD,PUSH4 16,JUMP,JUMPDEST,STOP,JUMPDEST,SWAP2,MUL,SWAP1,JUMP]
+
+funCallWithTwoArguments :: Spec
+funCallWithTwoArguments = do
+  it "Function call with two arguments" $ do
+    (eliminatePseudoInstructions . linker) evmForFuncallWithTwoArgs `shouldBe` linkedFuncallWithTwoArgs
