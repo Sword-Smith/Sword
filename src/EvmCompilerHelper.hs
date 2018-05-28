@@ -177,3 +177,9 @@ ppEvm instruction = case instruction of
     DELEGATECALL -> "f4"
     SELFDESTRUCT -> "ff"
     THROW        -> "fe"
+    FUNSTART _ _ -> undefined
+    FUNSTARTA _  -> undefined
+    FUNCALL _    -> undefined
+    FUNRETURN    -> undefined
+    JUMPTO _     -> undefined
+    JUMPITO _    -> undefined

@@ -309,57 +309,80 @@ getExecute mes tcs = concatMap getExecuteIMemExp mes ++ getExecuteTCs mes tcs
 -- This sets the relevant bits in the memory expression word in storage
 -- Here the IMemExp should be evaluated. But only iff it is NOT true atm.
 -- And also only iff current time is less than time in the IMemExp
+
+-- The new plan is to use two bits to set the value of the memExp:
+-- one if the memExp is evaluated to true, and one for false:
+-- The empty value 00 would then indicate that the value of this
+-- memExp has not yet been determined. The value 11 would be an invalid
+-- value, 01 would be false, and 10 true.
 getExecuteIMemExp :: IMemExp -> [EvmOpcode]
 getExecuteIMemExp (IMemExp beginTime endTime count iExp) =
   let
     checkIfExpShouldBeEvaluated =
       let
-        checkIfMemExpIsTrue  = [ PUSH4 $ getStorageAddress MemoryExpressionRefs,
-                                 SLOAD,
-                                 PUSH1 $ fromInteger count,
-                                 PUSH1 0x2,
-                                 EXP,
-                                 AND,
-                                 JUMPITO $ "memExp_end" ++ show count ]
+        -- It should be considered which of the next three codeblocks
+        -- it is cheaper to put first. Both read from storage so it might
+        -- be irrelevant.
 
-        checkIfTimeHasStarted = [ PUSH4 $ getStorageAddress CreationTimestamp
-                                , SLOAD
-                                , TIMESTAMP
-                                , SUB
-                                , PUSH32 $ integer2w256 beginTime
-                                , EVM_GT
-                                , JUMPITO $ "memExp_end" ++ show count ]
+        checkIfMemExpIsTrueOrFalse  =
+          [ PUSH4 $ getStorageAddress MemoryExpressionRefs
+          , SLOAD
+          , PUSH32 $ integer2w256 $ 0x3 * 2 ^ (2 * count) -- bitmask
+          , AND
+          , JUMPITO $ "memExp_end" ++ show count ]
 
-        checkIfTimeHasPassed = [ PUSH4 $ getStorageAddress CreationTimestamp,
-                                 SLOAD,
-                                 TIMESTAMP,
-                                 SUB,
-                                 PUSH32 $ integer2w256 endTime,
-                                 EVM_LT,
-                                 -- If contract time is less than elapsed time, don't evaluate,
-                                 -- jump to end of memory expression evaluation.
-                                 JUMPITO $ "memExp_end" ++ show count ]
+        -- TODO: The same value is read from storage twice. Use DUP instead?
+        checkIfTimeHasStarted =
+          [ PUSH4 $ getStorageAddress CreationTimestamp
+          , SLOAD
+          , TIMESTAMP
+          , SUB
+          , PUSH32 $ integer2w256 beginTime
+          , EVM_GT
+          , JUMPITO $ "memExp_end" ++ show count ]
 
-      in checkIfMemExpIsTrue ++ checkIfTimeHasStarted ++ checkIfTimeHasPassed
+        -- If the memory expression is neither true nor false
+        -- and the time has run out, its value is set to false.
+        checkIfTimeHasPassed =
+          [ PUSH4 $ getStorageAddress CreationTimestamp
+          , SLOAD
+          , TIMESTAMP
+          , SUB
+          , PUSH32 $ integer2w256 endTime
+          , EVM_GT
+          , JUMPITO $ "memExp_evaluate" ++ show count ]
 
-    evaulateExpression = evalState (compIExp iExp) (CompileEnv 0 count 0x0 "mem_exp")
-    checkEvalResult    = [ ISZERO,
-                           JUMPITO $ "memExp_end" ++ show count ]
-    updateMemExpWord   = [PUSH4 $ getStorageAddress MemoryExpressionRefs,
-                          SLOAD,
-                          PUSH1 $ fromInteger count,
-                          PUSH1 0x2,
-                          EXP,
-                          XOR,
-                          PUSH4 $ getStorageAddress MemoryExpressionRefs,
-                          SSTORE ]
+        setToFalse =
+          [ PUSH4 $ getStorageAddress MemoryExpressionRefs
+          , SLOAD
+          , PUSH32 $ integer2w256 $ 2 ^ (2 * count) -- bitmask
+          , XOR
+          , PUSH4 $ getStorageAddress MemoryExpressionRefs
+          , SSTORE
+          , JUMPTO $ "memExp_end" ++ show count ]
+
+      in checkIfMemExpIsTrueOrFalse ++ checkIfTimeHasStarted ++ checkIfTimeHasPassed ++ setToFalse
+
+    jumpDestEvaluateExp = [ JUMPDESTFROM $ "memExp_evaluate" ++ show count ]
+    evaulateExpression  = evalState (compIExp iExp) (CompileEnv 0 count 0x0 "mem_exp")
+
+     -- eval to false but time not run out: don't set memdibit
+    checkEvalResult     = [ ISZERO,
+                            JUMPITO $ "memExp_end" ++ show count ]
+
+    setToTrue           = [ PUSH4 $ getStorageAddress MemoryExpressionRefs
+                          , SLOAD
+                          , PUSH32 $ integer2w256 $ 2 ^ (2 * count + 1) -- bitmask
+                          , XOR
+                          , PUSH4 $ getStorageAddress MemoryExpressionRefs
+                          , SSTORE ]
   in
     checkIfExpShouldBeEvaluated ++
+    jumpDestEvaluateExp ++
     evaulateExpression ++
     checkEvalResult ++
-    updateMemExpWord ++
+    setToTrue ++
     [JUMPDESTFROM $ "memExp_end" ++ show count]
-
 
 -- Returns the code for executing all tcalls that function gets
 getExecuteTCs :: [IMemExp] -> [TransferCall] -> [EvmOpcode]
@@ -485,18 +508,14 @@ getExecuteTCsHH mes tc transferCounter =
   let
     checkIfCallShouldBeMade =
       let
-        -- here we probably need to hardcode the time that a contract should be executed.
-        -- DEVNOTE: That needs to be changed if time should be an expression
         checkIfTimeHasPassed = [ PUSH4 $ getStorageAddress CreationTimestamp,
                                  SLOAD,
                                  TIMESTAMP,
                                  SUB,
-                                 -- This could also be read from storage
                                  PUSH32 $ integer2w256 $ _delay tc,
                                  EVM_LT,
                                  ISZERO,
-                                 JUMPITO $ "method_end" ++ (show (transferCounter))
-                               ]
+                                 JUMPITO $ "method_end" ++ (show (transferCounter)) ]
         -- Skip tcall if method has been executed already
         -- This only works for less than 2^8 transfer calls
         checkIfTCHasBeenExecuted = [ PUSH4 $ getStorageAddress Executed,
@@ -507,88 +526,38 @@ getExecuteTCsHH mes tc transferCounter =
                                      AND,
                                      ISZERO,
                                      JUMPITO $ "method_end" ++ (show (transferCounter)) ]
-        checkIfTCIsInChosenBranches memExpPath =
-          let
-            -- A transferCall contains a list of IMemExpRefs
-            -- Here, the value of the IMemExps are checked. The values
-            -- are set by the getExecuteIMemExps code.
-            -- In the following membit == 1 iff expression has evaluated
-            -- to true.
-            -- "PASS" means that this check evaluates to true
-            -- What happens here is that for each IMemExpRef,
-            -- the following C-like code is run:
-            -- if (memBit == 1){
-            --   if (branch){
-            --     JUMPTO "PASS"
-            --   } else {
-            --     JUMPTO TRANSFER_BACK_TO_FROM_ADDRESS
-            --   }
-            -- } else { // i.e., memBit == 0
-            --   if (time_has_passed){
-            --     if (branch){
-            --       JUMPTO TRANSFER_BACK_TO_FROM_ADDRESS
-            --     } else {
-            --       JUMPTO "PASS"
-            --     }
-            --   } else {
-            --     JUMPTO "SKIP" // don't execute and don't set executed bit to zero
-            --   }
-            -- }
-            -- JUMPDESTFROM "PASS"
-            checkIfTCIsInChosenBranch (memExpId, branch) =
+
+            -- This code can be represented with the following C-like code:
+            -- if (memdibit == 00b) { GOTO YIELD } // Don't execute and don't set executed bit to zero.
+            -- if (memdibit == 10b && !branch || memdibit == 01b && branch ) { GOTO SKIP } // TC should not execute. Update executed bit
+            -- if (memdibit == 10b && branch || memdibit == 01b && !branch ) { GOTO PASS } // Check next memExp. If all PASS, then execute.
+            -- TODO: the three above code blocks should be placed in an order which optimizes the gas cost over some ensemble of contracts
+            -- Obviously, 3! possible orders exist.
+        checkIfTcIsInActiveBranches memExpPath = concatMap checkIfTcIsInActiveBranch memExpPath
+          where
+            checkIfTcIsInActiveBranch (memExpId, branch) =
               let
-                checkIfMemExpIsSet =
-                  [PUSH4 $ getStorageAddress MemoryExpressionRefs,
-                   SLOAD,
-                   PUSH1 $ fromInteger memExpId,
-                   PUSH1 0x2,
-                   EXP,
-                   AND,
-                   ISZERO,
-                   -- jump to else_branch if membit == 0
-                   JUMPITO $ "outer_else_branch_" ++ show memExpId ++ "_" ++ show transferCounter]
-
-                checkIfBranchIsTrue0 =
-                  if branch then
-                    []
-                  else
-                    -- push 0x0 to tell transfer that no amount has been sent to recipient
-                    [PUSH1 0x0, JUMPTO $ "transfer_back_to_from_address" ++ show transferCounter]
-
-                passThisCheck =
-                  [JUMPTO $ "pass_this_memExp_check" ++ show memExpId ++ "_" ++ show transferCounter]
-                jdOuterElse =
-                  [JUMPDESTFROM $ "outer_else_branch_" ++ show memExpId ++ "_" ++ show transferCounter]
-                checkIfMemTimeHasPassed = [ PUSH4 $ getStorageAddress CreationTimestamp
-                                          , SLOAD
-                                          , TIMESTAMP
-                                          , SUB
-                                          , PUSH32 $ integer2w256 (_IMemExpEnd (getMemExpById memExpId mes))
-                                          , EVM_GT
-                                            -- If time > elapsed time, skip the call, don't flip execute bit
-                                          , JUMPITO $ "method_end" ++ (show transferCounter)
-                                          ]
-                checkIfBranchIsTrue1 =
-                  if branch then
-                    -- push 0x0 to tell transfer that no amount has been sent to recipient
-                    [PUSH1 0x0, JUMPTO $ "transfer_back_to_from_address" ++ show transferCounter]
-                  else
-                    [JUMPTO $ "pass_this_memExp_check" ++ show memExpId ++ "_" ++ show transferCounter]
-
+                yieldStatement = 
+                  [ PUSH4 $ getStorageAddress MemoryExpressionRefs
+                  , SLOAD
+                  , DUP1 -- should be popped in all cases to keep the stack clean
+                  -- TODO: WARNING: ATM this value is not being popped!
+                  , PUSH32 $ integer2w256 $ 0x3 * 2 ^ (2 * memExpId) -- bitmask
+                  , AND
+                  , ISZERO
+                  , JUMPITO $ "method_end" ++ show transferCounter ] -- GOTO YIELD
+                passAndSkipStatement =
+                  [ PUSH32 $ integer2w256 $ 2 ^ (2 * memExpId + if branch then 1 else 0) -- bitmask
+                  , AND
+                  , ISZERO
+                  , JUMPITO $ "tc_SKIP" ++ show transferCounter ]
+                  -- The fall-through case represents the "PASS" case.
               in
-                checkIfMemExpIsSet ++
-                checkIfBranchIsTrue0 ++
-                passThisCheck ++
-                jdOuterElse ++
-                checkIfMemTimeHasPassed ++
-                checkIfBranchIsTrue1 ++
-                [JUMPDESTFROM $ "pass_this_memExp_check" ++ show memExpId ++ "_" ++ show transferCounter]
-          in
-            concatMap checkIfTCIsInChosenBranch memExpPath
+                yieldStatement ++ passAndSkipStatement
       in
         checkIfTimeHasPassed ++
         checkIfTCHasBeenExecuted ++
-        checkIfTCIsInChosenBranches (_memExpPath tc)
+        checkIfTcIsInActiveBranches (_memExpPath tc)
 
     callTransferToTcRecipient =
       evalState (compIExp ( _amount tc)) (CompileEnv 0 transferCounter 0x00 "amount_exp")
@@ -607,8 +576,7 @@ getExecuteTCsHH mes tc transferCounter =
       ++ [ ISZERO, JUMPITO "global_throw" ]
 
     checkIfTransferToTcSenderShouldBeMade =
-      [JUMPDESTFROM $ "transfer_back_to_from_address" ++ show transferCounter
-      , PUSH32 (integer2w256 (_maxAmount tc))
+      [ PUSH32 (integer2w256 (_maxAmount tc))
       , SUB
       , DUP1
       , PUSH1 0x0
@@ -631,17 +599,19 @@ getExecuteTCsHH mes tc transferCounter =
     -- Flip correct bit from one to zero and call selfdestruct if all tcalls compl.
     skipCallToTcSenderJumpDest = [ JUMPDESTFROM $ "skip_call_to_sender" ++ (show transferCounter)
                                  , POP ] -- pop return amount from stack
-    updateExecutedWord = [ PUSH4 $ getStorageAddress Executed,
-                           SLOAD,
-                           PUSH1 $ fromInteger transferCounter,
-                           PUSH1 0x2,
-                           EXP,
-                           XOR,
-                           DUP1,
-                           ISZERO,
-                           JUMPITO "selfdestruct",
-                           PUSH4 $ getStorageAddress Executed,
-                           SSTORE ]
+    updateExecutedWord = [
+      JUMPDESTFROM $ "tc_SKIP" ++ show transferCounter,
+      PUSH4 $ getStorageAddress Executed,
+      SLOAD,
+      PUSH1 $ fromInteger transferCounter,
+      PUSH1 0x2,
+      EXP,
+      XOR,
+      DUP1,
+      ISZERO,
+      JUMPITO "selfdestruct",
+      PUSH4 $ getStorageAddress Executed,
+      SSTORE ]
     functionEndLabel = [JUMPDESTFROM  $ "method_end" ++ (show transferCounter)]
   in
     checkIfCallShouldBeMade ++
