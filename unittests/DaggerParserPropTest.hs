@@ -13,8 +13,8 @@ tests = do
   it "is the inverse of a pretty-printer" $ do
     property prop_ppp_identity
 
-prop_ppp_identity :: Contract -> Property
-prop_ppp_identity contract =
+prop_ppp_identity :: ValidContract -> Property
+prop_ppp_identity (ValidContract contract) =
   counterexample ("Pretty-printed:\n" ++ daggerPP contract) $
     case parseWrap (daggerPP contract) of
       Left _ -> False

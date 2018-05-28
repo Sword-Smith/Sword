@@ -7,26 +7,66 @@ import Test.Hspec
 
 tests :: Spec
 tests = do
-  minMaxExprTest
+  basicExprTests
+  zeroContractTest
+
   parser_unittest0
   parser_unittest1
   parser_unittest2
   parser_unittest3
   parser_unittest4
-  zeroContractTest
 
 -- TESTS!
 
-minMaxExprTest :: Spec
-minMaxExprTest = do
-  it "parses min correctly" $
-    parse' ast1 `shouldBe` Scale 1 (MinExp (Lit (IntVal 2)) (Lit (IntVal 3))) Zero
+basicExprTests :: Spec
+basicExprTests = do
+  it "parses min" $
+    parse' "scale(1, min(2, 3), zero)"
+      `shouldBe` Scale 1 (MinExp two three) Zero
 
-  it "parses max correctly" $
-    parse' ast2 `shouldBe` Scale 1 (MaxExp (Lit (IntVal 4)) (Lit (IntVal 5))) Zero
+  it "parses max" $
+    parse' "scale(1, max(4, 5), zero)"
+      `shouldBe` Scale 1 (MaxExp four five) Zero
+
+  it "parses a simple not" $
+    parse' "if not true within seconds(1) then zero else zero"
+      `shouldBe` IfWithin (MemExp (Seconds 1) (NotExp true)) Zero Zero
+
+  it "parses 'not' correctly when there are arithmetic operators (1)" $
+    parse' "if not 1 + 2 < 3 + 4 within seconds(1) then zero else zero"
+      `shouldBe` parse' "if not (1 + 2 < 3 + 4) within seconds(1) then zero else zero"
+
+  it "parses 'not' when there are arithmetic operators (2)" $
+    parse' "if not 1 + 2 < 3 + 4 within seconds(1) then zero else zero"
+      `shouldBe` IfWithin (MemExp (Seconds 1)
+                                  (NotExp (LtExp (AddiExp one two) (AddiExp three four))))
+                          Zero Zero
+
+  it "parses simple if-then-else" $
+    parse' "scale(1, if (min(4, 2) >= max(3, 1) * 5) then 6 else 7, zero)"
+      `shouldBe` Scale 1 (IfExp (GtOrEqExp (MinExp four two) (MultExp (MaxExp three one) five)) six seven) Zero
+
+  -- Perhaps reasonably, parser will not currently accept if-then-else
+  -- inside the condition of an if-then-else. Still, perhaps, it is better
+  -- to give a type error or actually just allow this? (It can probably be
+  -- optimized in most cases anyways.)
+
+  it "parses if-then-else nested inside condition" $
+    parse' "scale(1, if (if (true) then true else false) then 2 else 3, zero)"
+      `shouldBe` Scale 1 (IfExp (IfExp true true false) two three) Zero
+
+  it "parses if-then-else nested inside 'then' branch" $
+    parse' "scale(1, if (true) then if (true) then 2 else 3 else 4, zero)"
+      `shouldBe` Scale 1 (IfExp true (IfExp true two three) four) Zero
+
+  it "parses if-then-else nested inside 'else' branch" $
+    parse' "scale(1, if (true) then 2 else if (true) then 3 else 4, zero)"
+      `shouldBe` Scale 1 (IfExp true two (IfExp true three four)) Zero
+
   where
-    ast1 = "scale(1, min(2, 3), zero)"
-    ast2 = "scale(1, max(4, 5), zero)"
+    true = Lit (BoolVal True)
+    false = Lit (BoolVal False)
+    one : two : three : four : five : six : seven : _ = map (Lit . IntVal) [1..]
 
 zeroContractTest :: Spec
 zeroContractTest = do

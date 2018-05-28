@@ -62,3 +62,22 @@ data ObservableType = OBool | OInteger deriving (Show, Eq)
 type TokenSymbol = String
 -- DEVFIX: Better choice for type is decided later.
 type Address = String
+
+getSubExps :: Expr -> [Expr]
+getSubExps e = case e of
+  Lit _           -> []
+  MinExp    e1 e2 -> [e1, e2]
+  MaxExp    e1 e2 -> [e1, e2]
+  MultExp   e1 e2 -> [e1, e2]
+  DiviExp   e1 e2 -> [e1, e2]
+  AddiExp   e1 e2 -> [e1, e2]
+  SubtExp   e1 e2 -> [e1, e2]
+  LtExp     e1 e2 -> [e1, e2]
+  GtExp     e1 e2 -> [e1, e2]
+  EqExp     e1 e2 -> [e1, e2]
+  GtOrEqExp e1 e2 -> [e1, e2]
+  LtOrEqExp e1 e2 -> [e1, e2]
+  NotExp    e1    -> [e1]
+  AndExp    e1 e2 -> [e1, e2]
+  OrExp     e1 e2 -> [e1, e2]
+  IfExp  e1 e2 e3 -> [e1, e2, e3]

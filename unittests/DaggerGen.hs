@@ -1,8 +1,47 @@
 module DaggerGen where
 
 import DaggerLanguageDefinition
-import DaggerPP
 import Test.QuickCheck
+
+-- Generate contracts that type-check
+newtype ValidContract = ValidContract { unVC :: Contract }
+                      deriving (Show, Eq)
+
+newtype AnyTime = AnyTime { getAnyTime :: Time }
+                deriving (Show, Eq)
+
+newtype IntExpr = IntExpr { getIntExpr :: Expr }
+                deriving (Show, Eq)
+
+newtype BoolExpr = BoolExpr { getBoolExpr :: Expr }
+                 deriving (Show, Eq)
+
+newtype AnyLiteral = AnyLiteral { getLiteral :: Literal }
+                   deriving (Show, Eq)
+
+instance Arbitrary ValidContract where
+  arbitrary = ValidContract <$> sized contractGen
+  shrink (ValidContract contract) = case contract of
+    Scale maxFactor scaleFactorExpr c -> map ValidContract $
+      [c] ++ map (\(IntExpr expr) -> Scale maxFactor expr c) (shrink (IntExpr scaleFactorExpr))
+          ++ map (Scale maxFactor scaleFactorExpr . unVC) (shrink (ValidContract c))
+    Both c1 c2 -> map ValidContract [c1, c2]
+    Translate _time c -> [ValidContract c]
+    IfWithin (MemExp time exp1) c1 c2 ->
+      map ValidContract $ [c1, c2] ++ map (\(BoolExpr exp2) -> IfWithin (MemExp time exp2) c1 c2)
+                                          (shrink (BoolExpr exp1))
+    Transfer{} -> []
+    Zero -> []
+
+contractGen :: Int -> Gen Contract
+contractGen 0 = Transfer <$> addressGen <*> addressGen <*> addressGen
+contractGen n = oneof
+  [ Transfer <$> addressGen <*> addressGen <*> addressGen
+  , Scale <$> (getPositive <$> arbitrary) <*> (getIntExpr <$> arbitrary) <*> contractGen (n - 1)
+  , Both <$> contractGen (n `div` 2) <*> contractGen (n `div` 2)
+  , Translate <$> (getAnyTime <$> arbitrary) <*> contractGen (n - 1)
+  , IfWithin <$> arbitrary <*> contractGen (n `div` 2) <*> contractGen (n `div` 2)
+  ]
 
 addressGen :: Gen Address
 addressGen = ("0x" ++) <$> vectorOf 40 hexChar
@@ -10,95 +49,82 @@ addressGen = ("0x" ++) <$> vectorOf 40 hexChar
     hexChar :: Gen Char
     hexChar = elements $ ['a'..'f'] ++ ['0'..'9']
 
-transferGen :: Gen Contract
-transferGen = Transfer <$> addressGen <*> addressGen <*> addressGen
+instance Arbitrary AnyTime where
+  arbitrary = AnyTime <$> sized timeGen
+  shrink (AnyTime time) = map AnyTime $ case time of
+    Now -> []
+    Seconds 0 -> [ Now ]
+    Seconds 1 -> [ Now, Seconds 0 ]
+    Seconds i -> [ Now, Seconds 0, Seconds 1 ]
+    Minutes i -> [ Now, Seconds i, Seconds (i*60) ]
+    Hours   i -> [ Now, Minutes i, Minutes (i*60) ]
+    Days    i -> [ Now, Hours   i, Hours   (i*24) ]
+    Weeks   i -> [ Now, Days    i, Days    (i*7)  ]
 
-contractGen :: Int -> Gen Contract
-contractGen 0 = transferGen
-contractGen n = oneof
-  [ Transfer <$> addressGen <*> addressGen <*> addressGen
-  , Scale <$> (getPositive <$> arbitrary) <*> arbitrary <*> contractGen (n - 1)
-  , Both <$> contractGen (n `div` 2) <*> contractGen (n `div` 2)
-  , Translate <$> arbitrary <*> contractGen (n - 1)
-  , IfWithin <$> arbitrary <*> contractGen (n `div` 2) <*> contractGen (n `div` 2)
-  ]
-
-instance Arbitrary Contract where
-  --arbitrary = sized $ \ n -> contractGen n
-  arbitrary = sized contractGen
-  shrink contract = case contract of
-    Scale maxFactor scaleFactorExpr c -> [c] ++ map (\expr -> Scale maxFactor expr c) (shrink scaleFactorExpr)
-                                             ++ map (\c2 -> Scale maxFactor scaleFactorExpr c2) (shrink c)
-    Both c1 c2 -> [c1, c2]
-    Translate _time c -> [c]
-    IfWithin (MemExp time exp) c1 c2 -> [c1, c2] ++ map (\exp2 -> IfWithin (MemExp time exp2) c1 c2) (shrink exp)
-    Transfer _ _ _ -> []
-
-instance Arbitrary Time where
-  arbitrary = oneof
-    [ return Now
-    , do Positive i <- arbitrary
-         constructor <- elements [Seconds, Minutes, Hours, Days, Weeks]
-         return (constructor i)
-    ]
+timeGen :: Int -> Gen Time
+timeGen 0 = return Now
+timeGen n = do
+  Positive i <- arbitrary
+  f <- elements [Seconds, Minutes, Hours, Days, Weeks]
+  return $ f i
 
 genSplit :: Int -> Gen (Int, Int)
 genSplit n = do
   i <- choose (0, n)
   return (i, n - i)
 
-exprGen :: Int -> Gen Expr
-exprGen 0 = Lit <$> arbitrary
-exprGen n = oneof $
-  [ Lit <$> arbitrary
-  , NotExp <$> exprGen (n - 1)
-  , IfExp <$> exprGen (n `div` 3) <*> exprGen (n `div` 3) <*> exprGen (n `div` 3)
-  ] ++ map binOpGen
-  [ MinExp, MaxExp, MultExp, DiviExp, AddiExp, SubtExp
-  , LtExp, GtExp, EqExp, GtOrEqExp, LtOrEqExp, AndExp, OrExp
-  ]
+binOpGen :: Int -> (Int -> Gen Expr) -> (Expr -> Expr -> Expr) -> Gen Expr
+binOpGen n exprGen op = do
+  (n1, n2) <- genSplit (n - 1)
+  op <$> exprGen n1 <*> exprGen n2
+
+instance Arbitrary IntExpr where
+  arbitrary = IntExpr <$> sized intExprGen
+  shrink (IntExpr expr) = map IntExpr (getSubExps expr)
+
+intExprGen :: Int -> Gen Expr
+intExprGen 0 = do
+  Positive i <- arbitrary
+  return $ Lit (IntVal i)
+intExprGen n = oneof $
+  intExprGen 0 : ifExpGen' : map (binOpGen n intExprGen) [ MinExp, MaxExp
+                                                         , MultExp, DiviExp
+                                                         , AddiExp, SubtExp ]
   where
-    binOpGen :: (Expr -> Expr -> Expr) -> Gen Expr
-    binOpGen op = do
-      (n1, n2) <- genSplit (n - 1)
-      op <$> exprGen n1 <*> exprGen n2
+    ifExpGen' :: Gen Expr
+    ifExpGen' = do
+      (n1, rest) <- genSplit (n - 1)
+      (n2, n3) <- genSplit rest
+      IfExp <$> boolExprGen n1 <*> intExprGen n2 <*> intExprGen n3
 
-instance Arbitrary Expr where
-  arbitrary = sized exprGen
-  shrink e = case e of
-    Lit _           -> []
-    MinExp    e1 e2 -> [e1, e2]
-    MaxExp    e1 e2 -> [e1, e2]
-    MultExp   e1 e2 -> [e1, e2]
-    DiviExp   e1 e2 -> [e1, e2]
-    AddiExp   e1 e2 -> [e1, e2]
-    SubtExp   e1 e2 -> [e1, e2]
-    LtExp     e1 e2 -> [e1, e2]
-    GtExp     e1 e2 -> [e1, e2]
-    EqExp     e1 e2 -> [e1, e2]
-    GtOrEqExp e1 e2 -> [e1, e2]
-    LtOrEqExp e1 e2 -> [e1, e2]
-    NotExp e        -> [e]
-    AndExp    e1 e2 -> [e1, e2]
-    OrExp     e1 e2 -> [e1, e2]
-    IfExp  e1 e2 e3 -> [e1, e2, e3]
+instance Arbitrary BoolExpr where
+  arbitrary = BoolExpr <$> sized boolExprGen
+  shrink (BoolExpr expr) = map BoolExpr (getSubExps expr)
 
-intValGen = IntVal <$> (getNonNegative <$> arbitrary)
-boolValGen = BoolVal <$> arbitrary
-observableGen = Observable <$> elements [OBool, OInteger] <*> addressGen <*> keyGen
+boolExprGen :: Int -> Gen Expr
+boolExprGen 0 = return $ Lit (BoolVal False)
+boolExprGen 1 = return $ Lit (BoolVal True)
+boolExprGen n = oneof $
+  [ boolExprGen 0, boolExprGen 1, ifExpGen', NotExp <$> boolExprGen (n - 1) ]
+  ++ map (binOpGen n intExprGen) [ LtExp, GtExp, EqExp, GtOrEqExp, LtOrEqExp ]
+  ++ map (binOpGen n boolExprGen) [ AndExp, OrExp ]
   where
-    keyGen :: Gen String
-    keyGen = do
-      rand <- choose (1,32)
-      vectorOf rand $ elements $ ['a'..'z'] ++ ['A'..'Z'] ++ [ '0'..'9']
+    ifExpGen' :: Gen Expr
+    ifExpGen' = do
+      (n1, rest) <- genSplit (n - 1)
+      (n2, n3) <- genSplit rest
+      IfExp <$> boolExprGen n1 <*> boolExprGen n2 <*> boolExprGen n3
 
-instance Arbitrary Literal where
-  arbitrary = oneof [ intValGen
-                    , boolValGen
-                    , observableGen
-                    ]
+instance Arbitrary AnyLiteral where
+  arbitrary = AnyLiteral <$> oneof [ IntVal <$> (getNonNegative <$> arbitrary)
+                                   , BoolVal <$> arbitrary
+                                   , Observable <$> elements [OBool, OInteger] <*> addressGen <*> keyGen
+                                   ]
+    where
+      keyGen :: Gen String
+      keyGen = do
+        rand <- choose (1,32)
+        vectorOf rand $ elements $ ['a'..'z'] ++ ['A'..'Z'] ++ [ '0'..'9']
 
 instance Arbitrary MemExp where
-  arbitrary = MemExp <$> arbitrary <*> arbitrary
-
-
+  arbitrary = MemExp <$> (getAnyTime <$> arbitrary) <*> (getBoolExpr <$> arbitrary)
