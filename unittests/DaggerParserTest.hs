@@ -7,6 +7,7 @@ import Test.Hspec
 
 tests :: Spec
 tests = do
+  minMaxExprTest
   parser_unittest0
   parser_unittest1
   parser_unittest2
@@ -16,12 +17,23 @@ tests = do
 
 -- TESTS!
 
+minMaxExprTest :: Spec
+minMaxExprTest = do
+  it "parses min correctly" $
+    parse' ast1 `shouldBe` Scale 1 (MinExp (Lit (IntVal 2)) (Lit (IntVal 3))) Zero
+
+  it "parses max correctly" $
+    parse' ast2 `shouldBe` Scale 1 (MaxExp (Lit (IntVal 4)) (Lit (IntVal 5))) Zero
+  where
+    ast1 = "scale(1, min(2, 3), zero)"
+    ast2 = "scale(1, max(4, 5), zero)"
+
 zeroContractTest :: Spec
 zeroContractTest = do
-  it "parses a zero contract" $ do
+  it "parses a zero contract" $
     parse' "zero" `shouldBe` Zero
 
-  it "parses a nested zero contract" $ do
+  it "parses a nested zero contract" $
     parse' "both(zero, zero)" `shouldBe` Both Zero Zero
 
   it "parses an if-within that contains a zero contract" $ do

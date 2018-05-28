@@ -255,14 +255,19 @@ brackets = do
   return e0
 
 leafExp :: Parser Expr
-leafExp = booleanLeaf <|> integerLeaf <|> minExp <|> maxExp <|> observableLeaf
+leafExp = booleanLeaf <|> integerLeaf <|> minMaxExp <|> observableLeaf
 
 booleanLeaf :: Parser Expr
 booleanLeaf = trueLeaf <|> falseLeaf
 
+minMaxExp :: Parser Expr
+minMaxExp = do
+  string "m"
+  minExp <|> maxExp
+
 minExp :: Parser Expr
 minExp = do
-  symbol "min"
+  symbol "in"
   parens $ do
     e0 <- getExpr
     symbol ","
@@ -271,7 +276,7 @@ minExp = do
 
 maxExp :: Parser Expr
 maxExp = do
-  symbol "max"
+  symbol "ax"
   parens $ do
     e0 <- getExpr
     symbol ","
