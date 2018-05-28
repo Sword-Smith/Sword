@@ -8,6 +8,10 @@ data CallArgument = Word256 Word256
                   | OwnAddress
                   | RawEvm [EvmOpcode]
 
+data FunctionSignature = Transfer
+                       | TransferFrom
+                       | Get
+
 type Label = String
 
 data EvmOpcode = STOP
@@ -61,10 +65,17 @@ data EvmOpcode = STOP
                | SSTORE
                | JUMP
                | JUMPI
-               | JUMPTO Label -- pseudo instruction: PUSH Addr(label); JUMP;
-               | JUMPITO Label -- pseudo instruction: PUSH Addr(label); JUMPI;
-               | JUMPTOA Integer --
-               | JUMPITOA Integer --
+               -- The integer in FUNSTART and FUNSTARTA represents the number of args
+               -- that this function takes.
+               | FUNSTART Label Integer -- pre-linker pseudo instruction: JUMPDEST Label + SWAP logic
+               | FUNSTARTA Integer -- post-linker pseudo instruction: JUMPDEST + SWAP logic
+               | FUNCALL Label -- pre-linker pseudo instruction: PC, JUMPTO Label (store PC on stack, jump)
+               | FUNCALLA Integer -- post-linker pseudo instruction: PC, JUMPTOA i
+               | FUNRETURN -- post-linker pseudo instruction: a synonyme for JUMP;
+               | JUMPTO Label -- pre-linker pseudo instruction: PUSH Addr(label); JUMP;
+               | JUMPITO Label -- pre-linker pseudo instruction: PUSH Addr(label); JUMPI;
+               | JUMPTOA Integer -- (after linker) pseudo instruction
+               | JUMPITOA Integer -- (after linker) pseudo instruction
                | PC
                | MSIZE
                | GAS
@@ -76,6 +87,9 @@ data EvmOpcode = STOP
                | DUP1
                | DUP2
                | DUP3
+               | DUP4
+               | DUP5
+               | DUP6
                | SWAP1
                | SWAP2
                | SWAP3

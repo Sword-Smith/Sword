@@ -3,7 +3,7 @@ module EvmCompiler where
 import EvmCompilerHelper
 import EvmLanguageDefinition
 import IntermediateLanguageDefinition
-import DaggerLanguageDefinition
+import DaggerLanguageDefinition hiding (Transfer)
 import IntermediateCompiler (emptyContract)
 
 import Control.Monad.State
@@ -58,6 +58,9 @@ asmToMachineCode = concatMap ppEvm
 getSizeOfOpcodeList :: [EvmOpcode] -> Integer
 getSizeOfOpcodeList = sum . map getOpcodeSize
 
+-- This function is called before the linker and before the
+-- elimination of pseudo instructions, so it must be able to
+-- also handle the pseudo instructions before and after linking
 getOpcodeSize :: EvmOpcode -> Integer
 getOpcodeSize (PUSH1  _)   = 2
 getOpcodeSize (PUSH4 _)    = 5
@@ -66,7 +69,12 @@ getOpcodeSize (JUMPITO _)  = 1 + 5 -- PUSH4 addr.; JUMPI
 getOpcodeSize (JUMPTO _)   = 1 + 5 -- PUSH4 addr.; JUMP
 getOpcodeSize (JUMPITOA _) = 1 + 5 -- PUSH4 addr.; JUMP
 getOpcodeSize (JUMPTOA _)  = 1 + 5 -- PUSH4 addr.; JUMP
-getOpcodeSize _            = 1
+getOpcodeSize (FUNSTART _ _n) = 1 + 1 -- JUMPDEST; SWAPn
+-- PC stores in µ[0] PC before PC opcode, we want to store the address
+-- pointing to the OPCODE after the JUMP opcode. Therefore, we add 10 to byte code address
+getOpcodeSize (FUNCALL _)     = 4 + 7 -- PC; PUSH1 10, ADD, JUMPTO label; JUMPDEST = PC; PUSH1, ADD, PUSH4 addr; JUMP; JUMPDEST; OPCODE -- addr(OPCODE)=µ[0]
+getOpcodeSize FUNRETURN       = 2 -- SWAP1; JUMP;
+getOpcodeSize _               = 1
 
 ----------------------------------------------------------------------------
 -- Main method for this module. Returns binary.
@@ -98,13 +106,14 @@ evmCompile intermediateContract = -- @ IntermediateContract tcs iMemExps activat
     activate = getActivate (getActivateMap intermediateContract)
 
 linker :: [EvmOpcode] -> [EvmOpcode]
-linker opcodes = linkerH 0 opcodes opcodes
+linker opcodes' = linkerH 0 opcodes' opcodes'
   where
     linkerH :: Integer -> [EvmOpcode] -> [EvmOpcode] -> [EvmOpcode]
     linkerH _ relabeledOpcodes [] = relabeledOpcodes
     linkerH instructionCount accOpcodes (opcode:opcodes) = case opcode of
-      JUMPDESTFROM label -> linkerH (instructionCount + 1) (replaceLabel label instructionCount accOpcodes) opcodes
-      _                  -> linkerH (instructionCount + n) accOpcodes                                       opcodes
+      JUMPDESTFROM label   -> linkerH (instructionCount + 1) (replaceLabel label instructionCount accOpcodes) opcodes
+      FUNSTART     label _ -> linkerH (instructionCount + 2) (replaceLabel label instructionCount accOpcodes) opcodes
+      _                    -> linkerH (instructionCount + n) accOpcodes                                       opcodes
         where n = getOpcodeSize opcode
 
 replaceLabel :: Label -> Integer -> [EvmOpcode] -> [EvmOpcode]
@@ -112,19 +121,28 @@ replaceLabel label int = map replaceH
   where
     replaceH :: EvmOpcode -> EvmOpcode
     replaceH opcode = case opcode of
-      JUMPTO       label' -> if label == label' then JUMPTOA  int else opcode
-      JUMPITO      label' -> if label == label' then JUMPITOA int else opcode
-      JUMPDESTFROM label' -> if label == label' then JUMPDEST     else opcode
-      _                   -> opcode
+      JUMPTO       label'   -> if label == label' then JUMPTOA  int else opcode
+      JUMPITO      label'   -> if label == label' then JUMPITOA int else opcode
+      JUMPDESTFROM label'   -> if label == label' then JUMPDEST     else opcode
+      FUNSTART     label' n -> if label == label' then FUNSTARTA n  else opcode
+      FUNCALL      label'   -> if label == label' then FUNCALLA int else opcode
+      _                     -> opcode
 
 transformPseudoInstructions :: [EvmOpcode] -> [EvmOpcode]
 transformPseudoInstructions = concatMap transformH
   where
     transformH :: EvmOpcode -> [EvmOpcode]
     transformH opcode = case opcode of
-      JUMPTOA  i -> [ PUSH4 (fromInteger i), JUMP ]
-      JUMPITOA i -> [ PUSH4 (fromInteger i), JUMPI ]
+      JUMPTOA   i -> [ PUSH4 (fromInteger i), JUMP ]
+      JUMPITOA  i -> [ PUSH4 (fromInteger i), JUMPI ]
+      FUNCALLA  i -> [ PC, PUSH1 10, ADD, PUSH4 (fromInteger i), JUMP, JUMPDEST ]
+      FUNSTARTA n -> [ JUMPDEST, getSwap n ]
+      FUNRETURN   -> [ SWAP1, JUMP ]
       _          -> [ opcode ]
+    getSwap :: Integer -> EvmOpcode
+    getSwap 2 = SWAP2
+    getSwap 3 = SWAP3
+    getSwap _ = undefined -- Only 2 or 3 args is accepted atm
 
 getFunctionSignature :: String -> Word32
 getFunctionSignature funDecl = read $ "0x" ++ take 8 (keccak256 funDecl)
@@ -189,6 +207,91 @@ getJumpTable =
                        THROW]
   in
     getCheckNoValue "Contract_Header" ++ switchStatement
+
+getSubroutines :: [EvmOpcode]
+getSubroutines = getTransferSubroutine ++ getTransferFromSubroutine
+  where
+
+    getTransferFromSubroutine =
+      funStartTF
+      ++ storeFunctionSignature TransferFrom
+      ++ storeArgumentsTF -- transferFrom(_from, _to, _amount) = transferFrom(party, self, amount)
+      ++ pushOutSize
+      ++ pushOutOffset
+      ++ pushInSizeTF
+      ++ pushInOffset
+      ++ pushValue
+      ++ pushCalleeAddress
+      ++ pushGasAmount
+      ++ callInstruction
+      ++ checkExitCode
+      ++ removeExtraArg
+      ++ getReturnValueFromMemory
+      ++ funEnd
+
+    getTransferSubroutine =
+      funStartT
+      ++ storeFunctionSignature Transfer
+      ++ storeArgumentsT -- transfer(_to, _amount) = transfer(party, amount)
+      ++ pushOutSize
+      ++ pushOutOffset
+      ++ pushInSizeT
+      ++ pushInOffset
+      ++ pushValue
+      ++ pushCalleeAddress
+      ++ pushGasAmount
+      ++ callInstruction
+      ++ checkExitCode
+      ++ removeExtraArg
+      ++ getReturnValueFromMemory
+      ++ funEnd
+
+    funStartT               = [ FUNSTART "transfer_subroutine" 3 ]
+    funStartTF              = [ FUNSTART "transferFrom_subroutine" 3 ]
+    storeFunctionSignature :: FunctionSignature -> [EvmOpcode]
+    storeFunctionSignature Transfer  =
+      [ PUSH32 (getFunctionSignature "transfer(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+      , PUSH1 0 -- TODO: We always use 0 here, since we don't use memory other places. Use monad to keep track of memory usage.
+      , MSTORE ]
+    storeFunctionSignature TransferFrom  =
+      [ PUSH32 (getFunctionSignature "transferFrom(address,address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+      , PUSH1 0
+      , MSTORE ]
+    storeArgumentsT =
+      [ PUSH1 0x04
+      , MSTORE -- store recipient (_to) in mem
+      , PUSH1 0x24
+      , MSTORE -- store amount in mem
+      ]
+    storeArgumentsTF =
+      [ PUSH1 0x04
+      , MSTORE -- store sender (_from) in mem
+      , ADDRESS
+      , PUSH1 0x24
+      , MSTORE -- store own address (_to) in mem (recipient of transferFrom transaction)
+      , PUSH1 0x44
+      , MSTORE -- store amount in mem
+      ]
+    pushOutSize        = [ PUSH1 0x20 ]
+    pushOutOffset      = [ PUSH1 0x0 ]
+    pushInSizeTF       = [ PUSH1 0x64 ]
+    pushInSizeT        = [ PUSH1 0x44 ]
+    pushInOffset       = [ PUSH1 0x0 ]
+    pushValue          = [ PUSH1 0x0 ]
+    pushCalleeAddress  = [ DUP6 ]
+    pushGasAmount      =
+      [ PUSH1 0x32
+      , GAS
+      , SUB ]
+    callInstruction    = [ CALL ]
+    checkExitCode      =
+      [ ISZERO
+      , JUMPITO "global_throw" ]
+    removeExtraArg           = [ POP ]
+    getReturnValueFromMemory =
+      [ PUSH1 0x0
+      , MLOAD ]
+    funEnd = [FUNRETURN]
 
 -- When calling execute(), PC must be set here
 -- to check if the DC is activated
@@ -468,28 +571,22 @@ getExecuteTransferCallsHH tc transferCounter = do
         checkIfTCIsInChosenBranches (_memExpPath tc)
 
     callTransferToTcRecipient =
-      getFunctionCallEvm
-        (_tokenAddress tc)
-        (getFunctionSignature "transfer(address,uint256)")
-        [ Word256 (address2w256 (_to tc))
-        , RawEvm getTransferAmount ]
-        0
-        0
-        0x20
-        where
-          getTransferAmount =
-            runExprCompiler (CompileEnv 0 transferCounter 0x44 "amount_exp") (compileExp (_amount tc))
-            ++ [ PUSH32 $ integer2w256 $ _maxAmount tc
-               , DUP2
-               , DUP2
-               , EVM_GT
-               , JUMPITO $ "use_exp_res" ++ show transferCounter
-               , SWAP1
-               , JUMPDESTFROM $ "use_exp_res" ++ show transferCounter
-               , POP
-               , DUP1 -- leaves transferred amount on stack for next call to transfer
-               , PUSH1 0x24
-               , MSTORE ]
+      runExprCompiler (CompileEnv 0 transferCounter 0x44 "amount_exp") (compileExp (_amount tc))
+      ++ [ PUSH32 $ integer2w256 (_maxAmount tc)
+         , DUP2
+         , DUP2
+         , EVM_GT
+         , JUMPITO $ "use_exp_res" ++ show transferCounter
+         , SWAP1
+         , JUMPDESTFROM $ "use_exp_res" ++ show transferCounter
+         , POP
+
+         , PUSH32 $ address2w256 (_to tc)
+         , PUSH32 $ address2w256 (_tokenAddress tc)
+         , DUP3
+
+         , FUNCALL "transfer_subroutine"
+         , ISZERO, JUMPITO "global_throw" ]
     checkIfTransferToTcSenderShouldBeMade =
       [JUMPDESTFROM $ "transfer_back_to_from_address" ++ show transferCounter
       , PUSH32 (integer2w256 (_maxAmount tc))
@@ -504,17 +601,14 @@ getExecuteTransferCallsHH tc transferCounter = do
       -- so we should locate the amount on the stack.
       -- And make sure it is preserved on the stack
       -- for the next call to transfer.
+
     callTransferToTcOriginator =
-      getFunctionCallEvm
-        (_tokenAddress tc)
-        (getFunctionSignature "transfer(address,uint256)")
-        [ Word256 (address2w256 (_from tc))
-        -- push amount of remaining margin to memory, DUP1 to ensure consistent
-        -- stack whether this call is made or not
-        , RawEvm [DUP1, PUSH1 0x24, MSTORE] ]
-        0
-        0
-        0x20
+      [ PUSH32 $ address2w256 (_from tc)
+      , PUSH32 $ address2w256 (_tokenAddress tc)
+      , DUP3
+      , FUNCALL "transfer_subroutine" ]
+      ++ [ ISZERO, JUMPITO "global_throw" ] -- check ret val
+
     -- Flip correct bit from one to zero and call selfdestruct if all tcalls compl.
     skipCallToTcSenderJumpDest = [ JUMPDESTFROM $ "skip_call_to_sender" ++ show transferCounter
                                  , POP ] -- pop return amount from stack
@@ -550,18 +644,15 @@ getActivate am = [JUMPDESTFROM "activate_method"]
 
 activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
 activateMapElementToTransferFromCall ((tokenAddress, fromAddress), amount) =
-  functionCallEvm ++ moveResToStack ++ throwIfReturnFalse
+  pushArgsToStack ++ subroutineCall ++ throwIfReturnFalse
   where
-    functionCallEvm =
-      getFunctionCallEvm
-        tokenAddress
-        (getFunctionSignature "transferFrom(address,address,uint256)")
-        [ Word256 (address2w256 fromAddress), OwnAddress, Word256 (integer2w256 amount) ]
-        0 -- inMemOffset
-        0 -- outMemOffset
-        32 -- outSize
-    moveResToStack = [ PUSH1 0, MLOAD ]
-    throwIfReturnFalse = [ISZERO, JUMPITO "global_throw" ]
+    pushArgsToStack =
+      [ PUSH32 $ address2w256 $ fromAddress
+      , PUSH32 $ address2w256 $ tokenAddress
+      , PUSH32 $ integer2w256 $ amount ]
+    subroutineCall =
+      [ FUNCALL "transferFrom_subroutine" ]
+    throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
 
 getMemExpById :: MemExpId -> [IMemExp] -> IMemExp
 getMemExpById memExpId [] = error $ "Could not find IMemExp with ID " ++ show memExpId
