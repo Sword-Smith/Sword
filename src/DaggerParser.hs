@@ -10,7 +10,7 @@ import Text.ParserCombinators.Parsec.Combinator as ParSecCom
 parse' :: String -> Contract
 parse' s =
   case parse contractParser "error" s of
-    Left _ -> undefined
+    Left err -> error (show err)
     Right ast -> ast
 
 parseWrap :: String -> Either ParseError Contract
@@ -19,63 +19,56 @@ parseWrap = parse contractParser "Parse error: "
 contractParser :: Parser Contract
 contractParser = do
   spaces
-  contract <- contractParserH
-  return contract
+  contractParserH
 
 contractParserH :: Parser Contract
-contractParserH = do
-    contract <- transferTranslateParser <|> scaleParser <|> bothParser <|> ifWithinParser <|> zeroParser
-    return contract
+contractParserH =
+  transferTranslateParser <|> scaleParser <|> bothParser <|> ifWithinParser <|> zeroParser
 
 transferTranslateParser :: Parser Contract
 transferTranslateParser = do
   string "trans"
-  contract <- transferParser <|> translateParser
-  return contract
+  translateParser <|> transferParser
 
 translateParser :: Parser Contract
 translateParser = do
   string "late"
-  symbol "("
-  delay <- getTime
-  symbol ","
-  contract <- contractParserH
-  symbol ")"
-  return $ Translate delay contract
+  parens $ do
+    delay <- getTime
+    symbol ","
+    contract <- contractParserH
+    return $ Translate delay contract
 
 transferParser :: Parser Contract
 transferParser = do
-    string "fer"
-    symbol "("
+  string "fer"
+  parens $ do
     ta <- getAddress
     symbol ","
     from <- getAddress
     symbol ","
     to <- getAddress
-    symbol ")"
     return $ Transfer ta from to
 
 scaleParser :: Parser Contract
 scaleParser = do
-    string "scale"
-    symbol "("
+  string "scale"
+  parens $ do
     maxFactor <- getInt
     symbol ","
     factorExp <- getExpr
     symbol ","
     contract <- contractParserH
-    symbol ")"
     return $ Scale maxFactor factorExp contract
 
 bothParser :: Parser Contract
 bothParser = do
   string "both"
-  symbol "("
-  contractA <- contractParserH
-  symbol ","
-  contractB <- contractParserH
-  symbol ")"
-  return $ Both contractA contractB
+  parens $ do
+    contractA <- contractParserH
+    symbol ","
+    contractB <- contractParserH
+    return $ Both contractA contractB
 
 ifWithinParser :: Parser Contract
 ifWithinParser = do
@@ -114,8 +107,7 @@ ifBranch = do
 orExp :: Parser Expr
 orExp = do
   tv <- andExp
-  v  <- orExpOpt tv
-  return v
+  orExpOpt tv
 
 orExpOpt :: Expr -> Parser Expr
 orExpOpt e0 = orBranch e0 <|> return e0
@@ -124,14 +116,12 @@ orBranch :: Expr -> Parser Expr
 orBranch e0 = do
   symbol "or"
   tv <- andExp
-  v  <- orExpOpt $ OrExp e0 tv
-  return v
+  orExpOpt $ OrExp e0 tv
 
 andExp :: Parser Expr
 andExp = do
   tv <- eqExp
-  v  <- andExpOpt tv
-  return v
+  andExpOpt tv
 
 andExpOpt :: Expr -> Parser Expr
 andExpOpt inval = andBranch inval <|> return inval
@@ -140,14 +130,12 @@ andBranch :: Expr -> Parser Expr
 andBranch e0 = do
   symbol "and"
   tv <- eqExp
-  v  <- andExpOpt $ AndExp e0 tv
-  return v
+  andExpOpt $ AndExp e0 tv
 
 eqExp :: Parser Expr
 eqExp = do
   tv <- ltgtExp
-  v  <- eqExpOpt tv
-  return v
+  eqExpOpt tv
 
 eqExpOpt :: Expr -> Parser Expr
 eqExpOpt inval = eqBranch inval <|> return inval
@@ -166,8 +154,7 @@ eqBranch e0 = do
 ltgtExp :: Parser Expr
 ltgtExp = do
   tv <- plusExp
-  v  <- ltgtExpOpt tv
-  return v
+  ltgtExpOpt tv
 
 ltgtExpOpt :: Expr -> Parser Expr
 ltgtExpOpt inval = ltXXBranch inval <|>
@@ -177,8 +164,7 @@ ltgtExpOpt inval = ltXXBranch inval <|>
 ltXXBranch :: Expr -> Parser Expr
 ltXXBranch e0 = do
   symbol "<"
-  v <- ltOrEqBranch e0 <|> ltBranch e0
-  return v
+  ltOrEqBranch e0 <|> ltBranch e0
 
 ltBranch :: Expr -> Parser Expr
 ltBranch e0 = do
@@ -194,8 +180,7 @@ ltOrEqBranch e0 = do
 gtXXBranch :: Expr -> Parser Expr
 gtXXBranch e0 = do
   symbol ">"
-  v <- gtOrEqBranch e0 <|> gtBranch e0
-  return v
+  gtOrEqBranch e0 <|> gtBranch e0
 
 gtBranch :: Expr -> Parser Expr
 gtBranch e0 = do
@@ -211,32 +196,28 @@ gtOrEqBranch e0 = do
 plusExp :: Parser Expr
 plusExp = do
   tv <- mulExp
-  v <- plusExpOpt tv
-  return v
+  plusExpOpt tv
 
 plusExpOpt :: Expr -> Parser Expr
-plusExpOpt inval = do
+plusExpOpt inval =
   plusBranch inval <|> minusBranch inval <|> return inval
 
 plusBranch :: Expr -> Parser Expr
 plusBranch inval = do
   symbol "+"
   tv <- mulExp
-  v <- plusExpOpt (AddiExp inval tv)
-  return v
+  plusExpOpt (AddiExp inval tv)
 
 minusBranch :: Expr -> Parser Expr
 minusBranch inval = do
   symbol "-"
   tv <- mulExp
-  v <- plusExpOpt (SubtExp inval tv)
-  return v
+  plusExpOpt (SubtExp inval tv)
 
 mulExp :: Parser Expr
 mulExp = do
   tv <- notExpr
-  v  <- mulExpOpt tv
-  return v
+  mulExpOpt tv
 
 mulExpOpt :: Expr -> Parser Expr
 mulExpOpt inval = mulBranch inval <|> divBranch inval <|> return inval
@@ -245,15 +226,13 @@ mulBranch :: Expr -> Parser Expr
 mulBranch inval = do
   symbol "*"
   tv <- notExpr
-  v  <- mulExpOpt (MultExp inval tv)
-  return v
+  mulExpOpt (MultExp inval tv)
 
 divBranch :: Expr -> Parser Expr
 divBranch inval = do
   symbol "/"
   tv <- notExpr
-  v <- mulExpOpt (DiviExp inval tv)
-  return $ v
+  mulExpOpt (DiviExp inval tv)
 
 -- This should be right associative
 notExpr :: Parser Expr
@@ -276,39 +255,34 @@ brackets = do
   return e0
 
 leafExp :: Parser Expr
-leafExp = booleanLeaf <|> integerLeaf <|> minMaxExp <|> observableLeaf
+leafExp = booleanLeaf <|> integerLeaf <|> minExp <|> maxExp <|> observableLeaf
 
 booleanLeaf :: Parser Expr
 booleanLeaf = trueLeaf <|> falseLeaf
 
-minMaxExp :: Parser Expr
-minMaxExp = do
-  string "m"
-  e0 <- minExp <|> maxExp
-  return e0
-
 minExp :: Parser Expr
 minExp = do
-  symbol "in("
-  e0 <- getExpr
-  symbol ","
-  e1 <- getExpr
-  symbol ")"
-  return $ MinExp e0 e1
+  symbol "min"
+  parens $ do
+    e0 <- getExpr
+    symbol ","
+    e1 <- getExpr
+    return $ MinExp e0 e1
 
 maxExp :: Parser Expr
 maxExp = do
-  symbol "ax("
-  e0 <- getExpr
-  symbol ","
-  e1 <- getExpr
-  symbol ")"
-  return $ MaxExp e0 e1
+  symbol "max"
+  parens $ do
+    e0 <- getExpr
+    symbol ","
+    e1 <- getExpr
+    return $ MaxExp e0 e1
 
 trueLeaf :: Parser Expr
 trueLeaf = do
   symbol "true"
   return $ Lit $ BoolVal True
+
 falseLeaf :: Parser Expr
 falseLeaf = do
   symbol "false"
@@ -347,9 +321,8 @@ getInteger = do
 
 -- Handle time
 getTime :: Parser Time
-getTime = do
-  time <- getNow <|> getSeconds0 <|> getSeconds1 <|> getMinutes <|> getHours <|> getDays <|> getWeeks
-  return time
+getTime =
+  getNow <|> getSeconds0 <|> getSeconds1 <|> getMinutes <|> getHours <|> getDays <|> getWeeks
 
 getNow :: Parser Time
 getNow = do
@@ -359,10 +332,9 @@ getNow = do
 getSeconds0 :: Parser Time
 getSeconds0 = do
   string "seconds"
-  symbol "("
-  i <- getInt
-  symbol ")"
-  return $ Seconds i
+  parens $ do
+    i <- getInt
+    return $ Seconds i
 
 getSeconds1 :: Parser Time
 getSeconds1 = do
@@ -372,35 +344,30 @@ getSeconds1 = do
 getMinutes :: Parser Time
 getMinutes = do
   string "minutes"
-  symbol "("
-  i <- getInt
-  symbol ")"
-  return $ Minutes i
+  parens $ do
+    i <- getInt
+    return $ Minutes i
 
 getHours :: Parser Time
 getHours = do
   string "hours"
-  symbol "("
-  i <- getInt
-  symbol ")"
-  return $ Hours i
+  parens $ do
+    i <- getInt
+    return $ Hours i
 
 getDays :: Parser Time
 getDays = do
   string "days"
-  symbol "("
-  i <- getInt
-  symbol ")"
-  return $ Days i
+  parens $ do
+    i <- getInt
+    return $ Days i
 
 getWeeks :: Parser Time
 getWeeks = do
   string "weeks"
-  symbol "("
-  i <- getInt
-  symbol ")"
-  return $ Weeks i
-
+  parens $ do
+    i <- getInt
+    return $ Weeks i
 
 -- This is not used ATM
 getTokenSymbol :: Parser TokenSymbol
@@ -430,3 +397,6 @@ symbol s = do
 
 eol :: Parser Char
 eol = char '\n'
+
+parens :: Parser a -> Parser a
+parens = between (symbol "(") (symbol ")")
