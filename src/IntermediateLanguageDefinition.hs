@@ -62,8 +62,10 @@ type ActivateMap = Map.Map (Address, Address) Integer
 
 type MarginRefundMap = Map.Map [(Integer, Bool)] [(Address, Address, Integer)]
 
+-- (path, marginRefundValue) = ([(memExpRef, branch (true or false))], (token address, recipient, amount))
 type MarginRefundMapElement = ([(Integer, Bool)], [(Address, Address, Integer)])
 
 type MarginRefundPath = [(Integer, Bool)]
 
+-- (token address, from address, amount)
 type ActivateMapElement = ((Address, Address), Integer)

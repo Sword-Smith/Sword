@@ -118,6 +118,7 @@ getFunctionSignature funDecl = read $ "0x" ++ take 8 (keccak256 funDecl)
 
 -- Main method for this module. Returns binary.
 -- Check that there are not more than 2^8 transfercalls
+-- or more than 2^7 mem exps (each mem exp is one dibit)
 -- Wrapper for intermediateToOpcodesH
 intermediateToOpcodes :: IntermediateContract -> String
 intermediateToOpcodes (IntermediateContract tcs iMemExps activateMap marginRefundMap) =
@@ -126,13 +127,13 @@ intermediateToOpcodes (IntermediateContract tcs iMemExps activateMap marginRefun
     intermediateToOpcodesH :: IntermediateContract -> String
     intermediateToOpcodesH = asmToMachineCode . eliminatePseudoInstructions . evmCompile
   in
-    if length(tcs) > 256
+    if length(tcs) > 256 || length(iMemExps) > 128
     then undefined
     else intermediateToOpcodesH (IntermediateContract tcs iMemExps activateMap marginRefundMap)
 
--- Given an IntermediateContract, returns the EvmOpcodes representing the binary
+-- Given an IntermediateContract, returns the EvmOpcodes representing the contract
 evmCompile :: IntermediateContract -> [EvmOpcode]
-evmCompile (IntermediateContract tcs iMemExps activateMap _marginRefundMap) =
+evmCompile (IntermediateContract tcs iMemExps activateMap marginRefundMap) =
   let
     constructor      = getConstructor tcs
     body             = jumpTable ++ subroutines ++ checkIfActivated ++ execute ++ activate
@@ -140,7 +141,7 @@ evmCompile (IntermediateContract tcs iMemExps activateMap _marginRefundMap) =
     jumpTable        = getJumpTable
     subroutines      = getSubroutines -- TODO: If we want to do dynamic inclusion of obs getter, then specify here.
     checkIfActivated = getActivateCheck
-    execute          = getExecute iMemExps tcs -- also contains selfdestruct when contract is fully executed
+    execute          = getExecute iMemExps tcs marginRefundMap -- also contains selfdestruct when contract is fully executed
     activate         = getActivate activateMap
   in
     -- The addresses of the constructor run are different from runs when DC is on BC
@@ -303,8 +304,9 @@ getActivateCheck =
   , ISZERO
   , JUMPITO "global_throw" ]
 
-getExecute :: [IMemExp] -> [TransferCall] -> [EvmOpcode]
-getExecute mes tcs = concatMap getExecuteIMemExp mes ++ getExecuteTCs mes tcs
+getExecute :: [IMemExp] -> [TransferCall] -> MarginRefundMap -> [EvmOpcode]
+getExecute mes tcs mrm =
+  concatMap getExecuteIMemExp mes ++ evalState (liftM concat (mapM getExecuteMarginRefundM ( Map.assocs mrm ))) 0 ++ getExecuteTCs mes tcs
 
 -- This sets the relevant bits in the memory expression word in storage
 -- Here the IMemExp should be evaluated. But only iff it is NOT true atm.
@@ -383,6 +385,73 @@ getExecuteIMemExp (IMemExp beginTime endTime count iExp) =
     checkEvalResult ++
     setToTrue ++
     [JUMPDESTFROM $ "memExp_end" ++ show count]
+
+-- Return the code to handle the margin refund as a result of dead
+-- branches due to evaluation of memory expressions
+-- Happens within a state monad since each element needs an index to
+-- identify it in storage s.t. its state can be stored
+
+type MrId = Integer
+type MarginCompiler a = State MrId a
+
+newMrId :: MarginCompiler MrId
+newMrId = get <* modify (+ 1)
+
+-- This method should compare the bits set in the MemoryExpression word
+-- in storage with the path which is the key of the element with which it
+-- is called.
+-- If we are smart here, we set the entire w32 (256 bit value) to represent
+-- a path and load the word and XOR it with what was found in storage
+-- This word can be set at compile time
+getExecuteMarginRefundM :: MarginRefundMapElement -> MarginCompiler [EvmOpcode]
+getExecuteMarginRefundM (path, refunds) = do
+  i <- newMrId
+  return $ (checkIfMarginHasAlreadyBeenRefunded i) ++ (checkIfPathIsChosen path i) ++ (payBackMargin refunds) ++ (setMarginRefundBit i) ++  [JUMPDESTFROM $ "mr_end" ++ show i]
+  where
+    -- Skip the rest of the call if the margin has already been repaid
+    checkIfMarginHasAlreadyBeenRefunded i =
+      [ PUSH32 $ integer2w256 $ 2 ^ ( i + 1 ) -- add 1 since right-most bit is used to indicate an active DC
+      , PUSH4 $ getStorageAddress Activated
+      , SLOAD
+      , AND
+      , JUMPITO $ "mr_end" ++ show i
+      ]
+    -- leaves 1 or 0 on top of stack to show if path is chosen
+    -- Only the bits below max index need to match for this path to be chosen
+    checkIfPathIsChosen mrme i =
+      [ PUSH32 $ integer2w256 $ path2Bitmask mrme
+      , PUSH32 $ integer2w256 $ 2 ^ ( 2 * (path2highestIndexValue mrme + 1) ) - 1 -- bitmask to only check lowest bits
+      , AND
+      , PUSH4 $ getStorageAddress MemoryExpressionRefs
+      , SLOAD
+      , XOR
+      , JUMPITO $ "mr_end" ++ show i -- iff non-zero refund; if 0, refund
+      ]
+    payBackMargin [] = []
+    payBackMargin ((tokenAddr, recipient, amount):ls) = -- push args, call transfer, check ret val
+      [ PUSH32 $ address2w256 recipient -- TODO: This hould be PUSH20, not PUSH32. Will save gas.
+      , PUSH32 $ address2w256 tokenAddr
+      , PUSH32 $ integer2w256 amount
+      , FUNCALL "transfer_subroutine"
+      , ISZERO,
+        JUMPITO "global_throw"
+      ] ++ payBackMargin ls
+    setMarginRefundBit i =
+      [ PUSH32 $ integer2w256 $ 2 ^ (i + 1)
+      , PUSH4 $ getStorageAddress Activated
+      , SSTORE
+      ]
+
+path2Bitmask :: [(Integer, Bool)] -> Integer
+path2Bitmask [] = 0
+path2Bitmask ((i, branch):ls) = 2 ^ (2 * i + if branch then 1 else 0) + path2Bitmask ls
+
+-- Return highest index value in path, assumes the path is an ordered, asc list. So returns int of last elem
+-- TODO: Rewrite this using better language constructs
+path2highestIndexValue :: [(Integer, Bool)] -> Integer
+path2highestIndexValue [] = 0
+path2highestIndexValue ((i, _branch):[]) = i
+path2highestIndexValue ((_i, _branch):ls) = path2highestIndexValue ls
 
 -- Returns the code for executing all tcalls that function gets
 getExecuteTCs :: [IMemExp] -> [TransferCall] -> [EvmOpcode]
