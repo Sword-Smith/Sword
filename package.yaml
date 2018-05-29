@@ -34,8 +34,6 @@ tests:
     dependencies:
       - daggerc
       - base >= 4.9.1.0
-      - test-framework
-      - test-framework-hunit
       - HUnit
       - QuickCheck
       - containers
