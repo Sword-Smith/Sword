@@ -421,6 +421,7 @@ getExecuteMarginRefundM (path, refunds) = do
     -- leaves 1 or 0 on top of stack to show if path is chosen
     -- Only the bits below max index need to match for this path to be chosen
     checkIfPathIsChosen mrme i =
+      -- TODO: Three below opcodes should be reduced to one PUSH whose value is calculated compile-time
       [ PUSH32 $ integer2w256 $ path2Bitmask mrme
       , PUSH32 $ integer2w256 $ 2 ^ ( 2 * (path2highestIndexValue mrme + 1) ) - 1 -- bitmask to only check lowest bits
       , AND
