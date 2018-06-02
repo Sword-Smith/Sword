@@ -301,6 +301,8 @@ getActivateCheck =
   [ JUMPDESTFROM "execute_method"
   , PUSH4 $ getStorageAddress Activated
   , SLOAD
+  , PUSH1 $ fromInteger 1
+  , AND
   , ISZERO
   , JUMPITO "global_throw" ]
 
