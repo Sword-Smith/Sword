@@ -584,8 +584,7 @@ getExecuteTCsHH mes tc transferCounter =
                                  TIMESTAMP,
                                  SUB,
                                  PUSH32 $ integer2w256 $ _delay tc,
-                                 EVM_LT,
-                                 ISZERO,
+                                 EVM_GT,
                                  JUMPITO $ "method_end" ++ (show (transferCounter)) ]
         -- Skip tcall if method has been executed already
         -- This only works for less than 2^8 transfer calls
