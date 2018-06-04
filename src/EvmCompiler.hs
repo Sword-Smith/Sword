@@ -140,7 +140,7 @@ functionSignature :: String -> Word32
 functionSignature funDecl = read $ "0x" ++ take 8 (keccak256 funDecl)
 
 eventSignature :: String -> Word256
-eventSignature eventSig = read $ "0x" ++ keccak256 eventSig
+eventSignature eventDecl = hexString2w256 $ "0x" ++ keccak256 eventDecl
 
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
