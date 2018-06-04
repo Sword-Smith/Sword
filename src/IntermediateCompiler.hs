@@ -167,6 +167,7 @@ foldExpr expr = case expr of
                      (_, Lit (IntVal 0)) -> Lit (IntVal 0)
                      (Lit (IntVal 1), e2') -> e2'
                      (e1', Lit (IntVal 1)) -> e1'
+                     (Lit (Intval i), Lit (IntVal j)) -> Lit (IntVal (i * j))
                      (e1', e2') -> MultExp e1' e2'
   DiviExp e1 e2 -> case (foldExpr e1, foldExpr e2) of
                      (_, Lit (IntVal 0)) -> error "Division by zero"
