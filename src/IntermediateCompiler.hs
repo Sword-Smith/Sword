@@ -50,6 +50,9 @@ intermediateCompile :: Contract -> IntermediateContract
 intermediateCompile contract =
   evalState (runReaderT (intermediateCompileM contract) initialScope) 0
 
+intermediateCompileOptimize :: Contract -> IntermediateContract
+intermediateCompileOptimize = foldExprs . intermediateCompile
+
 intermediateCompileM :: Contract -> ICompiler IntermediateContract
 intermediateCompileM (Transfer token from to) = do
   ScopeEnv maxFactor scaleFactor delayTerm memExpPath <- ask
@@ -138,3 +141,89 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
       Map.differenceWith (\x y -> if x - y > 0 then Just (x - y) else Nothing) am1 am2
 
 intermediateCompileM Zero = return emptyContract
+
+foldExprs :: IntermediateContract -> IntermediateContract
+foldExprs contract =
+  contract { getTransferCalls = map foldTC (getTransferCalls contract)
+           , getMemExps       = map foldME (getMemExps contract) }
+  where
+    foldTC :: TransferCall -> TransferCall
+    foldTC transferCall = transferCall { _amount = foldExpr (_amount transferCall) }
+
+    foldME :: IMemExp -> IMemExp
+    foldME memExp = memExp { _IMemExp = foldExpr (_IMemExp memExp) }
+
+foldExpr :: Expr -> Expr
+foldExpr expr = case expr of
+  Lit _        -> expr
+  MinExp e1 e2  -> case (foldExpr e1, foldExpr e2) of
+                     (Lit (IntVal i), Lit (IntVal j)) -> Lit (IntVal (min i j))
+                     (e1', e2') -> MinExp e1' e2'
+  MaxExp e1 e2  -> case (foldExpr e1, foldExpr e2) of
+                     (Lit (IntVal i), Lit (IntVal j)) -> Lit (IntVal (max i j))
+                     (e1', e2') -> MaxExp e1' e2'
+  MultExp e1 e2 -> case (foldExpr e1, foldExpr e2) of
+                     (Lit (IntVal 0), _) -> Lit (IntVal 0)
+                     (_, Lit (IntVal 0)) -> Lit (IntVal 0)
+                     (Lit (IntVal 1), e2') -> e2'
+                     (e1', Lit (IntVal 1)) -> e1'
+                     (e1', e2') -> MultExp e1' e2'
+  DiviExp e1 e2 -> case (foldExpr e1, foldExpr e2) of
+                     (_, Lit (IntVal 0)) -> error "Division by zero"
+                     (Lit (IntVal 0), _) -> Lit (IntVal 0)
+                     (Lit (IntVal i), Lit (IntVal j)) ->
+                       if i `mod` j == 0
+                       then Lit (IntVal (i `div` j))
+                       else DiviExp (Lit (IntVal (i `div` gcd i j)))
+                                    (Lit (IntVal (j `div` gcd i j)))
+                     (e1', e2') -> DiviExp e1' e2'
+  AddiExp e1 e2 -> case (foldExpr e1, foldExpr e2) of
+                     (Lit (IntVal 0), e2') -> e2'
+                     (e1', Lit (IntVal 0)) -> e1'
+                     (Lit (IntVal i), Lit (IntVal j)) ->
+                       if i + j == 0
+                       then Lit (IntVal 0)
+                       else Lit (IntVal (i+j))
+                     (e1', e2') -> AddiExp e1' e2'
+  SubtExp e1 e2 -> case (foldExpr e1, foldExpr e2) of
+                     (e1', Lit (IntVal 0)) -> e1'
+                     (Lit (IntVal i), Lit (IntVal j)) ->
+                       if i - j == 0
+                       then Lit (IntVal 0)
+                       else Lit (IntVal (i-j))
+                     (e1', e2') -> SubtExp e1' e2'
+  LtExp e1 e2 -> case (foldExpr e1, foldExpr e2) of
+                   (Lit (IntVal i), Lit (IntVal j)) -> Lit (BoolVal (i < j))
+                   (e1', e2') -> LtExp e1' e2'
+  GtExp e1 e2 -> case (foldExpr e1, foldExpr e2) of
+                   (Lit (IntVal i), Lit (IntVal j)) -> Lit (BoolVal (i > j))
+                   (e1', e2') -> GtExp e1' e2'
+  EqExp e1 e2 -> case (foldExpr e1, foldExpr e2) of
+                   (Lit (IntVal i), Lit (IntVal j)) -> Lit (BoolVal (i == j))
+                   (Lit (BoolVal a), Lit (BoolVal b)) -> Lit (BoolVal (a == b))
+                   (e1', e2') -> EqExp e1' e2'
+  GtOrEqExp e1 e2 -> case (foldExpr e1, foldExpr e2) of
+                   (Lit (IntVal i), Lit (IntVal j)) -> Lit (BoolVal (i >= j))
+                   (e1', e2') -> GtOrEqExp e1' e2'
+  LtOrEqExp e1 e2 -> case (foldExpr e1, foldExpr e2) of
+                   (Lit (IntVal i), Lit (IntVal j)) -> Lit (BoolVal (i >= j))
+                   (e1', e2') -> LtOrEqExp e1' e2'
+  NotExp e1 -> case foldExpr e1 of
+                 Lit (BoolVal b) -> Lit (BoolVal (not b))
+                 e1' -> NotExp e1'
+  AndExp e1 e2 -> case (foldExpr e1, foldExpr e2) of
+                    (Lit (BoolVal a), other) ->
+                      if a then other else Lit (BoolVal False)
+                    (other, Lit (BoolVal b)) ->
+                      if b then other else Lit (BoolVal False)
+                    (e1', e2') -> AndExp e1' e2'
+  OrExp e1 e2 -> case (foldExpr e1, foldExpr e2) of
+                    (Lit (BoolVal a), other) ->
+                      if a then Lit (BoolVal True) else other
+                    (other, Lit (BoolVal b)) ->
+                      if b then Lit (BoolVal True) else other
+                    (e1', e2') -> OrExp e1' e2'
+  IfExp e1 e2 e3 -> case (foldExpr e1, foldExpr e2, foldExpr e3) of
+                      (Lit (BoolVal True), e2', _) -> e2'
+                      (Lit (BoolVal False), _, e3') -> e3'
+                      (e1', e2', e3') -> IfExp e1' e2' e3'
