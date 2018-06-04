@@ -11,6 +11,15 @@ import Data.Word
 import Numeric (showHex)
 import Text.Printf (printf)
 
+-- Given a list of things, t a, and a monadic function we map across that
+-- returns a list of values inside a monad (e.g. Compiler [EvmOpcode]),
+-- concatenate those result lists inside that monad.
+concatMapM :: (Traversable t, Monad m) => (a -> m [b]) -> t a -> m [b]
+concatMapM f = fmap concat . mapM f
+
+(<++>) :: Applicative f => f [a] -> f [a] -> f [a]
+(<++>) xs ys = (++) <$> xs <*> ys
+
 keccak256 :: String -> String
 keccak256 fname =
   let
