@@ -33,14 +33,14 @@ instance ToJSON AbiConstructorDefinition where
   toJSON (AbiConstructorDefinition p t is) =
     object ["payable" .= p, "type" .= t, "inputs" .= toJSON is]
 
-data AbiFunctionDefinition = AbiFunctionDefinition {
-      _name     :: String
-    , _type     :: String
-    , _payable  :: Bool
-    , _outputs  :: [AbiVarDefinition]
-    , _inputs   :: [AbiVarDefinition]
-    , _constant :: Bool
-    } deriving (Generic, Show)
+data AbiFunctionDefinition = AbiFunctionDefinition
+  { _name     :: String
+  , _type     :: String
+  , _payable  :: Bool
+  , _outputs  :: [AbiVarDefinition]
+  , _inputs   :: [AbiVarDefinition]
+  , _constant :: Bool
+  } deriving (Generic, Show)
 
 instance ToJSON AbiFunctionDefinition where
   toJSON (AbiFunctionDefinition n t p os is c) =
@@ -51,19 +51,34 @@ instance ToJSON AbiFunctionDefinition where
             "outputs"  .= toJSON os,
             "constant" .= c]
 
+data AbiEventDefinition = AbiEventDefinition
+  { _eventName      :: String
+  , _eventType      :: String
+  , _eventAnonymous :: Bool
+  , _eventInputs    :: [AbiVarDefinition]
+  } deriving (Generic, Show)
+
+instance ToJSON AbiEventDefinition where
+  toJSON (AbiEventDefinition n t a i) =
+    object [ "name"      .= n
+           , "type"      .= t
+           , "inputs"    .= i
+           , "anonymous" .= a ]
+
 data AbiDefinition = AbiDefinition {
     constuctor :: Maybe AbiConstructorDefinition
   , functions  :: [AbiFunctionDefinition]
+  , events     :: [AbiEventDefinition]
   } deriving (Show)
 
 -- The JSON type of this should be [abiConstructor, abiFucntions]
 instance ToJSON AbiDefinition where
-  toJSON (AbiDefinition constructor functions) =
+  toJSON (AbiDefinition constructor functions events) =
     case constructor of
       Nothing -> toJSONList functions
       -- DEVFIX: THIS NEEDS TO HAVE THE CONSTRUCTOR ADDED!!!
       --Just c  -> toJSON $ ( [(toJSON c), (toJSONList functions)])
-      Just c -> toJSON $ toJSONList functions
+      Just c -> toJSON $ map toJSON functions ++ map toJSON events
 
 -- What kind of type should this take as argument?
 -- DEVQ: Perhaps this should be calculated in EvmCompile?
@@ -73,8 +88,9 @@ getAbiDefinition =
     constructor = Just $ AbiConstructorDefinition False "constructor" []
     execute     = AbiFunctionDefinition "execute" "function" False [] [] False
     activate    = AbiFunctionDefinition "activate" "function" False [] [] False
+    activatedE  = AbiEventDefinition "Activated" "event" False []
   in
-    AbiDefinition constructor [execute, activate]
+    AbiDefinition constructor [execute, activate] [activatedE]
 
 -- This function writes an ABI definition of the contract.
 writeAbiDef :: String -> String -> IO()
