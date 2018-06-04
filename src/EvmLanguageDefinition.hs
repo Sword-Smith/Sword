@@ -94,6 +94,7 @@ data EvmOpcode = STOP
                | SWAP2
                | SWAP3
                | LOG0
+               | LOG1
                | CREATE
                | CALL
                | CALLCODE

@@ -179,6 +179,7 @@ ppEvm instruction = case instruction of
     SWAP2        -> "91"
     SWAP3        -> "92"
     LOG0         -> "a0"
+    LOG1         -> "a1"
     CREATE       -> "f0"
     CALL         -> "f1"
     CALLCODE     -> "f2"

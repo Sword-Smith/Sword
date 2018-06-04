@@ -139,6 +139,9 @@ transformPseudoInstructions = concatMap transformH
 functionSignature :: String -> Word32
 functionSignature funDecl = read $ "0x" ++ take 8 (keccak256 funDecl)
 
+eventSignature :: String -> Word256
+eventSignature eventSig = read $ "0x" ++ keccak256 eventSig
+
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
 constructor :: [TransferCall] -> [EvmOpcode]
@@ -691,6 +694,13 @@ activate = do
     -- set activate bit to 0x01 (true)
     ++ [ PUSH1 0x01, PUSH4 $ storageAddress Activated, SSTORE ]
     ++ saveTimestampToStorage
+    -- emit activated event
+    ++ emitEvent
+  where emitEvent =
+          [ PUSH32 $ eventSignature "Activated()"
+          , PUSH1 0
+          , PUSH1 0
+          , LOG1 ]
 
 activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
 activateMapElementToTransferFromCall ((tokenAddress, fromAddress), amount) =
