@@ -9,6 +9,7 @@ import IntermediateCompiler (emptyContract)
 import Control.Monad.State
 import Control.Monad.Reader
 
+import Data.List
 import qualified Data.Map.Strict as Map
 import Data.Word
 
@@ -46,7 +47,7 @@ data StorageType = CreationTimestamp
 -- For each storage index we pay 20000 GAS. Reusing one is only 5000 GAS.
 -- It would therefore make sense to pack as much as possible into the same index.
 -- Storage is word addressed, not byte addressed
-storageAddress :: StorageType -> Word32
+storageAddress :: Integral i => StorageType -> i
 storageAddress CreationTimestamp      = 0x0
 storageAddress Activated              = 0x1
 storageAddress Executed               = 0x2
@@ -62,6 +63,7 @@ sizeOfOpcode :: EvmOpcode -> Integer
 sizeOfOpcode (PUSH1  _)   = 2
 sizeOfOpcode (PUSH4 _)    = 5
 sizeOfOpcode (PUSH32 _)   = 33
+sizeOfOpcode (PUSHN ws)   = genericLength ws + 1
 sizeOfOpcode (JUMPITO _)  = 1 + 5 -- PUSH4 addr.; JUMPI
 sizeOfOpcode (JUMPTO _)   = 1 + 5 -- PUSH4 addr.; JUMP
 sizeOfOpcode (JUMPITOA _) = 1 + 5 -- PUSH4 addr.; JUMP
