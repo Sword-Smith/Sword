@@ -4,10 +4,14 @@ import EvmLanguageDefinition
 import EvmCompiler
 import EvmCompilerHelper
 
+import Control.Monad
+
 import Test.Hspec
+import Test.QuickCheck
 
 tests :: Spec
 tests = do
+  pushTests
   simpleLinker0
   simplePIElim0
   simpleMCG0
@@ -21,6 +25,17 @@ tests = do
   funcCallLinkerCountJumpdestSize
   funCallWithTwoArguments
 
+pushTests :: Spec
+pushTests =
+  describe "push" $ do
+    it "compiles to the same as PUSH1" $
+      forM_ [0..255] $ \i ->
+        ppEvm (push i) `shouldBe` ppEvm (PUSH1 $ fromIntegral i)
+
+    it "compiles to the same as PUSH4" $
+      forAll (choose (256*256*256, 256*256*256*256 - 1)) $ \i ->
+        ppEvm (push i) `shouldBe` ppEvm (PUSH4 $ fromIntegral i)
+
 preLinker0 :: [EvmOpcode]
 preLinker0 = [JUMPTO "label0", POP, JUMPDESTFROM "label0"]
 
@@ -28,7 +43,7 @@ postLinker0 :: [EvmOpcode]
 postLinker0 = [JUMPTOA 7, POP, JUMPDEST]
 
 postPseudoInstructionElimination0 :: [EvmOpcode]
-postPseudoInstructionElimination0 = [PUSH4 $ fromInteger 7, JUMP, POP, JUMPDEST]
+postPseudoInstructionElimination0 = [PUSH4 7, JUMP, POP, JUMPDEST]
 
 postMachineCodeGeneration0 :: [Char]
 postMachineCodeGeneration0 = "630000000756505b"
