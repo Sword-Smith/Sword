@@ -430,14 +430,12 @@ executeMarginRefundM (path, refunds) = do
       , JUMPITO $ "mr_end" ++ show i
       ]
     -- leaves 1 or 0 on top of stack to show if path is chosen
-    -- Only the bits below max index need to match for this path to be chosen
     checkIfPathIsChosen mrme i =
-      -- TODO: Three below opcodes should be reduced to one PUSH whose value is calculated compile-time
       [ push $ path2Bitmask mrme
-      , push $ 2 ^ ( 2 * (path2highestIndexValue mrme + 1) ) - 1 -- bitmask to only check lowest bits
-      , AND
       , push $ storageAddress MemoryExpressionRefs
       , SLOAD
+      , push $ otherBitMask mrme
+      , AND
       , XOR
       , JUMPITO $ "mr_end" ++ show i -- iff non-zero refund; if 0, refund
       ]
@@ -450,11 +448,20 @@ executeMarginRefundM (path, refunds) = do
       , ISZERO,
         JUMPITO "global_throw"
       ] ++ payBackMargin ls
+
     setMarginRefundBit i =
       [ push $ 2 ^ (i + 1)
       , push $ storageAddress Activated
+      , SLOAD
+      , XOR
+      , push $ storageAddress Activated
       , SSTORE
       ]
+
+-- Ensures that only the bits relevant for this path are checked
+otherBitMask :: [(Integer, Bool)] -> Integer
+otherBitMask [] = 0
+otherBitMask ((i, _branch):ls) = 3 * 2 ^ (i * 2) + otherBitMask ls
 
 path2Bitmask :: [(Integer, Bool)] -> Integer
 path2Bitmask [] = 0
