@@ -8,6 +8,7 @@ import Control.Monad
 
 import Test.Hspec
 import Test.QuickCheck
+import Text.Printf
 
 tests :: Spec
 tests = do
@@ -27,7 +28,19 @@ tests = do
 
 pushTests :: Spec
 pushTests =
+
   describe "push" $ do
+    it "compiles to the right EVM codes" $ do
+      ppEvm (push 0) `shouldBe` "6000"
+      ppEvm (push 1) `shouldBe` "6001"
+      ppEvm (push 255) `shouldBe` "60ff"
+      ppEvm (push 256) `shouldBe` "610100"
+      ppEvm (push $ 256 * 256 - 1) `shouldBe` "61ffff"
+      ppEvm (push $ 256 * 256) `shouldBe` "62010000"
+      ppEvm (push $ 256 * 256 + 16) `shouldBe` "62010010"
+      ppEvm (push $ 256 * 256 * 256 - 1) `shouldBe` "62ffffff"
+      ppEvm (push $ 256 * 256 * 256) `shouldBe` "6301000000"
+
     it "compiles to the same as PUSH1" $
       forM_ [0..255] $ \i ->
         ppEvm (push i) `shouldBe` ppEvm (PUSH1 $ fromIntegral i)
@@ -35,6 +48,22 @@ pushTests =
     it "compiles to the same as PUSH4" $
       forAll (choose (256*256*256, 256*256*256*256 - 1)) $ \i ->
         ppEvm (push i) `shouldBe` ppEvm (PUSH4 $ fromIntegral i)
+
+    -- 2:  256^1 - 256^2 - 1
+    -- 3:  256^2 - 256^3 - 1
+    -- 4:  256^3 - 256^4 - 1
+    -- ...
+    -- 32: 256^31 - 256^32 - 1
+    forM_ [2..32] $ \n ->
+      it ("compiles to the same as PUSH" ++ show n) $
+        forAll (choose (256^(n-1), 256^n - 1)) $ \i -> do
+          let hex = ppEvm (push i)
+
+          -- The right instruction is used.
+          take 2 hex `shouldBe` printf "%02x" (0x60 + n - 1 :: Int)
+
+          -- The hex-encoded number decodes properly.
+          read ("0x" ++ drop 2 hex) `shouldBe` (i :: Integer)
 
 preLinker0 :: [EvmOpcode]
 preLinker0 = [JUMPTO "label0", POP, JUMPDESTFROM "label0"]
