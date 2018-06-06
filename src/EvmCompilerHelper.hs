@@ -169,6 +169,7 @@ ppEvm instruction = case instruction of
     PUSH1 w8     -> "60" ++ printf "%02x" w8
     PUSH4 w32    -> "63" ++ printf "%08x" w32
     PUSH32 (w32_0, w32_1, w32_2, w32_3, w32_4, w32_5, w32_6, w32_7 ) -> "7f" ++ printf "%08x" w32_0 ++ printf "%08x" w32_1 ++ printf "%08x" w32_2 ++ printf "%08x" w32_3 ++ printf "%08x" w32_4 ++ printf "%08x" w32_5 ++ printf "%08x" w32_6 ++ printf "%08x" w32_7
+    PUSHN ws     -> printf "%02x" (0x60 + length ws - 1 :: Int) ++ concatMap (printf "%02x") ws
     DUP1         -> "80"
     DUP2         -> "81"
     DUP3         -> "82"
@@ -193,3 +194,20 @@ ppEvm instruction = case instruction of
     FUNRETURN    -> undefined
     JUMPTO _     -> undefined
     JUMPITO _    -> undefined
+
+push :: Integer -> EvmOpcode
+push = PUSHN . words'
+  where
+    words' :: Integer -> [Word8]
+    words' i | i < 256 = [fromIntegral i]
+    words' i = words' (i `div` 256) ++ [fromIntegral $ i `mod` 256]
+
+-- Was: PUSH32 (0xffffffff, 0, 0, 0, 0, 0, 0, 0)
+push4BigEnd :: Integer -> [EvmOpcode]
+push4BigEnd i =
+  [ push i
+  , push (0xe0)
+  , push 2
+  , EXP
+  , MUL
+  ]

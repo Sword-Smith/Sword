@@ -9,6 +9,7 @@ import IntermediateCompiler (emptyContract)
 import Control.Monad.State
 import Control.Monad.Reader
 
+import Data.List
 import qualified Data.Map.Strict as Map
 import Data.Word
 
@@ -46,7 +47,7 @@ data StorageType = CreationTimestamp
 -- For each storage index we pay 20000 GAS. Reusing one is only 5000 GAS.
 -- It would therefore make sense to pack as much as possible into the same index.
 -- Storage is word addressed, not byte addressed
-storageAddress :: StorageType -> Word32
+storageAddress :: Integral i => StorageType -> i
 storageAddress CreationTimestamp      = 0x0
 storageAddress Activated              = 0x1
 storageAddress Executed               = 0x2
@@ -62,6 +63,7 @@ sizeOfOpcode :: EvmOpcode -> Integer
 sizeOfOpcode (PUSH1  _)   = 2
 sizeOfOpcode (PUSH4 _)    = 5
 sizeOfOpcode (PUSH32 _)   = 33
+sizeOfOpcode (PUSHN ws)   = genericLength ws + 1
 sizeOfOpcode (JUMPITO _)  = 1 + 5 -- PUSH4 addr.; JUMPI
 sizeOfOpcode (JUMPTO _)   = 1 + 5 -- PUSH4 addr.; JUMP
 sizeOfOpcode (JUMPITOA _) = 1 + 5 -- PUSH4 addr.; JUMP
@@ -161,27 +163,27 @@ checkNoValue target = [CALLVALUE,
 -- Stores timestamp of creation of contract in storage
 saveTimestampToStorage :: [EvmOpcode]
 saveTimestampToStorage =  [TIMESTAMP,
-                           PUSH4 $ storageAddress CreationTimestamp,
+                           push $ storageAddress CreationTimestamp,
                            SSTORE]
 
 -- Given a number of transfercalls, set executed word in storage
 -- A setMemExpWord is not needed since that word is initialized to zero automatically
 setExecutedWord :: [TransferCall] -> [EvmOpcode]
 setExecutedWord []  = undefined
-setExecutedWord tcs = [ PUSH32 $ integer2w256 $ 2^length tcs - 1,
-                        PUSH4 $ storageAddress Executed,
+setExecutedWord tcs = [ push $ 2^length tcs - 1,
+                        push $ storageAddress Executed,
                         SSTORE ]
 
 -- Returns the code needed to transfer code from *init* to I_b in the EVM
 -- 22 is the length of itself, right now we are just saving in mem0
 -- TODO: Change '22' to a calculated length.
 codecopy :: [EvmOpcode] -> [EvmOpcode] -> [EvmOpcode]
-codecopy con exe = [ PUSH4 $ fromInteger (sizeOfOpcodes exe)
-                   , PUSH4 $ fromInteger (sizeOfOpcodes con + 22)
-                   , PUSH1 0
+codecopy con exe = [ PUSH4 $ fromInteger (sizeOfOpcodes exe) -- DO NOT REPLACE THIS WITH A push :: Integer -> EvmOpcode!
+                   , PUSH4 $ fromInteger (sizeOfOpcodes con + 22) -- this may be the problem! -- DO NOT REPLACE THIS WITH A push :: Integer -> EvmOpcode!
+                   , push 0
                    , CODECOPY
-                   , PUSH4 $ fromInteger (sizeOfOpcodes exe)
-                   , PUSH1 0
+                   , PUSH4 $ fromInteger (sizeOfOpcodes exe) -- DO NOT REPLACE THIS WITH A push :: Integer -> EvmOpcode!
+                   , push 0
                    , RETURN
                    , STOP
                    ]
@@ -190,7 +192,7 @@ codecopy con exe = [ PUSH4 $ fromInteger (sizeOfOpcodes exe)
 jumpTable :: [EvmOpcode]
 jumpTable =
   checkNoValue "Contract_Header" ++
-  [ PUSH1 0
+  [ push 0
   , CALLDATALOAD
   , PUSH32 (0xffffffff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , AND
@@ -248,39 +250,39 @@ subroutines = transferSubroutine ++ transferFromSubroutine
     storeFunctionSignature :: FunctionSignature -> [EvmOpcode]
     storeFunctionSignature Transfer =
       [ PUSH32 (functionSignature "transfer(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-      , PUSH1 0 -- TODO: We always use 0 here, since we don't use memory other places. Use monad to keep track of memory usage.
+      , push 0 -- TODO: We always use 0 here, since we don't use memory other places. Use monad to keep track of memory usage.
       , MSTORE ]
     storeFunctionSignature TransferFrom  =
       [ PUSH32 (functionSignature "transferFrom(address,address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-      , PUSH1 0
+      , push 0
       , MSTORE ]
     -- TODO: Missing 'Get' case.
 
     storeArgumentsT =
-      [ PUSH1 0x04
+      [ push 0x04
       , MSTORE -- store recipient (_to) in mem
-      , PUSH1 0x24
+      , push 0x24
       , MSTORE -- store amount in mem
       ]
 
     storeArgumentsTF =
-      [ PUSH1 0x04
+      [ push 0x04
       , MSTORE -- store sender (_from) in mem
       , ADDRESS
-      , PUSH1 0x24
+      , push 0x24
       , MSTORE -- store own address (_to) in mem (recipient of transferFrom transaction)
-      , PUSH1 0x44
+      , push 0x44
       , MSTORE -- store amount in mem
       ]
-    pushOutSize        = [ PUSH1 0x20 ]
-    pushOutOffset      = [ PUSH1 0x0 ]
-    pushInSizeTF       = [ PUSH1 0x64 ]
-    pushInSizeT        = [ PUSH1 0x44 ]
-    pushInOffset       = [ PUSH1 0x0 ]
-    pushValue          = [ PUSH1 0x0 ]
+    pushOutSize        = [ push 0x20 ]
+    pushOutOffset      = [ push 0x0 ]
+    pushInSizeTF       = [ push 0x64 ]
+    pushInSizeT        = [ push 0x44 ]
+    pushInOffset       = [ push 0x0 ]
+    pushValue          = [ push 0x0 ]
     pushCalleeAddress  = [ DUP6 ]
     pushGasAmount      =
-      [ PUSH1 0x32
+      [ push 0x32
       , GAS
       , SUB ]
     callInstruction    = [ CALL ]
@@ -289,7 +291,7 @@ subroutines = transferSubroutine ++ transferFromSubroutine
       , JUMPITO "global_throw" ]
     removeExtraArg           = [ POP ]
     getReturnValueFromMemory =
-      [ PUSH1 0x0
+      [ push 0x0
       , MLOAD ]
     funEnd = [FUNRETURN]
 
@@ -299,9 +301,9 @@ subroutines = transferSubroutine ++ transferFromSubroutine
 activateCheck :: [EvmOpcode]
 activateCheck =
   [ JUMPDESTFROM "execute_method"
-  , PUSH4 $ storageAddress Activated
+  , push $ storageAddress Activated
   , SLOAD
-  , PUSH1 1
+  , push 1
   , AND
   , ISZERO
   , JUMPITO "global_throw" ]
@@ -333,39 +335,39 @@ executeMemExp (IMemExp beginTime endTime count exp) =
         -- be irrelevant.
 
         checkIfMemExpIsTrueOrFalse  =
-          [ PUSH4 $ storageAddress MemoryExpressionRefs
+          [ push $ storageAddress MemoryExpressionRefs
           , SLOAD
-          , PUSH32 $ integer2w256 $ 0x3 * 2 ^ (2 * count) -- bitmask
+          , push $ 0x3 * 2 ^ (2 * count) -- bitmask
           , AND
           , JUMPITO $ "memExp_end" ++ show count ]
 
         -- TODO: The same value is read from storage twice. Use DUP instead?
         checkIfTimeHasStarted =
-          [ PUSH4 $ storageAddress CreationTimestamp
+          [ push $ storageAddress CreationTimestamp
           , SLOAD
           , TIMESTAMP
           , SUB
-          , PUSH32 $ integer2w256 beginTime
+          , push beginTime
           , EVM_GT
           , JUMPITO $ "memExp_end" ++ show count ]
 
         -- If the memory expression is neither true nor false
         -- and the time has run out, its value is set to false.
         checkIfTimeHasPassed =
-          [ PUSH4 $ storageAddress CreationTimestamp
+          [ push $ storageAddress CreationTimestamp
           , SLOAD
           , TIMESTAMP
           , SUB
-          , PUSH32 $ integer2w256 endTime
+          , push endTime
           , EVM_GT
           , JUMPITO $ "memExp_evaluate" ++ show count ]
 
         setToFalse =
-          [ PUSH4 $ storageAddress MemoryExpressionRefs
+          [ push $ storageAddress MemoryExpressionRefs
           , SLOAD
-          , PUSH32 $ integer2w256 $ 2 ^ (2 * count) -- bitmask
+          , push $ 2 ^ (2 * count) -- bitmask
           , XOR
-          , PUSH4 $ storageAddress MemoryExpressionRefs
+          , push $ storageAddress MemoryExpressionRefs
           , SSTORE
           , JUMPTO $ "memExp_end" ++ show count ]
 
@@ -378,11 +380,11 @@ executeMemExp (IMemExp beginTime endTime count exp) =
     checkEvalResult     = [ ISZERO,
                             JUMPITO $ "memExp_end" ++ show count ]
 
-    setToTrue           = [ PUSH4 $ storageAddress MemoryExpressionRefs
+    setToTrue           = [ push $ storageAddress MemoryExpressionRefs
                           , SLOAD
-                          , PUSH32 $ integer2w256 $ 2 ^ (2 * count + 1) -- bitmask
+                          , push $ 2 ^ (2 * count + 1) -- bitmask
                           , XOR
-                          , PUSH4 $ storageAddress MemoryExpressionRefs
+                          , push $ storageAddress MemoryExpressionRefs
                           , SSTORE ]
   in
     checkIfExpShouldBeEvaluated ++
@@ -421,21 +423,19 @@ executeMarginRefundM (path, refunds) = do
   where
     -- Skip the rest of the call if the margin has already been repaid
     checkIfMarginHasAlreadyBeenRefunded i =
-      [ PUSH32 $ integer2w256 $ 2 ^ ( i + 1 ) -- add 1 since right-most bit is used to indicate an active DC
-      , PUSH4 $ storageAddress Activated
+      [ push $ 2 ^ ( i + 1 ) -- add 1 since right-most bit is used to indicate an active DC
+      , push $ storageAddress Activated
       , SLOAD
       , AND
       , JUMPITO $ "mr_end" ++ show i
       ]
     -- leaves 1 or 0 on top of stack to show if path is chosen
-    -- Only the bits below max index need to match for this path to be chosen
     checkIfPathIsChosen mrme i =
-      -- TODO: Three below opcodes should be reduced to one PUSH whose value is calculated compile-time
-      [ PUSH32 $ integer2w256 $ path2Bitmask mrme
-      , PUSH32 $ integer2w256 $ 2 ^ ( 2 * (path2highestIndexValue mrme + 1) ) - 1 -- bitmask to only check lowest bits
-      , AND
-      , PUSH4 $ storageAddress MemoryExpressionRefs
+      [ push $ path2Bitmask mrme
+      , push $ storageAddress MemoryExpressionRefs
       , SLOAD
+      , push $ otherBitMask mrme
+      , AND
       , XOR
       , JUMPITO $ "mr_end" ++ show i -- iff non-zero refund; if 0, refund
       ]
@@ -443,16 +443,25 @@ executeMarginRefundM (path, refunds) = do
     payBackMargin ((tokenAddr, recipient, amount):ls) = -- push args, call transfer, check ret val
       [ PUSH32 $ address2w256 recipient -- TODO: This hould be PUSH20, not PUSH32. Will save gas.
       , PUSH32 $ address2w256 tokenAddr
-      , PUSH32 $ integer2w256 amount
+      , push amount
       , FUNCALL "transfer_subroutine"
       , ISZERO,
         JUMPITO "global_throw"
       ] ++ payBackMargin ls
+
     setMarginRefundBit i =
-      [ PUSH32 $ integer2w256 $ 2 ^ (i + 1)
-      , PUSH4 $ storageAddress Activated
+      [ push $ 2 ^ (i + 1)
+      , push $ storageAddress Activated
+      , SLOAD
+      , XOR
+      , push $ storageAddress Activated
       , SSTORE
       ]
+
+-- Ensures that only the bits relevant for this path are checked
+otherBitMask :: [(Integer, Bool)] -> Integer
+otherBitMask [] = 0
+otherBitMask ((i, _branch):ls) = 3 * 2 ^ (i * 2) + otherBitMask ls
 
 path2Bitmask :: [(Integer, Bool)] -> Integer
 path2Bitmask [] = 0
@@ -520,14 +529,14 @@ compileExp e = case e of
                     return [DUP2, DUP2, EVM_LT, JUMPITO label, SWAP1, JUMPDESTFROM label, POP]
 
   MultExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [MUL]
-  DiviExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [DIV]
+  DiviExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [DIV]
   AddiExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [ADD]
-  SubtExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [SUB]
+  SubtExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [SUB]
   EqExp     e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [EVM_EQ]
-  LtExp     e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [EVM_LT]
-  GtExp     e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [EVM_GT]
-  GtOrEqExp e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [EVM_LT, ISZERO]
-  LtOrEqExp e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [EVM_GT, ISZERO]
+  LtExp     e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [EVM_LT]
+  GtExp     e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [EVM_GT]
+  GtOrEqExp e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [EVM_LT, ISZERO]
+  LtOrEqExp e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [EVM_GT, ISZERO]
   NotExp    e1    -> compileExp e1 <++> return [ISZERO]
   AndExp    e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [AND]
   OrExp     e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [OR]
@@ -544,8 +553,8 @@ compileExp e = case e of
 
 compileLit :: Literal -> Integer -> String -> [EvmOpcode]
 compileLit lit mo _label = case lit of
-  IntVal  i -> [ PUSH32 $ integer2w256 i ]
-  BoolVal b -> [ PUSH1 (if b then 0x1 else 0x0) ] -- 0x1 is true
+  IntVal  i -> [ push i ]
+  BoolVal b -> [ push (if b then 0x1 else 0x0) ] -- 0x1 is true
   Observable _ address key ->
     let functionCall = getFunctionCallEvm
                          address
@@ -554,7 +563,7 @@ compileLit lit mo _label = case lit of
                          (fromInteger mo)
                          (fromInteger mo)
                          0x20
-        moveResToStack = [ PUSH1 $ fromInteger mo, MLOAD ]
+        moveResToStack = [ push $ fromInteger mo, MLOAD ]
 
     in functionCall ++ moveResToStack
 
@@ -564,20 +573,20 @@ executeTransferCallsHH tc transferCounter = do
   let
     checkIfCallShouldBeMade =
       let
-        checkIfTimeHasPassed = [ PUSH4 $ storageAddress CreationTimestamp,
+        checkIfTimeHasPassed = [ push $ storageAddress CreationTimestamp,
                                  SLOAD,
                                  TIMESTAMP,
                                  SUB,
-                                 PUSH32 $ integer2w256 $ _delay tc,
+                                 push $ _delay tc,
                                  EVM_GT,
                                  JUMPITO $ "method_end" ++ show transferCounter ]
 
         -- Skip tcall if method has been executed already
         -- This only works for less than 2^8 transfer calls
-        checkIfTCHasBeenExecuted = [ PUSH4 $ storageAddress Executed,
+        checkIfTCHasBeenExecuted = [ push $ storageAddress Executed,
                                      SLOAD,
-                                     PUSH1 $ fromInteger transferCounter,
-                                     PUSH1 0x2,
+                                     push $ fromInteger transferCounter,
+                                     push 0x2,
                                      EXP,
                                      AND,
                                      ISZERO,
@@ -594,16 +603,16 @@ executeTransferCallsHH tc transferCounter = do
             checkIfTcIsInActiveBranch (memExpId, branch) =
               let
                 yieldStatement = 
-                  [ PUSH4 $ storageAddress MemoryExpressionRefs
+                  [ push $ storageAddress MemoryExpressionRefs
                   , SLOAD
                   , DUP1 -- should be popped in all cases to keep the stack clean
                   -- TODO: WARNING: ATM this value is not being popped!
-                  , PUSH32 $ integer2w256 $ 0x3 * 2 ^ (2 * memExpId) -- bitmask
+                  , push $ 0x3 * 2 ^ (2 * memExpId) -- bitmask
                   , AND
                   , ISZERO
                   , JUMPITO $ "method_end" ++ show transferCounter ] -- GOTO YIELD
                 passAndSkipStatement =
-                  [ PUSH32 $ integer2w256 $ 2 ^ (2 * memExpId + if branch then 1 else 0) -- bitmask
+                  [ push $ 2 ^ (2 * memExpId + if branch then 1 else 0) -- bitmask
                   , AND
                   , ISZERO
                   , JUMPITO $ "tc_SKIP" ++ show transferCounter ]
@@ -617,7 +626,7 @@ executeTransferCallsHH tc transferCounter = do
 
     callTransferToTcRecipient =
       runExprCompiler (CompileEnv 0 transferCounter 0x44 "amount_exp") (_amount tc)
-      ++ [ PUSH32 $ integer2w256 (_maxAmount tc)
+      ++ [ push (_maxAmount tc)
          , DUP2
          , DUP2
          , EVM_GT
@@ -634,10 +643,10 @@ executeTransferCallsHH tc transferCounter = do
          , ISZERO, JUMPITO "global_throw" ]
 
     checkIfTransferToTcSenderShouldBeMade =
-      [ PUSH32 (integer2w256 (_maxAmount tc))
+      [ push (_maxAmount tc)
       , SUB
       , DUP1
-      , PUSH1 0x0
+      , push 0x0
       , EVM_EQ
       , JUMPITO $ "skip_call_to_sender" ++ show transferCounter ]
       -- TODO: Here, we should call transfer to the
@@ -660,16 +669,16 @@ executeTransferCallsHH tc transferCounter = do
 
     updateExecutedWord = [
       JUMPDESTFROM $ "tc_SKIP" ++ show transferCounter,
-      PUSH4 $ storageAddress Executed,
+      push $ storageAddress Executed,
       SLOAD,
-      PUSH1 $ fromInteger transferCounter,
-      PUSH1 0x2,
+      push $ fromInteger transferCounter,
+      push 0x2,
       EXP,
       XOR,
       DUP1,
       ISZERO,
       JUMPITO "selfdestruct",
-      PUSH4 $ storageAddress Executed,
+      push $ storageAddress Executed,
       SSTORE ]
 
     functionEndLabel = [JUMPDESTFROM  $ "method_end" ++ show transferCounter]
@@ -692,14 +701,14 @@ activate = do
     [JUMPDESTFROM "activate_method"]
     ++ concatMap activateMapElementToTransferFromCall (Map.assocs am)
     -- set activate bit to 0x01 (true)
-    ++ [ PUSH1 0x01, PUSH4 $ storageAddress Activated, SSTORE ]
+    ++ [ push 0x01, push $ storageAddress Activated, SSTORE ]
     ++ saveTimestampToStorage
     -- emit activated event
     ++ emitEvent
   where emitEvent =
           [ PUSH32 $ eventSignature "Activated()"
-          , PUSH1 0
-          , PUSH1 0
+          , push 0
+          , push 0
           , LOG1 ]
 
 activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
@@ -709,7 +718,7 @@ activateMapElementToTransferFromCall ((tokenAddress, fromAddress), amount) =
     pushArgsToStack =
       [ PUSH32 $ address2w256 fromAddress
       , PUSH32 $ address2w256 tokenAddress
-      , PUSH32 $ integer2w256 amount ]
+      , push amount ]
     subroutineCall =
       [ FUNCALL "transferFrom_subroutine" ]
     throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]

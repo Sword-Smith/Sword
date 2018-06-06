@@ -84,6 +84,7 @@ data EvmOpcode = STOP
                | PUSH1 Word8
                | PUSH4 Word32
                | PUSH32 Word256
+               | PUSHN [Word8]
                | DUP1
                | DUP2
                | DUP3
