@@ -3,7 +3,7 @@ module EvmCompiler where
 import EvmCompilerHelper
 import EvmLanguageDefinition
 import IntermediateLanguageDefinition
-import DaggerLanguageDefinition hiding (Transfer)
+import EtlLanguageDefinition hiding (Transfer)
 import IntermediateCompiler (emptyContract)
 
 import Control.Monad.State

@@ -1,6 +1,6 @@
 module EvmCompilerHelper where
 
-import DaggerLanguageDefinition
+import EtlLanguageDefinition
 import EvmLanguageDefinition
 
 import Crypto.Hash

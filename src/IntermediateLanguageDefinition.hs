@@ -1,6 +1,6 @@
 module IntermediateLanguageDefinition where
 
-import DaggerLanguageDefinition
+import EtlLanguageDefinition
 
 import qualified Data.Map.Strict as Map
 

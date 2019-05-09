@@ -3,7 +3,7 @@ module Main where
 
 import EvmCompiler as EVMC
 import IntermediateCompiler as IMC
-import DaggerParser as BP
+import EtlParser as BP
 import TypeChecker as TC
 
 import Data.Aeson

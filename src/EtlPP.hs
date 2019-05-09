@@ -1,17 +1,17 @@
-module DaggerPP where
+module EtlPP where
 
-import DaggerLanguageDefinition
+import EtlLanguageDefinition
 
-daggerPP :: Contract -> String
-daggerPP c = daggerPPH c 1
+etlPP :: Contract -> String
+etlPP c = etlPPH c 1
 
-daggerPPH :: Contract -> Int -> String
-daggerPPH contract indent = case contract of
+etlPPH :: Contract -> Int -> String
+etlPPH contract indent = case contract of
   Transfer tok from to -> concat [ "transfer(", tok, ", ", from, ", ", to, ")" ]
-  Scale maxScale scaleExpr c -> concat [ "scale(\n", indentSpace , show maxScale, ",\n", indentSpace, ppExpr scaleExpr, ",\n", indentSpace, daggerPPH c (indent + 1), ")" ]
-  Both c1 c2 -> concat [ "both(\n",indentSpace, daggerPPH c1 (indent + 1), ",\n", indentSpace, daggerPPH c2 (indent + 1), ")"]
-  Translate time c -> concat [ "translate(\n", indentSpace, ppTime time, ",\n", indentSpace, daggerPPH c (indent + 1), ")" ]
-  IfWithin (MemExp time e) c1 c2 -> concat [ "if ", ppExpr e, " within ", ppTime time, "\n", indentSpace, "then ", daggerPPH c1 (indent + 1), "\n", indentSpace, "else ", daggerPPH c2 (indent + 1) ]
+  Scale maxScale scaleExpr c -> concat [ "scale(\n", indentSpace , show maxScale, ",\n", indentSpace, ppExpr scaleExpr, ",\n", indentSpace, etlPPH c (indent + 1), ")" ]
+  Both c1 c2 -> concat [ "both(\n",indentSpace, etlPPH c1 (indent + 1), ",\n", indentSpace, etlPPH c2 (indent + 1), ")"]
+  Translate time c -> concat [ "translate(\n", indentSpace, ppTime time, ",\n", indentSpace, etlPPH c (indent + 1), ")" ]
+  IfWithin (MemExp time e) c1 c2 -> concat [ "if ", ppExpr e, " within ", ppTime time, "\n", indentSpace, "then ", etlPPH c1 (indent + 1), "\n", indentSpace, "else ", etlPPH c2 (indent + 1) ]
   where
     indentSpace = replicate (2*indent) ' '
 

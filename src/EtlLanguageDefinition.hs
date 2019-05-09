@@ -1,4 +1,4 @@
-module DaggerLanguageDefinition where
+module EtlLanguageDefinition where
 
 data Contract = Transfer { tokenAddress_ :: Address,
                            from_         :: Address,

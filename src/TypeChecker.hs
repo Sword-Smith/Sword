@@ -1,6 +1,6 @@
 module TypeChecker where
 
-import DaggerLanguageDefinition
+import EtlLanguageDefinition
 
 data ExpType = BoolType
              | IntType deriving (Show, Eq)

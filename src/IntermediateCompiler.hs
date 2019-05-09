@@ -1,7 +1,7 @@
 module IntermediateCompiler where
 
 import IntermediateLanguageDefinition
-import DaggerLanguageDefinition
+import EtlLanguageDefinition
 
 import Control.Monad.Reader
 import Control.Monad.State
