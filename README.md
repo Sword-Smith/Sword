@@ -12,7 +12,7 @@ advantages. In particular, the language is restricted such that using
 it to specify unintended behavior is impossible. Further, as the
 semantics of the language are formally verified, contracts specified
 in the language is guaranteed to behave as intended and to only have a
-single possible interpretation.
+single interpretation.
 
 To show a possible integration of the language, we provide a graphical
 frontend for creating, deploying and monitoring future
@@ -25,16 +25,16 @@ possible view both the generated eToroLang code and the compiled EVM
 code.
 
 The frontend is for demonstration purposes only and relies on being
-able to act as a signatory on behalf of accounts representing both
-parties entering the contract. In an actual deployment of the system,
-a separate signing step by each individual signatory is required
-before they can enter into agreement. Further, since the frontend is
-for proof-of-concept demonstration purposes only, it is not possible
-to decide with whom you want to enter the contract. The current
-implementation of the on-chain contracts will take the amount of
-tokens held by the contract into escrow. In an actual implementation
-of the system, an alternative method would be used which avoids
-large amounts of tokens in this manner.
+able to act as a signatory on behalf of the accounts representing both
+parties agreeing to the contract. In an actual deployment of the
+system, a separate signing step by each individual signatory is
+required before they can enter into agreement. Further, the
+demonstration fronted will always create a contractual agreement
+between two predefined parties. Finally, The current implementation of the
+on-chain contracts will take the amount of tokens held by the contract
+into escrow. In an actual implementation of the system, an alternative
+method would be used which avoids large amounts of tokens in this
+manner.
 
 ## The eToroLang Language
 We present a couple of examples which shows eToroLang in action.
@@ -142,6 +142,10 @@ In a separate terminal window do:
     `yarn install`
  1. Start the client (will launch a browser)  
     `yarn start`
+
+Below is a screenshot of the started frontend
+
+![Frontend screenshot]()
 
 #### Setting up metamask
 
