@@ -145,7 +145,7 @@ In a separate terminal window do:
 
 Below is a screenshot of the started frontend
 
-![Frontend screenshot]()
+![Frontend screenshot](https://raw.githubusercontent.com/Firmo-Network/etlc/master/docs/frontend.png?token=AABFWOQJMDDFRAKTDADEXHC432VAC)
 
 #### Setting up metamask
 
