@@ -51,12 +51,16 @@ is read from an oracle.
         100,
         100,
             if obs(bool, addressDataFeedBool, 0) within minutes(2) then
-                        transfer( addressErc20, B, A)
+                        transfer( eToroUSD, B, A)
         else
-    transfer( addressErc20, A, B))
+    transfer( eToroUSD, A, B))
 
 
-Addresses are text strings written as `0x[0-9a-f]{40}`.
+Addresses are text strings written as `0x[0-9a-f]{40}`. The three
+arguments to `transfer` are addresses: the address of the ERC20
+smart contract of the tokens being transferred, the party that makes
+this payment, and the last argument is the party to receive this
+payment.
 
 This contract will transfer 100 tokens to A if the oracle/data feed
 shows the value true at any time within two minutes. If that does not
@@ -87,8 +91,22 @@ USD. This can be achieved by the following contract:
 
 If the ETH price at the strike time is 10 USD, then this contract will
 pay out 90 USD, thus guaranteeing A a value of 100 USD at the maturity
-of the contract.
+of the contract. eToroUSD is the address of an ERC20-complaint smart
+contract.
 
+## ABI of the produced contracts
+
+A compiled etl contract has three methods: `activate()`, `execute()`,
+and `Activated()`. `activate()` and `execute()` may change state,
+`Activated()` is a pure function (no side effects).
+ * `activate()` collects the margin from the parties' accounts
+ and starts the timer. Will only succeed if the parties have allowed
+ the etl contract to withdraw from their balance through the ERC20
+ contract call `approve`.
+ * `execute()` checks whether any subparts of the contracts are ready
+ to be paid out to the parties or any margins can be paid back.
+ * `Activated()` returns a boolean indicating whether the contract
+ has been activated or not.
 
 ## Working with the system
 We now describe how to set up the various components needed to get the
