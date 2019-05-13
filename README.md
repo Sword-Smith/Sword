@@ -108,6 +108,26 @@ and `Activated()`. `activate()` and `execute()` may change state,
  * `Activated()` returns a boolean indicating whether the contract
  has been activated or not.
 
+## Definition of the eToroLang (etl)
+The context free grammar definition of the language in which the
+derivative contracts are written is:
+# CFG for ETL
+
+```
+c ::= scale(n,e,c1) | zero | both(c1,c2) |
+      transfer(a, p1, p2) | translate(t,c1) |
+      if e within t1
+      then c1 else c2
+e ::= b | obs(ot, f, t) | e 1op e2 | uop e1
+t ::= now | u(n)
+u ::= seconds | minutes | hours | days | weeks
+uop ::=  not
+op ::= + | - | x | / | = | if | or | and
+ot ::= int | bool
+```
+where n is a natural number, p is a party to the contract (identified by an Ethereum address), a is a token contract address, f is the address of a feed, and b is a whole number.
+
+
 ## Working with the system
 We now describe how to set up the various components needed to get the
 demonstration frontend up and running.
