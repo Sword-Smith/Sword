@@ -111,7 +111,6 @@ and `Activated()`. `activate()` and `execute()` may change state,
 ## Definition of the eToroLang (etl)
 The context free grammar definition of the language in which the
 derivative contracts are written is:
-# CFG for ETL
 
 ```
 c ::= scale(n,e,c1) | zero | both(c1,c2) |
