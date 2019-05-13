@@ -79,13 +79,11 @@ contract whose value plus the value of an ether is at least 100
 USD. This can be achieved by the following contract:
 
     translate(
-    seconds(90),
-    scale(
+      days(90),
+      scale(
         100,
         max(0, 100 - obs(int, priceFeed, ETHUSD))
-        transfer(eToroUSD, B, A )
-        )
-    )
+        transfer(eToroUSD, B, A )))
 
 If the ETH price at the strike time is 10 USD, then this contract will
 pay out 90 USD, thus guaranteeing A a value of 100 USD at the maturity
