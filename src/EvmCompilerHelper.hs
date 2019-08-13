@@ -50,6 +50,14 @@ keccak256 fname =
   in
     show $ keccak256H $ pack fname
 
+keccak256B :: ByteString -> String
+keccak256B str =
+  let
+    keccak256H :: ByteString -> Digest Keccak_256
+    keccak256H = hash
+  in
+    show $ keccak256H str
+
 address2w256 :: Address -> Word256
 address2w256 ('0':'x':addr) =
   let
@@ -156,6 +164,7 @@ ppEvm instruction = case instruction of
     XOR          -> "18"
     NOT          -> "19"
     BYTE         -> "1a"
+    SHL          -> "1b"
     SHA3         -> "20"
     ADDRESS      -> "30"
     BALANCE      -> "31"
@@ -203,6 +212,7 @@ ppEvm instruction = case instruction of
     SWAP3        -> "92"
     LOG0         -> "a0"
     LOG1         -> "a1"
+    LOG2         -> "a2"
     CREATE       -> "f0"
     CALL         -> "f1"
     CALLCODE     -> "f2"
@@ -210,6 +220,7 @@ ppEvm instruction = case instruction of
     DELEGATECALL -> "f4"
     SELFDESTRUCT -> "ff"
     THROW        -> "fe"
+    REVERT       -> "fd"
     FUNSTART _ _ -> undefined
     FUNSTARTA _  -> undefined
     FUNCALL _    -> undefined

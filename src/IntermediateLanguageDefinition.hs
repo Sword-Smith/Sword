@@ -26,12 +26,16 @@ import EtlLanguageDefinition
 
 import qualified Data.Map.Strict as Map
 
+type PartyIndex = Integer
+type PartyIdentifier = Integer
+
 type MemExpId = Integer
 type Branch = Bool
 type MemExpPath = [(MemExpId, Branch)]
 
 data IntermediateContract =
-     IntermediateContract { getTransferCalls   :: [TransferCall]
+     IntermediateContract { getParties         :: [Party]
+                          , getTransferCalls   :: [TransferCall]
                           , getMemExps         :: [IMemExp]
                           , getActivateMap     :: ActivateMap
                           , getMarginRefundMap :: MarginRefundMap
@@ -42,8 +46,8 @@ data TransferCall =
                   , _amount       :: Expr
                   , _delay        :: Integer
                   , _tokenAddress :: Address
-                  , _from         :: Address
-                  , _to           :: Address
+                  , _from         :: PartyIndex
+                  , _to           :: PartyIndex
                   , _memExpPath   :: MemExpPath
                   } deriving (Show, Eq)
 
@@ -56,14 +60,14 @@ data IMemExp = IMemExp { _IMemExpBegin  :: Integer
                        , _IMemExp       :: Expr
                        } deriving (Show, Eq)
 
-type ActivateMap = Map.Map (Address, Address) Integer
+type ActivateMap = Map.Map (Address, PartyIndex) Integer
 
-type MarginRefundMap = Map.Map [(Integer, Bool)] [(Address, Address, Integer)]
+type MarginRefundMap = Map.Map [(Integer, Bool)] [(Address, PartyIndex, Integer)]
 
 -- (path, marginRefundValue) = ([(memExpRef, branch (true or false))], (token address, recipient, amount))
-type MarginRefundMapElement = ([(Integer, Bool)], [(Address, Address, Integer)])
+type MarginRefundMapElement = ([(Integer, Bool)], [(Address, PartyIndex, Integer)])
 
 type MarginRefundPath = [(Integer, Bool)]
 
 -- (token address, from address, amount)
-type ActivateMapElement = ((Address, Address), Integer)
+type ActivateMapElement = ((Address, PartyIndex), Integer)

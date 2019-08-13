@@ -110,9 +110,10 @@ getAbiDefinition =
     constructor = Just $ AbiConstructorDefinition False "constructor" []
     execute     = AbiFunctionDefinition "execute" "function" False [] [] False
     activate    = AbiFunctionDefinition "activate" "function" False [] [] False
+    take        = AbiFunctionDefinition "take" "function" False [] [AbiVarDefinition "party" "uint256"] False
     activatedE  = AbiEventDefinition "Activated" "event" False []
   in
-    AbiDefinition constructor [execute, activate] [activatedE]
+    AbiDefinition constructor [execute, activate, take] [activatedE]
 
 -- This function writes an ABI definition of the contract.
 writeAbiDef :: String -> String -> IO()

@@ -28,6 +28,7 @@ import EtlLanguageDefinition
 import Control.Monad.Reader
 import Control.Monad.State
 
+import Data.List
 import qualified Data.Map.Strict as Map
 
 -- State monad definitions
@@ -41,7 +42,12 @@ data ScopeEnv =
               , _currentMemExpPath :: MemExpPath
               }
 
-type ICompiler a = ReaderT ScopeEnv (State MemExpId) a
+data GlobalEnv =
+  GlobalEnv { _parties  :: [Party]
+            , _memExpId :: Maybe MemExpId
+            }
+
+type ICompiler a = ReaderT ScopeEnv (State GlobalEnv) a
 
 -- The marginRefundPath and memExpRs could be combined to reduce
 -- the number of fields in this recored by one.
@@ -52,11 +58,35 @@ initialScope = ScopeEnv { _maxFactor   = 1
                         , _currentMemExpPath  = []
                         }
 
+initialGlobal :: GlobalEnv
+initialGlobal = GlobalEnv { _parties = []
+                          , _memExpId = Nothing
+                          }
+
 emptyContract :: IntermediateContract
-emptyContract = IntermediateContract [] [] Map.empty Map.empty
+emptyContract = IntermediateContract [] [] [] Map.empty Map.empty
 
 newMemExpId :: ICompiler MemExpId
-newMemExpId = get <* modify (+ 1)
+newMemExpId = do
+  g @ (GlobalEnv _ _memExpId) <- get
+  let _memExpId' = increment _memExpId
+  put $ g { _memExpId = Just _memExpId' }
+  return _memExpId'
+  where
+    increment :: Maybe MemExpId -> MemExpId
+    increment (Just id) = id + 1
+    increment _         = 0
+
+insertIfMissing :: Party -> ICompiler PartyIndex
+insertIfMissing party = do
+  g @ (GlobalEnv _parties _) <- get
+
+  let (_parties', partyIndex) = case findIndex (party ==) _parties of
+        Just partyIndex -> (_parties, fromIntegral $ partyIndex)
+        Nothing -> (_parties ++ [party], fromIntegral $ length _parties)
+
+  put $ g { _parties = _parties' }
+  return partyIndex
 
 toSeconds :: Time -> Integer
 toSeconds t = case t of
@@ -70,25 +100,34 @@ toSeconds t = case t of
 -- Main method of the intermediate compiler
 intermediateCompile :: Contract -> IntermediateContract
 intermediateCompile contract =
-  evalState (runReaderT (intermediateCompileM contract) initialScope) 0
+  evalState (runReaderT compile initialScope) initialGlobal
+  where
+    compile = intermediateCompileM contract >>= intermediateCompileFinalizeParties
 
 intermediateCompileOptimize :: Contract -> IntermediateContract
 intermediateCompileOptimize = foldExprs . intermediateCompile
 
+intermediateCompileFinalizeParties :: IntermediateContract -> ICompiler IntermediateContract
+intermediateCompileFinalizeParties contract = do
+  GlobalEnv _parties _ <- get
+  return $ contract { getParties = _parties }
+
 intermediateCompileM :: Contract -> ICompiler IntermediateContract
 intermediateCompileM (Transfer token from to) = do
   ScopeEnv maxFactor scaleFactor delayTerm memExpPath <- ask
+  fromPartyId <- insertIfMissing from
+  toPartyId   <- insertIfMissing to
   let transferCall = TransferCall { _maxAmount     = maxFactor
                                   , _amount        = scaleFactor (Lit (IntVal 1))
                                   , _delay         = delayTerm
                                   , _tokenAddress  = token
-                                  , _from          = from
-                                  , _to            = to
+                                  , _from          = fromPartyId
+                                  , _to            = toPartyId
                                   , _memExpPath    = memExpPath
                                   }
 
-  let activateMap = Map.fromList [((token, from), maxFactor)]
-  return (IntermediateContract [transferCall] [] activateMap Map.empty)
+  let activateMap = Map.fromList [((token, fromPartyId), maxFactor)]
+  return (IntermediateContract [] [transferCall] [] activateMap Map.empty)
 
 intermediateCompileM (Scale maxFactor factorExp contract) =
   local adjustScale $ intermediateCompileM contract
@@ -100,9 +139,9 @@ intermediateCompileM (Scale maxFactor factorExp contract) =
                }
 
 intermediateCompileM (Both contractA contractB) = do
-  IntermediateContract tcs1 mes1 am1 mrm1 <- intermediateCompileM contractA
-  IntermediateContract tcs2 mes2 am2 mrm2 <- intermediateCompileM contractB
-  return $ IntermediateContract (tcs1 ++ tcs2)
+  IntermediateContract _ tcs1 mes1 am1 mrm1 <- intermediateCompileM contractA
+  IntermediateContract _ tcs2 mes2 am2 mrm2 <- intermediateCompileM contractB
+  return $ IntermediateContract [] (tcs1 ++ tcs2)
                                 (mes1 ++ mes2)
                                 (Map.unionWith (+) am1 am2)
                                 (Map.union mrm1 mrm2)
@@ -124,10 +163,10 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
   let delayEnd = toSeconds time + delay
 
   icA <- local (extendMemExpPath (memExpId, True)) $ intermediateCompileM contractA
-  let IntermediateContract tcs1 mes1 am1 mrm1 = icA
+  let IntermediateContract _ tcs1 mes1 am1 mrm1 = icA
 
   icB <- local (extendMemExpPath (memExpId, False)) $ intermediateCompileM contractB
-  let IntermediateContract tcs2 mes2 am2 mrm2 = icB
+  let IntermediateContract _ tcs2 mes2 am2 mrm2 = icB
 
   let me0 = IMemExp { _IMemExpBegin = delay
                     , _IMemExpEnd   = delayEnd
@@ -137,12 +176,12 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
 
   -- MarginRefundMap
   memExpPath <- reader _currentMemExpPath
-  let marginRefundMap = Map.filter (not . null) $
+  let marginRefundMap = Map.filter (not . Prelude.null) $
                           Map.insert (memExpPath ++ [(memExpId, True)])  (iw am2 am1) $
                           Map.insert (memExpPath ++ [(memExpId, False)]) (iw am1 am2) $
                           Map.union mrm1 mrm2
 
-  return $ IntermediateContract (tcs1 ++ tcs2)
+  return $ IntermediateContract [] (tcs1 ++ tcs2)
                                 (me0 : mes1 ++ mes2)
                                 (Map.unionWith max am1 am2)
                                 marginRefundMap
@@ -158,9 +197,10 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
     -- Hence the subtraction. If no margin is present in the
     -- RC and margin is present in the LC, the entire margin can be
     -- returned, hence the Map.differenceWith.
-    iw :: ActivateMap -> ActivateMap -> [(Address, Address, Integer)]
-    iw am1 am2 = map (\((a,b), c) -> (a,b,c)) $ Map.toList $
-      Map.differenceWith (\x y -> if x - y > 0 then Just (x - y) else Nothing) am1 am2
+    iw :: ActivateMap -> ActivateMap -> [(Address, PartyIndex, Integer)]
+    iw am1 am2 = map (\((a,b), c) -> (a,b,c))
+      $ Map.toList
+      $ Map.differenceWith (\x y -> if x - y > 0 then Just (x - y) else Nothing) am1 am2
 
 intermediateCompileM Zero = return emptyContract
 

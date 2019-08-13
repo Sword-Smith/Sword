@@ -65,6 +65,8 @@ data StorageType = CreationTimestamp
                  | Executed
                  | Activated
                  | MemoryExpressionRefs
+                 | PartyMap
+                 | PartyFreeMap
 
 -- For each storage index we pay 20000 GAS. Reusing one is only 5000 GAS.
 -- It would therefore make sense to pack as much as possible into the same index.
@@ -74,10 +76,11 @@ storageAddress CreationTimestamp      = 0x0
 storageAddress Activated              = 0x1
 storageAddress Executed               = 0x2
 storageAddress MemoryExpressionRefs   = 0x3
+storageAddress PartyMap               = 0x4
+storageAddress PartyFreeMap           = 0x5
 
 sizeOfOpcodes :: [EvmOpcode] -> Integer
 sizeOfOpcodes = sum . map sizeOfOpcode
-
 -- This function is called before the linker and before the
 -- elimination of pseudo instructions, so it must be able to
 -- also handle the pseudo instructions before and after linking
@@ -113,11 +116,12 @@ evmCompile :: IntermediateContract -> [EvmOpcode]
 evmCompile intermediateContract =
   linker (constructor' ++ codecopy') ++ linker body
   where
-    constructor'     = constructor (getTransferCalls intermediateContract)
+    constructor'     = constructor intermediateContract
     codecopy'        = codecopy constructor' body
-    body             = jumpTable ++ subroutines ++ activateCheck ++ execute' ++ activate'
+    body             = jumpTable ++ subroutines ++ activateCheck ++ execute' ++ activate' ++ take'
     execute'         = runCompiler intermediateContract initialEnv execute -- also contains selfdestruct when contract is fully executed
     activate'        = runCompiler intermediateContract initialEnv activate
+    take'            = runCompiler intermediateContract initialEnv EvmCompiler.take
     -- The addresses of the constructor run are different from runs when DC is on BC
 
 linker :: [EvmOpcode] -> [EvmOpcode]
@@ -161,26 +165,29 @@ transformPseudoInstructions = concatMap transformH
     swap _ = undefined -- Only 2 or 3 args is accepted atm
 
 functionSignature :: String -> Word32
-functionSignature funDecl = read $ "0x" ++ take 8 (keccak256 funDecl)
+functionSignature funDecl = read $ "0x" ++ Data.List.take 8 (keccak256 funDecl)
 
 eventSignature :: String -> Word256
 eventSignature eventDecl = hexString2w256 $ "0x" ++ keccak256 eventDecl
 
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
-constructor :: [TransferCall] -> [EvmOpcode]
-constructor tcs =
-  checkNoValue "Constructor_Header" ++
-  setExecutedWord tcs
+constructor :: IntermediateContract -> [EvmOpcode]
+constructor (IntermediateContract parties tcs _ _ _) =
+  checkNoValue "Constructor_Header"
+  ++ setExecutedWord tcs
+  ++ saveParties parties
 
 -- Checks that no value (ether) is sent when executing contract method
 -- Used in both contract header and in constructor
 checkNoValue :: String -> [EvmOpcode]
-checkNoValue target = [CALLVALUE,
-                          ISZERO,
-                          JUMPITO target,
-                          THROW,
-                          JUMPDESTFROM target]
+checkNoValue target = [ CALLVALUE
+                      , ISZERO
+                      , JUMPITO target
+                      , push 0
+                      , push 0
+                      , REVERT
+                      , JUMPDESTFROM target ]
 
 -- Stores timestamp of creation of contract in storage
 saveTimestampToStorage :: [EvmOpcode]
@@ -195,6 +202,51 @@ setExecutedWord []  = undefined
 setExecutedWord tcs = [ push $ 2^length tcs - 1,
                         push $ storageAddress Executed,
                         SSTORE ]
+
+
+saveParties :: [Party] -> [EvmOpcode]
+saveParties parties = savePartiesH $ zip [toInteger 0..] parties
+
+savePartiesH :: [(PartyIndex, Party)] -> [EvmOpcode]
+savePartiesH ((partyIndex, p):parties) = savePartyToStorage partyIndex p ++ savePartiesH parties
+savePartiesH _ = []
+
+savePartyToStorage :: PartyIndex -> Party -> [EvmOpcode]
+savePartyToStorage partyIndex (Bound address) =
+  saveToStorage (storageAddress PartyMap) partyIndex (address2w256 address)
+savePartyToStorage partyIndex (Free partyIdentifier) =
+  saveToStorage (storageAddress PartyFreeMap) partyIdentifier (integer2w256 partyIndex)
+
+getPartyFromStorage :: PartyIndex -> [EvmOpcode]
+getPartyFromStorage partyIndex =
+  [ push partyIndex ] ++ (getFromStorageStack $ storageAddress PartyMap)
+
+saveToStorage :: Integer -> Integer -> Word256 -> [EvmOpcode]
+saveToStorage prefix key value =
+  [ PUSH32 value ]
+  ++ [ push key ] ++ getStorageHashKeyStack prefix
+  ++ [ SSTORE ]
+
+getFromStorageStack :: Integer -> [EvmOpcode]
+getFromStorageStack prefix = getStorageHashKeyStack prefix ++ [ SLOAD ]
+
+getStorageHashKeyStack :: Integer -> [EvmOpcode]
+getStorageHashKeyStack prefix = [ push 8
+                                , SHL
+
+                                , push prefix
+                                , OR
+
+                                , push freeSpaceOffset
+                                , MSTORE
+                                , push 0x32
+                                , push freeSpaceOffset
+                                , SHA3
+                                ]
+  where
+    -- TODO: Proper memory handling in state monad, instead of guessing free space
+    freeSpaceOffset = 0x2000
+
 
 -- Returns the code needed to transfer code from *init* to I_b in the EVM
 -- 22 is the length of itself, right now we are just saving in mem0
@@ -219,14 +271,24 @@ jumpTable =
   , PUSH32 (0xffffffff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , AND
   , DUP1
+  , DUP1
+
   , PUSH32 (functionSignature "execute()" , 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "execute_method"
+
   , PUSH32 (functionSignature "activate()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "activate_method"
+
+  , PUSH32 (functionSignature "take(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "take_method"
+
   , JUMPDESTFROM "global_throw"
-  , THROW
+  , push 0
+  , push 0
+  , REVERT
   ]
 
 subroutines :: [EvmOpcode]
@@ -463,13 +525,13 @@ executeMarginRefundM (path, refunds) = do
       ]
     payBackMargin [] = []
     payBackMargin ((tokenAddr, recipient, amount):ls) = -- push args, call transfer, check ret val
-      [ PUSH32 $ address2w256 recipient -- TODO: This hould be PUSH20, not PUSH32. Will save gas.
-      , PUSH32 $ address2w256 tokenAddr
-      , push amount
-      , FUNCALL "transfer_subroutine"
-      , ISZERO,
-        JUMPITO "global_throw"
-      ] ++ payBackMargin ls
+      getPartyFromStorage recipient -- TODO: This hould be PUSH20, not PUSH32. Will save gas.
+      ++ [ PUSH32 $ address2w256 tokenAddr
+         , push amount
+         , FUNCALL "transfer_subroutine"
+         , ISZERO,
+           JUMPITO "global_throw" ]
+      ++ payBackMargin ls
 
     setMarginRefundBit i =
       [ push $ 2 ^ (i + 1)
@@ -624,7 +686,7 @@ executeTransferCallsHH tc transferCounter = do
           where
             checkIfTcIsInActiveBranch (memExpId, branch) =
               let
-                yieldStatement = 
+                yieldStatement =
                   [ push $ storageAddress MemoryExpressionRefs
                   , SLOAD
                   , DUP1 -- should be popped in all cases to keep the stack clean
@@ -655,10 +717,10 @@ executeTransferCallsHH tc transferCounter = do
          , JUMPITO $ "use_exp_res" ++ show transferCounter
          , SWAP1
          , JUMPDESTFROM $ "use_exp_res" ++ show transferCounter
-         , POP
+         , POP ]
 
-         , PUSH32 $ address2w256 (_to tc)
-         , PUSH32 $ address2w256 (_tokenAddress tc)
+      ++ getPartyFromStorage (_to tc)
+      ++ [ PUSH32 $ address2w256 (_tokenAddress tc)
          , DUP3
 
          , FUNCALL "transfer_subroutine"
@@ -679,10 +741,10 @@ executeTransferCallsHH tc transferCounter = do
       -- for the next call to transfer.
 
     callTransferToTcOriginator =
-      [ PUSH32 $ address2w256 (_from tc)
-      , PUSH32 $ address2w256 (_tokenAddress tc)
-      , DUP3
-      , FUNCALL "transfer_subroutine" ]
+      getPartyFromStorage (_from tc)
+      ++ [ PUSH32 $ address2w256 (_tokenAddress tc)
+         , DUP3
+         , FUNCALL "transfer_subroutine" ]
       ++ [ ISZERO, JUMPITO "global_throw" ] -- check ret val
 
     -- Flip correct bit from one to zero and call selfdestruct if all tcalls compl.
@@ -703,7 +765,7 @@ executeTransferCallsHH tc transferCounter = do
       push $ storageAddress Executed,
       SSTORE ]
 
-    functionEndLabel = [JUMPDESTFROM  $ "method_end" ++ show transferCounter]
+    functionEndLabel = [ JUMPDESTFROM  $ "method_end" ++ show transferCounter ]
 
   return $
     checkIfCallShouldBeMade ++
@@ -727,23 +789,57 @@ activate = do
     ++ saveTimestampToStorage
     -- emit activated event
     ++ emitEvent
+    ++ [STOP]
   where emitEvent =
           [ PUSH32 $ eventSignature "Activated()"
           , push 0
           , push 0
-          , LOG1 ]
+          , LOG1
+          ]
 
 activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
-activateMapElementToTransferFromCall ((tokenAddress, fromAddress), amount) =
+activateMapElementToTransferFromCall ((tokenAddress, partyIndex), amount) =
   pushArgsToStack ++ subroutineCall ++ throwIfReturnFalse
   where
     pushArgsToStack =
-      [ PUSH32 $ address2w256 fromAddress
-      , PUSH32 $ address2w256 tokenAddress
-      , push amount ]
+      getPartyFromStorage partyIndex
+      ++ [ PUSH32 $ address2w256 tokenAddress
+         , push amount ]
     subroutineCall =
       [ FUNCALL "transferFrom_subroutine" ]
     throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
+
+take :: Compiler [EvmOpcode]
+take = do
+  return $
+    [ JUMPDESTFROM "take_method" ]
+    ++ notActivatedCheck
+    ++ loadPartyName
+    ++ loadPartyIndex
+    ++ checkAddress
+    ++ saveAddress
+    ++ [ STOP ]
+  where
+    notActivatedCheck = [ push $ storageAddress Activated
+                        , SLOAD
+                        , JUMPITO "global_throw"
+                        ]
+    loadPartyName     = [ push 0x4 -- Skip the method signature
+                        , CALLDATALOAD
+                        ]
+
+    loadPartyIndex    = (getFromStorageStack $ storageAddress PartyFreeMap)
+                        ++ [ DUP1 ]
+    checkAddress      = (getFromStorageStack $ storageAddress PartyMap)
+                        ++ [ push 0
+                           , EVM_LT
+                           , JUMPITO "global_throw"
+                           ]
+    saveAddress       = [ CALLER
+                        , SWAP1
+                        ]
+                        ++ (getStorageHashKeyStack $ storageAddress PartyMap)
+                        ++ [ SSTORE ]
 
 getMemExpById :: MemExpId -> [IMemExp] -> IMemExp
 getMemExpById memExpId [] = error $ "Could not find IMemExp with ID " ++ show memExpId
@@ -756,66 +852,3 @@ getMemExpById memExpId (me:mes) =
 -- returns true or false. Only of all function calls return true, should
 -- the activated bit be set. This bit has not yet been reserved in
 -- memory/defined.
-
-
-
--- TESTS
-
--- test_EvmOpCodePush1Hex = PUSH1 0x60 :: EvmOpcode
--- test_EvmOpCodePush1Dec = PUSH1 60 :: EvmOpcode
-
--- -- ppEvm
-
--- test_ppEvmWithHex = TestCase ( assertEqual "ppEvm with hex input" (ppEvm(test_EvmOpCodePush1Hex)) "6060" )
--- test_ppEvmWithDec = TestCase ( assertEqual "ppEvm with dec input" (ppEvm(test_EvmOpCodePush1Dec)) "603c" )
-
--- -- getJumpTable
-
--- test_getJumpTable = TestCase (assertEqual "getJumpTable test" (getJumpTable) ([CALLVALUE,ISZERO,JUMPITO "no_val0",THROW,JUMPDESTFROM "no_val0",STOP]))
-
--- -- evmCompile
-
--- exampleContact             = parse' "translate(100, both(scale(101, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000)), scale(42, transfer(EUR, 0xffffffffffffffffffffffffffffffffffffffff, 0x0000000000000000000000000000000000000000))))"
--- exampleIntermediateContact = intermediateCompile(exampleContact)
-
--- test_evmCompile = TestCase( assertEqual "evmCompile test with two contracts" (evmCompile exampleIntermediateContact) (getJumpTable) )
-
--- -- getOpcodeSize
-
--- evm_opcode_push1       = PUSH1 0x60 :: EvmOpcode
--- evm_opcode_push4       = PUSH4 0x60606060 :: EvmOpcode
--- evm_opcode_pushJUMPITO = JUMPITO ":)" :: EvmOpcode
--- evm_opcode_pushaADD    = ADD :: EvmOpcode
-
--- test_getOpcodeSize_push1   = TestCase (assertEqual "test_getOpcodeSize_push1" (getOpcodeSize evm_opcode_push1) (2))
--- test_getOpcodeSize_push4   = TestCase (assertEqual "test_getOpcodeSize_push4" (getOpcodeSize evm_opcode_push4) (5))
--- test_getOpcodeSize_JUMPITO = TestCase (assertEqual "test_getOpcodeSize_JUMPITO" (getOpcodeSize evm_opcode_pushJUMPITO) (6))
--- test_getOpcodeSize_ADD     = TestCase (assertEqual "evm_opcode_pushaADD" (getOpcodeSize evm_opcode_pushaADD) (1))
-
--- -- linker
-
--- exampleWithMultipleJumpDest = [JUMPITO "MADS",CALLVALUE,STOP,STOP,JUMPDESTFROM "MADS",ISZERO,JUMPITO "no_val0",THROW,JUMPDESTFROM "no_val0",STOP, JUMPTO "MADS", JUMPITO "MADS"]
-
--- test_linker_mult_JumpDest = TestCase (assertEqual "test_linker_mult_JumpDest" (linker exampleWithMultipleJumpDest) ([JUMPITOA 10,CALLVALUE,STOP,STOP,JUMPDEST,ISZERO,JUMPITOA 19,THROW,JUMPDEST,STOP,JUMPTOA 10,JUMPITOA 10]))
-
--- -- replaceLabel
-
--- test_eliminatePseudoInstructions_mult_JumpDest = TestCase (assertEqual "test_eliminatePseudoInstructions_mult_JumpDest" (eliminatePseudoInstructions $ linker exampleWithMultipleJumpDest) ([PUSH4 10,JUMPI,CALLVALUE,STOP,STOP,JUMPDEST,ISZERO,PUSH4 19,JUMPI,THROW,JUMPDEST,STOP,PUSH4 10,JUMP,PUSH4 10,JUMPI]))
-
--- -- asmToMachineCode
-
--- test_asmToMachineCode_easy = TestCase (assertEqual "test_asmToMachineCode_easy" (asmToMachineCode $ eliminatePseudoInstructions $ linker [PUSH1 0x60, STOP, PC]) "60600058")
--- test_asmToMachineCode_hard = TestCase (assertEqual "test_asmToMachineCode_hard" (asmToMachineCode $ eliminatePseudoInstructions $ linker exampleWithMultipleJumpDest) ("630000000a573400005b15630000001357fe5b00630000000a56630000000a57"))
-
--- tests = TestList [TestLabel "test_ppEvmWithHex" test_ppEvmWithHex,
---                   TestLabel "test_ppEvmWithDec" test_ppEvmWithDec,
---                   TestLabel "test_getJumpTable" test_getJumpTable,
---                   TestLabel "test_evmCompile" test_evmCompile,
---                   TestLabel "test_getOpcodeSize_push1" test_getOpcodeSize_push1,
---                   TestLabel "test_getOpcodeSize_push4" test_getOpcodeSize_push4,
---                   TestLabel "test_getOpcodeSize_JUMPITO" test_getOpcodeSize_JUMPITO,
---                   TestLabel "test_getOpcodeSize_ADD" test_getOpcodeSize_ADD,
---                   TestLabel "test_linker_mult_JumpDest" test_linker_mult_JumpDest,
---                   TestLabel "test_eliminatePseudoInstructions_mult_JumpDest" test_eliminatePseudoInstructions_mult_JumpDest,
---                   TestLabel "test_asmToMachineCode_hard" test_asmToMachineCode_hard,
---                   TestLabel "test_asmToMachineCode_easy" test_asmToMachineCode_easy]
