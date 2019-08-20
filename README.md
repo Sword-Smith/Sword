@@ -45,8 +45,8 @@ To transfer a unit token from address `p1` to address `p2`, the `transfer(a, p1,
 p2)` function is used, where `a` is the token constract address (e.g. eToroUSD).
 
 Transfering an arbitry token amount can be done by using `scale(n, e, c)`, where
-`n` is the amount of tokens the constract will hold, `e` is an expression
-resolving in the actual amount of tokens to transfer and `c` is the constract to
+`n` is the maximum amount of tokens the contract will lock in escrow, `e` is an expression
+resolving in the actual amount of tokens to transfer and `c` is the ERC-20 token contract.
 excecute. This means that combining the transfer function and the scale function
 above, we can transfer an arbitrary amount of tokens using `scale(a, e,
 transfer(a, p1, p2))`.
@@ -145,7 +145,7 @@ translate(
 ```
 If the ETH price at the strike time is 10 USD, then this contract will pay out
 90 USD, thus guaranteeing A a value of 100 USD at the maturity of the contract.
-eToroUSD is the address of an ERC20-complaint smart contract.
+eToroUSD is the address of an ERC20-complaint token.
 
 ### Example 3: Future
 The code below describes a future contract, namely a legal agreement to buy or
@@ -182,18 +182,15 @@ translate(
 
 ## Application Binary Interface (ABI) of the produced contracts
 
-The eToroLang (etl) contract compiles into the Ethereum's ABI and has three
-methods: `activate()`, `execute()`, and `Activated()`.
+The eToroLang (etl) contract compiles into the Ethereum's ABI and has two
+methods: `activate()` and `execute()`.
  * `activate()` collects the margin from the parties' accounts and starts the
    timer. Will only succeed if the parties have allowed the etl contract to
    withdraw from their balance through the ERC20 contract call `approve`.
  * `execute()` checks whether any subparts of the contracts are ready to be paid
    out to the parties or any margins can be paid back.
- * `Activated()` returns a boolean indicating whether the contract has been
-   activated or not.
 
- `activate()` and `execute()` may change state, `Activated()` is a pure function
- (no side effects).
+ `activate()` and `execute()` may change state.
 
 ## Online DEMO
 A working demo can be found at
@@ -227,9 +224,6 @@ Before proceeding, make sure that you have the following installed
  * `git`
  * `yarn`
  * `node.js` version [10.xx](https://nodejs.org) (12.x is not supported)
- * If you are running on MacOS, Xcode needs to be installed and the path to the
-   full Xcode.app should be set:<br> `sudo xcode-select -s
-   /Applications/Xcode.app/Contents/Developer`
  * A browser with the [Metamask](http://metamask.io) extension installed
 
 ### Running and installing
@@ -271,13 +265,13 @@ private keys. Change the endpoint address private keys as follows:
 
 You are now able to create contracts using the interface.
 
-(TODO: web3.enable() needs to be called manually, but should be implemented on
+(TODO: ethereum.enable() needs to be called manually, but should be implemented on
 the frontend)
 
 ### Notes
 
 * Since this is a demo only, all contracts are entered between the two parties
-  represented by the accounts belonging to the private keys (for a more
+  represented by the accounts belonging to the private keys, as the server manages the keys for easy experience (for a more
   realistic demo, use the [online sandbox
   demo](https://sandbox.firmo.network/)).
 * After a contract has expired, you will be able to see the change of the
