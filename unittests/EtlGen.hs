@@ -20,9 +20,9 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
-module DaggerGen where
+module EtlGen where
 
-import DaggerLanguageDefinition
+import EtlLanguageDefinition
 import Test.QuickCheck
 
 -- Generate contracts that type-check
@@ -41,6 +41,8 @@ newtype BoolExpr = BoolExpr { getBoolExpr :: Expr }
 newtype AnyLiteral = AnyLiteral { getLiteral :: Literal }
                    deriving (Show, Eq)
 
+newtype AnyParty = AnyParty { getParty :: Party }
+
 instance Arbitrary ValidContract where
   arbitrary = ValidContract <$> sized contractGen
   shrink (ValidContract contract) = case contract of
@@ -56,9 +58,9 @@ instance Arbitrary ValidContract where
     Zero -> []
 
 contractGen :: Int -> Gen Contract
-contractGen 0 = Transfer <$> addressGen <*> addressGen <*> addressGen
+contractGen 0 = Transfer <$> addressGen <*> partyGen <*> partyGen
 contractGen n = oneof
-  [ Transfer <$> addressGen <*> addressGen <*> addressGen
+  [ Transfer <$> addressGen <*> partyGen <*> partyGen
   , Scale <$> (getPositive <$> arbitrary) <*> (getIntExpr <$> arbitrary) <*> contractGen (n - 1)
   , Both <$> contractGen (n `div` 2) <*> contractGen (n `div` 2)
   , Translate <$> (getAnyTime <$> arbitrary) <*> contractGen (n - 1)
@@ -150,3 +152,11 @@ instance Arbitrary AnyLiteral where
 
 instance Arbitrary MemExp where
   arbitrary = MemExp <$> (getAnyTime <$> arbitrary) <*> (getBoolExpr <$> arbitrary)
+
+-- instance Arbitrary AnyParty where
+--  arbitrary =
+
+partyGen :: Gen Party
+partyGen = oneof [ Free <$> choose (0, 255)
+                 , Bound <$> addressGen
+                 ]

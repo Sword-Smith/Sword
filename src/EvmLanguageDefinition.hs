@@ -59,6 +59,7 @@ data EvmOpcode = STOP
                | XOR
                | NOT
                | BYTE
+               | SHL
                | SHA3
                | ADDRESS
                | BALANCE
@@ -118,10 +119,12 @@ data EvmOpcode = STOP
                | SWAP3
                | LOG0
                | LOG1
+               | LOG2
                | CREATE
                | CALL
                | CALLCODE
                | RETURN
                | DELEGATECALL
                | SELFDESTRUCT
-               | THROW deriving (Eq, Show)
+               | THROW
+               | REVERT deriving (Eq, Show)

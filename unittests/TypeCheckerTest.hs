@@ -22,7 +22,7 @@
 
 module TypeCheckerTest where
 
-import DaggerLanguageDefinition
+import EtlLanguageDefinition
 
 import Data.Either
 
@@ -55,8 +55,8 @@ tests = do
 transferContract :: Contract
 transferContract = Transfer {
     tokenAddress_ = "0x123456789012345678901234567890123456789a",
-    from_         = "0x123456789012345678901234567890123456789a",
-    to_           = "0x123456789012345678901234567890123456789a"
+    from_         = Bound "0x123456789012345678901234567890123456789a",
+    to_           = Bound "0x123456789012345678901234567890123456789a"
 }
 
 scaleContract :: Integer -> Expr -> Contract -> Contract

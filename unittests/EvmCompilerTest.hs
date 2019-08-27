@@ -22,7 +22,7 @@
 
 module EvmCompilerTest (tests) where
 
-import DaggerLanguageDefinition
+import EtlLanguageDefinition
 import EvmLanguageDefinition
 import EvmCompiler
 import EvmCompilerHelper
@@ -88,7 +88,7 @@ pushTests =
           let hex = ppEvm (push i)
 
           -- The right instruction is used.
-          take 2 hex `shouldBe` printf "%02x" (0x60 + n - 1 :: Int)
+          Prelude.take 2 hex `shouldBe` printf "%02x" (0x60 + n - 1 :: Int)
 
           -- The hex-encoded number decodes properly.
           read ("0x" ++ drop 2 hex) `shouldBe` (i :: Integer)

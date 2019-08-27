@@ -20,10 +20,10 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
-module DaggerParserTest (tests, canonical_iw_source) where
+module EtlParserTest (tests, canonical_iw_source) where
 
-import DaggerParser
-import DaggerLanguageDefinition
+import EtlParser
+import EtlLanguageDefinition
 
 import Test.Hspec
 
@@ -116,8 +116,8 @@ zeroContractTest = do
 
     ast1 = IfWithin { memExp_ = MemExp (Seconds 10) (Lit (Observable OBool obsAddr "0"))
                     , contractA_ = Transfer { tokenAddress_ = tokAddr
-                                            , from_ = oneAddr
-                                            , to_ = twoAddr
+                                            , from_ = Bound oneAddr
+                                            , to_ = Bound twoAddr
                                             }
                     , contractB_ = Zero
                     }
@@ -134,8 +134,9 @@ parser_unittest0 =
     src = "transfer( 0x123456789012345678901234567890123456789a        ,    0x123456789012345678901234567890123456789b,0x123456789012345678901234567890123456789c)"
     ast :: Contract
     ast =  Transfer { tokenAddress_ = "0x123456789012345678901234567890123456789a"
-                    , from_         = "0x123456789012345678901234567890123456789b"
-                    , to_           = "0x123456789012345678901234567890123456789c" }
+                    , from_         = Bound "0x123456789012345678901234567890123456789b"
+                    , to_           = Bound "0x123456789012345678901234567890123456789c"
+                    }
 
 parser_unittest1 :: Spec
 parser_unittest1 = do
@@ -145,7 +146,7 @@ parser_unittest1 = do
     src :: String
     src = "if obs(bool, 0x123456789012345678901234567890123456789a, 0) within hours(10) then transfer(0x123456789012345678901234567890123456789a,0x123456789012345678901234567890123456789b,0x123456789012345678901234567890123456789c) else scale(100, 3 * 2, transfer(0x123456789012345678901234567890123456789a,0x123456789012345678901234567890123456789b,0x123456789012345678901234567890123456789c))"
     ast :: Contract
-    ast = IfWithin {memExp_ = MemExp (Hours 10) (Lit (Observable OBool "0x123456789012345678901234567890123456789a" "0")), contractA_ = Transfer {tokenAddress_ = "0x123456789012345678901234567890123456789a", from_ = "0x123456789012345678901234567890123456789b", to_ = "0x123456789012345678901234567890123456789c"}, contractB_ = Scale {maxFactor_ = 100, scaleFactor_ = MultExp (Lit (IntVal 3)) (Lit (IntVal 2)), contract_ = Transfer {tokenAddress_ = "0x123456789012345678901234567890123456789a", from_ = "0x123456789012345678901234567890123456789b", to_ = "0x123456789012345678901234567890123456789c"}}}
+    ast = IfWithin {memExp_ = MemExp (Hours 10) (Lit (Observable OBool "0x123456789012345678901234567890123456789a" "0")), contractA_ = Transfer {tokenAddress_ = "0x123456789012345678901234567890123456789a", from_ = Bound "0x123456789012345678901234567890123456789b", to_ = Bound "0x123456789012345678901234567890123456789c"}, contractB_ = Scale {maxFactor_ = 100, scaleFactor_ = MultExp (Lit (IntVal 3)) (Lit (IntVal 2)), contract_ = Transfer {tokenAddress_ = "0x123456789012345678901234567890123456789a", from_ = Bound "0x123456789012345678901234567890123456789b", to_ = Bound "0x123456789012345678901234567890123456789c"}}}
 
 parser_unittest2 :: Spec
 parser_unittest2 = do
@@ -155,7 +156,7 @@ parser_unittest2 = do
     src :: String
     src =  "if      obs(bool, 0x1234567890123456789012345678901234567890, 42)    within                 minutes(2) then if false within minutes(7) then scale(100, 2, transfer( 0x1234567890123456789012345678901234567891, 0x1234567890123456789012345678901234567892,0x1234567890123456789012345678901234567893)) else scale(100, 42 ,transfer( 0x1234567890123456789012345678901234567894, 0x1234567890123456789012345678901234567895, 0x1234567890123456789012345678901234567896)) else scale(100, 5 * 2, transfer( 0x1234567890123456789012345678901234567897, 0x1234567890123456789012345678901234567898, 0x1234567890123456789012345678901234567899))"
     ast :: Contract
-    ast = IfWithin {memExp_ = MemExp (Minutes 2) (Lit (Observable OBool "0x1234567890123456789012345678901234567890" "42")), contractA_ = IfWithin {memExp_ = MemExp (Minutes 7) (Lit (BoolVal False)), contractA_ = Scale {maxFactor_ = 100, scaleFactor_ = Lit (IntVal 2), contract_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567891", from_ = "0x1234567890123456789012345678901234567892", to_ = "0x1234567890123456789012345678901234567893"}}, contractB_ = Scale {maxFactor_ = 100, scaleFactor_ = Lit (IntVal 42), contract_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567894", from_ = "0x1234567890123456789012345678901234567895", to_ = "0x1234567890123456789012345678901234567896"}}}, contractB_ = Scale {maxFactor_ = 100, scaleFactor_ = MultExp (Lit (IntVal 5)) (Lit (IntVal 2)), contract_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567897", from_ = "0x1234567890123456789012345678901234567898", to_ = "0x1234567890123456789012345678901234567899"}}}
+    ast = IfWithin {memExp_ = MemExp (Minutes 2) (Lit (Observable OBool "0x1234567890123456789012345678901234567890" "42")), contractA_ = IfWithin {memExp_ = MemExp (Minutes 7) (Lit (BoolVal False)), contractA_ = Scale {maxFactor_ = 100, scaleFactor_ = Lit (IntVal 2), contract_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567891", from_ = Bound "0x1234567890123456789012345678901234567892", to_ = Bound "0x1234567890123456789012345678901234567893"}}, contractB_ = Scale {maxFactor_ = 100, scaleFactor_ = Lit (IntVal 42), contract_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567894", from_ = Bound "0x1234567890123456789012345678901234567895", to_ = Bound "0x1234567890123456789012345678901234567896"}}}, contractB_ = Scale {maxFactor_ = 100, scaleFactor_ = MultExp (Lit (IntVal 5)) (Lit (IntVal 2)), contract_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567897", from_ = Bound "0x1234567890123456789012345678901234567898", to_ = Bound "0x1234567890123456789012345678901234567899"}}}
 
 parser_unittest3 :: Spec
 parser_unittest3 = do
@@ -165,7 +166,7 @@ parser_unittest3 = do
     src :: String
     src = "scale(0, 1-                                            2 - 3, transfer(0x123456789012345678901234567890123456789a,0x123456789012345678901234567890123456789b,0x123456789012345678901234567890123456789c))"
     ast :: Contract
-    ast = Scale {maxFactor_ = 0, scaleFactor_ = SubtExp (SubtExp (Lit (IntVal 1)) (Lit (IntVal 2))) (Lit (IntVal 3)), contract_ = Transfer {tokenAddress_ = "0x123456789012345678901234567890123456789a", from_ = "0x123456789012345678901234567890123456789b", to_ = "0x123456789012345678901234567890123456789c"}}
+    ast = Scale {maxFactor_ = 0, scaleFactor_ = SubtExp (SubtExp (Lit (IntVal 1)) (Lit (IntVal 2))) (Lit (IntVal 3)), contract_ = Transfer {tokenAddress_ = "0x123456789012345678901234567890123456789a", from_ = Bound "0x123456789012345678901234567890123456789b", to_ = Bound "0x123456789012345678901234567890123456789c"}}
 
 canonical_iw_source :: String
 canonical_iw_source = "if 1*1 > 1 within seconds(1) then if 2*2 > 2 within seconds(2) then if 3*3 > 3 within seconds(3) then transfer(0x1234567890123456789012345678901234567891,0x1234567890123456789012345678901234567891,0x1234567890123456789012345678901234567891) else transfer(0x1234567890123456789012345678901234567892,0x1234567890123456789012345678901234567892,0x1234567890123456789012345678901234567892) else if 4*4 > 4 within seconds(4) then if 5*5 > 5 within seconds(5) then transfer(0x1234567890123456789012345678901234567893,0x1234567890123456789012345678901234567893,0x1234567890123456789012345678901234567893) else transfer(0x1234567890123456789012345678901234567894,0x1234567890123456789012345678901234567894,0x1234567890123456789012345678901234567894) else transfer(0x1234567890123456789012345678901234567895,0x1234567890123456789012345678901234567895,0x1234567890123456789012345678901234567895) else if 6*6 > 6 within seconds(6) then transfer(0x1234567890123456789012345678901234567896,0x1234567890123456789012345678901234567896,0x1234567890123456789012345678901234567896) else if 7*7 > 7 within seconds(7) then transfer(0x1234567890123456789012345678901234567897,0x1234567890123456789012345678901234567897,0x1234567890123456789012345678901234567897) else transfer(0x1234567890123456789012345678901234567898,0x1234567890123456789012345678901234567898,0x1234567890123456789012345678901234567898)"
@@ -176,4 +177,4 @@ parser_unittest4 = do
     parse' canonical_iw_source `shouldBe` ast
   where
     ast :: Contract
-    ast = IfWithin {memExp_ = MemExp (Seconds 1) (GtExp (MultExp (Lit (IntVal 1)) (Lit (IntVal 1))) (Lit (IntVal 1))), contractA_ = IfWithin {memExp_ = MemExp (Seconds 2) (GtExp (MultExp (Lit (IntVal 2)) (Lit (IntVal 2))) (Lit (IntVal 2))), contractA_ = IfWithin {memExp_ = MemExp (Seconds 3) (GtExp (MultExp (Lit (IntVal 3)) (Lit (IntVal 3))) (Lit (IntVal 3))), contractA_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567891", from_ = "0x1234567890123456789012345678901234567891", to_ = "0x1234567890123456789012345678901234567891"}, contractB_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567892", from_ = "0x1234567890123456789012345678901234567892", to_ = "0x1234567890123456789012345678901234567892"}}, contractB_ = IfWithin {memExp_ = MemExp (Seconds 4) (GtExp (MultExp (Lit (IntVal 4)) (Lit (IntVal 4))) (Lit (IntVal 4))), contractA_ = IfWithin {memExp_ = MemExp (Seconds 5) (GtExp (MultExp (Lit (IntVal 5)) (Lit (IntVal 5))) (Lit (IntVal 5))), contractA_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567893", from_ = "0x1234567890123456789012345678901234567893", to_ = "0x1234567890123456789012345678901234567893"}, contractB_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567894", from_ = "0x1234567890123456789012345678901234567894", to_ = "0x1234567890123456789012345678901234567894"}}, contractB_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567895", from_ = "0x1234567890123456789012345678901234567895", to_ = "0x1234567890123456789012345678901234567895"}}}, contractB_ = IfWithin {memExp_ = MemExp (Seconds 6) (GtExp (MultExp (Lit (IntVal 6)) (Lit (IntVal 6))) (Lit (IntVal 6))), contractA_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567896", from_ = "0x1234567890123456789012345678901234567896", to_ = "0x1234567890123456789012345678901234567896"}, contractB_ = IfWithin {memExp_ = MemExp (Seconds 7) (GtExp (MultExp (Lit (IntVal 7)) (Lit (IntVal 7))) (Lit (IntVal 7))), contractA_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567897", from_ = "0x1234567890123456789012345678901234567897", to_ = "0x1234567890123456789012345678901234567897"}, contractB_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567898", from_ = "0x1234567890123456789012345678901234567898", to_ = "0x1234567890123456789012345678901234567898"}}}}
+    ast = IfWithin {memExp_ = MemExp (Seconds 1) (GtExp (MultExp (Lit (IntVal 1)) (Lit (IntVal 1))) (Lit (IntVal 1))), contractA_ = IfWithin {memExp_ = MemExp (Seconds 2) (GtExp (MultExp (Lit (IntVal 2)) (Lit (IntVal 2))) (Lit (IntVal 2))), contractA_ = IfWithin {memExp_ = MemExp (Seconds 3) (GtExp (MultExp (Lit (IntVal 3)) (Lit (IntVal 3))) (Lit (IntVal 3))), contractA_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567891", from_ = Bound "0x1234567890123456789012345678901234567891", to_ = Bound "0x1234567890123456789012345678901234567891"}, contractB_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567892", from_ = Bound "0x1234567890123456789012345678901234567892", to_ = Bound "0x1234567890123456789012345678901234567892"}}, contractB_ = IfWithin {memExp_ = MemExp (Seconds 4) (GtExp (MultExp (Lit (IntVal 4)) (Lit (IntVal 4))) (Lit (IntVal 4))), contractA_ = IfWithin {memExp_ = MemExp (Seconds 5) (GtExp (MultExp (Lit (IntVal 5)) (Lit (IntVal 5))) (Lit (IntVal 5))), contractA_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567893", from_ = Bound "0x1234567890123456789012345678901234567893", to_ = Bound "0x1234567890123456789012345678901234567893"}, contractB_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567894", from_ = Bound "0x1234567890123456789012345678901234567894", to_ = Bound "0x1234567890123456789012345678901234567894"}}, contractB_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567895", from_ = Bound "0x1234567890123456789012345678901234567895", to_ = Bound "0x1234567890123456789012345678901234567895"}}}, contractB_ = IfWithin {memExp_ = MemExp (Seconds 6) (GtExp (MultExp (Lit (IntVal 6)) (Lit (IntVal 6))) (Lit (IntVal 6))), contractA_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567896", from_ = Bound "0x1234567890123456789012345678901234567896", to_ = Bound "0x1234567890123456789012345678901234567896"}, contractB_ = IfWithin {memExp_ = MemExp (Seconds 7) (GtExp (MultExp (Lit (IntVal 7)) (Lit (IntVal 7))) (Lit (IntVal 7))), contractA_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567897", from_ = Bound "0x1234567890123456789012345678901234567897", to_ = Bound "0x1234567890123456789012345678901234567897"}, contractB_ = Transfer {tokenAddress_ = "0x1234567890123456789012345678901234567898", from_ = Bound "0x1234567890123456789012345678901234567898", to_ = Bound "0x1234567890123456789012345678901234567898"}}}}

@@ -20,24 +20,15 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
-module DaggerParserPropTest (tests, prop_ppp_identity) where
+module EtlFmt where
 
-import DaggerParser
-import DaggerLanguageDefinition
-import DaggerGen
-import DaggerPP
-
-import Test.Hspec
+import EtlPP
+import EtlGen
+import IntermediateCompiler
 import Test.QuickCheck
 
-tests :: Spec
-tests = do
-  it "is the inverse of a pretty-printer" $ do
-    property prop_ppp_identity
-
-prop_ppp_identity :: ValidContract -> Property
-prop_ppp_identity (ValidContract contract) =
-  counterexample ("Pretty-printed:\n" ++ daggerPP contract) $
-    case parseWrap (daggerPP contract) of
-      Left _ -> False
-      Right contract2 -> contract == contract2
+main :: IO ()
+main = do
+  contract <- unVC <$> generate arbitrary
+  putStrLn $ "Before:\n"  ++ show (intermediateCompile contract)
+  putStrLn $ "\nAfter:\n" ++ show (intermediateCompileOptimize contract)

@@ -1,4 +1,4 @@
--- MIT License
+--- MIT License
 -- 
 -- Copyright (c) 2019 eToroX Labs
 -- 
@@ -23,8 +23,8 @@
 module EtlLanguageDefinition where
 
 data Contract = Transfer { tokenAddress_ :: Address,
-                           from_         :: Address,
-                           to_           :: Address
+                           from_         :: Party,
+                           to_           :: Party
                          }
               | Scale { maxFactor_   :: Integer,
                         scaleFactor_ :: Expr,
@@ -81,9 +81,13 @@ data Literal = IntVal Integer
 
 data ObservableType = OBool | OInteger deriving (Show, Eq)
 
-type TokenSymbol = String
 -- DEVFIX: Better choice for type is decided later.
+data Party = Bound Address
+           | Free Integer deriving (Show, Eq)
+
+type TokenSymbol = String
 type Address = String
+
 
 getSubExps :: Expr -> [Expr]
 getSubExps e = case e of

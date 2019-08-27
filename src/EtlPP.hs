@@ -29,7 +29,7 @@ etlPP c = etlPPH c 1
 
 etlPPH :: Contract -> Int -> String
 etlPPH contract indent = case contract of
-  Transfer tok from to -> concat [ "transfer(", tok, ", ", from, ", ", to, ")" ]
+  Transfer tok from to -> concat [ "transfer(", tok, ", ", ppParty from, ", ", ppParty to, ")" ]
   Scale maxScale scaleExpr c -> concat [ "scale(\n", indentSpace , show maxScale, ",\n", indentSpace, ppExpr scaleExpr, ",\n", indentSpace, etlPPH c (indent + 1), ")" ]
   Both c1 c2 -> concat [ "both(\n",indentSpace, etlPPH c1 (indent + 1), ",\n", indentSpace, etlPPH c2 (indent + 1), ")"]
   Translate time c -> concat [ "translate(\n", indentSpace, ppTime time, ",\n", indentSpace, etlPPH c (indent + 1), ")" ]
@@ -128,3 +128,7 @@ ppTime t = case t of
   Days    d -> "days("    ++ show d ++ ")"
   Weeks   w -> "weeks("   ++ show w ++ ")"
 
+ppParty :: Party -> String
+ppParty p = case p of
+  Bound a -> a
+  Free identity -> "free(" ++ show identity ++ ")"
