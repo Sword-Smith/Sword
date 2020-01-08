@@ -1,4 +1,4 @@
-name: etlc
+name: daggerc
 version: "0.1"
 category: Language
 
@@ -17,20 +17,20 @@ library:
     - directory >= 1.3.0.0
 
 executables:
-  etlc: &daggerc
+  daggerc: &daggerc
     main: src/Main.hs
     dependencies:
-      - etlc
+      - daggerc
       - base >= 4.9.1.0
       - aeson >= 1.0.2.1
       - bytestring >= 0.10.8.1
       - split >= 0.2.3.1
       - directory >= 1.3.0.0
-  # daggerfmt: &etlc
+  # daggerfmt: &dagger
   #   source-dirs: unittests
   #   main: DaggerFmt.hs
   #   dependencies:
-  #     - etlc
+  #     - daggerc
   #     - base >= 4.9.1.0
   #     - HUnit
   #     - QuickCheck
@@ -43,7 +43,7 @@ tests:
     source-dirs: unittests
     main: main_tests.hs
     dependencies:
-      - etlc
+      - daggerc
       - base >= 4.9.1.0
       - HUnit
       - QuickCheck

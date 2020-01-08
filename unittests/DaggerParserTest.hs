@@ -20,10 +20,10 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
-module EtlParserTest (tests, canonical_iw_source) where
+module DaggerParserTest (tests, canonical_iw_source) where
 
-import EtlParser
-import EtlLanguageDefinition
+import DaggerParser
+import DaggerLanguageDefinition
 
 import Test.Hspec
 

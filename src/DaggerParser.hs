@@ -22,10 +22,10 @@
 
 {-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
 {-# LANGUAGE OverloadedStrings #-}
-module EtlParser where
+module DaggerParser where
 
 -- file: Parser.hs
-import EtlLanguageDefinition
+import DaggerLanguageDefinition
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Combinator as ParSecCom
 

@@ -22,7 +22,7 @@
 
 module IntermediateLanguageDefinition where
 
-import EtlLanguageDefinition
+import DaggerLanguageDefinition
 
 import qualified Data.Map.Strict as Map
 

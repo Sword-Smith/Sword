@@ -22,7 +22,7 @@
 
 module TypeChecker where
 
-import EtlLanguageDefinition
+import DaggerLanguageDefinition
 
 data ExpType = BoolType
              | IntType deriving (Show, Eq)

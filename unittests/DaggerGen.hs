@@ -20,9 +20,9 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
-module EtlGen where
+module DaggerGen where
 
-import EtlLanguageDefinition
+import DaggerLanguageDefinition
 import Test.QuickCheck
 
 -- Generate contracts that type-check

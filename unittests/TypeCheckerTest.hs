@@ -22,7 +22,7 @@
 
 module TypeCheckerTest where
 
-import EtlLanguageDefinition
+import DaggerLanguageDefinition
 
 import Data.Either
 

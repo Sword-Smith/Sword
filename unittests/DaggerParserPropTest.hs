@@ -1,3 +1,4 @@
+
 -- MIT License
 -- 
 -- Copyright (c) 2019 eToroX Labs
@@ -20,32 +21,24 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
-module EtlTestHelpers ( makeContract
-                      , defaultAddressMap
-                      , obsAddr, tokAddr, oneAddr, twoAddr
-                      ) where
+module DaggerParserPropTest (tests, prop_ppp_identity) where
 
-import EtlLanguageDefinition
-import EtlParser (parse')
-import Data.Map as Map
+import DaggerParser
+import DaggerLanguageDefinition
+import DaggerGen
+import DaggerPP
 
-obsAddr, tokAddr, oneAddr, twoAddr :: Address
-obsAddr = "0x1111111111111111111111111111111111111111"
-tokAddr = "0x2222222222222222222222222222222222222222"
-oneAddr = "0x3333333333333333333333333333333333333333"
-twoAddr = "0x4444444444444444444444444444444444444444"
+import Test.Hspec
+import Test.QuickCheck
 
-defaultAddressMap :: Map Char Address
-defaultAddressMap = Map.fromList
-  [ ('O', obsAddr)
-  , ('T', tokAddr)
-  , ('A', oneAddr)
-  , ('B', twoAddr)
-  ]
+tests :: Spec
+tests = do
+  it "is the inverse of a pretty-printer" $ do
+    property prop_ppp_identity
 
-makeContract :: Map Char Address -> String -> Contract
-makeContract addressMap contract =
-  parse' contract'
-  where
-    contract' :: String
-    contract' = concatMap (\c -> findWithDefault [c] c addressMap) contract
+prop_ppp_identity :: ValidContract -> Property
+prop_ppp_identity (ValidContract contract) =
+  counterexample ("Pretty-printed:\n" ++ etlPP contract) $
+    case parseWrap (etlPP contract) of
+      Left _ -> False
+      Right contract2 -> contract == contract2

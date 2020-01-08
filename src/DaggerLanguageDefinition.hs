@@ -20,7 +20,7 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
-module EtlLanguageDefinition where
+module DaggerLanguageDefinition where
 
 data Contract = Transfer { tokenAddress_ :: Address,
                            from_         :: Party,

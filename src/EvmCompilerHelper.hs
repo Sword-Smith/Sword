@@ -22,7 +22,7 @@
 
 module EvmCompilerHelper where
 
-import EtlLanguageDefinition
+import DaggerLanguageDefinition
 import EvmLanguageDefinition
 
 import Crypto.Hash

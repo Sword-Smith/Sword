@@ -22,7 +22,7 @@
 
 module EvmCompilerTest (tests) where
 
-import EtlLanguageDefinition
+import DaggerLanguageDefinition
 import EvmLanguageDefinition
 import EvmCompiler
 import EvmCompilerHelper

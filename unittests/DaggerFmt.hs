@@ -1,4 +1,3 @@
-
 -- MIT License
 -- 
 -- Copyright (c) 2019 eToroX Labs
@@ -21,24 +20,15 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
-module EtlParserPropTest (tests, prop_ppp_identity) where
+module DaggerFmt where
 
-import EtlParser
-import EtlLanguageDefinition
-import EtlGen
-import EtlPP
-
-import Test.Hspec
+import DaggerPP
+import DaggerGen
+import IntermediateCompiler
 import Test.QuickCheck
 
-tests :: Spec
-tests = do
-  it "is the inverse of a pretty-printer" $ do
-    property prop_ppp_identity
-
-prop_ppp_identity :: ValidContract -> Property
-prop_ppp_identity (ValidContract contract) =
-  counterexample ("Pretty-printed:\n" ++ etlPP contract) $
-    case parseWrap (etlPP contract) of
-      Left _ -> False
-      Right contract2 -> contract == contract2
+main :: IO ()
+main = do
+  contract <- unVC <$> generate arbitrary
+  putStrLn $ "Before:\n"  ++ show (intermediateCompile contract)
+  putStrLn $ "\nAfter:\n" ++ show (intermediateCompileOptimize contract)
