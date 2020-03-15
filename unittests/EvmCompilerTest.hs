@@ -212,9 +212,9 @@ compileLessThanExpressions :: Spec
 compileLessThanExpressions =
   describe "Compile less-than expressions" $ do
     it "Compare two one byte values" $
-      concatMap ppEvm (runCompiler emptyContract initialEnv (compileExp (LtExp (Lit (IntVal 5)) (Lit (IntVal 10))))) `shouldBe` "600a600510"
+      concatMap ppEvm (runCompiler emptyContract initialEnv (compileExp (LtExp (Lit (IntVal 5)) (Lit (IntVal 10))))) `shouldBe` "600a600512"
     it "Compare two largers values" $
-      concatMap ppEvm (runCompiler emptyContract initialEnv (compileExp (LtExp (Lit (IntVal 256)) (Lit (IntVal (256^11-42)))))) `shouldBe` "6affffffffffffffffffffd661010010"
+      concatMap ppEvm (runCompiler emptyContract initialEnv (compileExp (LtExp (Lit (IntVal 256)) (Lit (IntVal (256^11-42)))))) `shouldBe` "6affffffffffffffffffffd661010012"
 
 compileDivisionExpressions :: Spec
 compileDivisionExpressions =
