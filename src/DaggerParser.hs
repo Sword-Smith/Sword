@@ -67,10 +67,8 @@ transferParser = do
   parens $ do
     ta <- getAddress
     symbol ","
-    from <- getParty
-    symbol ","
     to <- getParty
-    return $ Transfer ta from to
+    return $ Transfer ta to
 
 scaleParser :: Parser Contract
 scaleParser = do

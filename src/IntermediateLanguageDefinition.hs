@@ -38,7 +38,7 @@ data IntermediateContract =
                           , getTransferCalls   :: [TransferCall]
                           , getMemExps         :: [IMemExp]
                           , getActivateMap     :: ActivateMap
-                          , getMarginRefundMap :: MarginRefundMap
+--                          , getMarginRefundMap :: MarginRefundMap
                           } deriving (Show, Eq)
 
 data TransferCall =
@@ -46,7 +46,6 @@ data TransferCall =
                   , _amount       :: Expr
                   , _delay        :: Integer
                   , _tokenAddress :: Address
-                  , _from         :: PartyIndex
                   , _to           :: PartyIndex
                   , _memExpPath   :: MemExpPath
                   } deriving (Show, Eq)
@@ -60,7 +59,11 @@ data IMemExp = IMemExp { _IMemExpBegin  :: Integer
                        , _IMemExp       :: Expr
                        } deriving (Show, Eq)
 
-type ActivateMap = Map.Map (Address, PartyIndex) Integer
+type ActivateMap = Map.Map Address Integer
+
+-- This is the type for elements in Map.assocs
+type ActivateMapElement = (Address, Integer)
+
 
 type MarginRefundMap = Map.Map [(Integer, Bool)] [(Address, PartyIndex, Integer)]
 
@@ -69,5 +72,3 @@ type MarginRefundMapElement = ([(Integer, Bool)], [(Address, PartyIndex, Integer
 
 type MarginRefundPath = [(Integer, Bool)]
 
--- (token address, from address, amount)
-type ActivateMapElement = ((Address, PartyIndex), Integer)

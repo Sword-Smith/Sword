@@ -173,7 +173,7 @@ eventSignature eventDecl = hexString2w256 $ "0x" ++ keccak256 eventDecl
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
 constructor :: IntermediateContract -> [EvmOpcode]
-constructor (IntermediateContract parties tcs _ _ _) =
+constructor (IntermediateContract parties tcs _ _) =
   checkNoValue "Constructor_Header"
   ++ setExecutedWord tcs
   ++ saveParties parties
@@ -395,10 +395,8 @@ activateCheck =
 execute :: Compiler [EvmOpcode]
 execute = do
   memExpCode <- concatMap executeMemExp <$> reader getMemExps
-  mrm <- reader getMarginRefundMap
-  let marginRefundCode = evalState (concatMapM executeMarginRefundM (Map.assocs mrm)) 0
   transferCallCode <- executeTransferCalls
-  return (memExpCode ++ marginRefundCode ++ transferCallCode)
+  return (memExpCode ++ transferCallCode)
 
 -- This sets the relevant bits in the memory expression word in storage
 -- Here the IMemExp should be evaluated. But only iff it is NOT true atm.
@@ -740,12 +738,14 @@ executeTransferCallsHH tc transferCounter = do
       -- And make sure it is preserved on the stack
       -- for the next call to transfer.
 
+      {-
     callTransferToTcOriginator =
       getPartyFromStorage (_from tc)
       ++ [ PUSH32 $ address2w256 (_tokenAddress tc)
          , DUP3
          , FUNCALL "transfer_subroutine" ]
       ++ [ ISZERO, JUMPITO "global_throw" ] -- check ret val
+      -}
 
     -- Flip correct bit from one to zero and call selfdestruct if all tcalls compl.
     skipCallToTcSenderJumpDest = [ JUMPDESTFROM $ "skip_call_to_sender" ++ show transferCounter
@@ -771,7 +771,7 @@ executeTransferCallsHH tc transferCounter = do
     checkIfCallShouldBeMade ++
     callTransferToTcRecipient ++
     checkIfTransferToTcSenderShouldBeMade ++
-    callTransferToTcOriginator ++
+    -- callTransferToTcOriginator ++
     skipCallToTcSenderJumpDest ++
     updateExecutedWord ++
     functionEndLabel
@@ -798,11 +798,11 @@ activate = do
           ]
 
 activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
-activateMapElementToTransferFromCall ((tokenAddress, partyIndex), amount) =
+activateMapElementToTransferFromCall (tokenAddress, amount) =
   pushArgsToStack ++ subroutineCall ++ throwIfReturnFalse
   where
     pushArgsToStack =
-      getPartyFromStorage partyIndex
+      [CALLER]
       ++ [ PUSH32 $ address2w256 tokenAddress
          , push amount ]
     subroutineCall =
