@@ -21,3 +21,5 @@ cabal.sandbox.config
 cabal.project.local
 .HTF/
 src/Main
+tags
+TAGS

@@ -30,8 +30,11 @@ data CallArgument = Word256 Word256
                   | OwnAddress
                   | RawEvm [EvmOpcode]
 
+-- Inter-contract methods
 data FunctionSignature = Transfer
                        | TransferFrom
+                       | Mint
+                       | Burn
                        | Get
 
 type Label = String

@@ -273,13 +273,21 @@ jumpTable =
   , DUP1
   , DUP1
 
-  , PUSH32 (functionSignature "execute()" , 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-  , EVM_EQ
-  , JUMPITO "execute_method"
-
-  , PUSH32 (functionSignature "activate()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , PUSH32 (functionSignature "activate(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "activate_method"
+
+  , PUSH32 (functionSignature "burn(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "burn_method"
+
+  , PUSH32 (functionSignature "mint(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "mint_method"
+
+  , PUSH32 (functionSignature "pay()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "pay_method"
 
   , PUSH32 (functionSignature "take(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
@@ -328,8 +336,45 @@ subroutines = transferSubroutine ++ transferFromSubroutine
       ++ getReturnValueFromMemory
       ++ funEnd
 
+    mintSubroutine =
+        funStartMint
+        ++ storeFunctionSignature Mint
+        ++ storeArgumentsMint
+        ++ pushOutSize
+        ++ pushOutOffset
+        ++ pushInSizeT
+        ++ pushInOffset
+        ++ pushValue
+        ++ pushCalleeAddress
+        ++ pushGasAmount
+        ++ callInstruction
+        ++ checkExitCode
+        ++ removeExtraArg
+        ++ getReturnValueFromMemory
+        ++ funEnd
+
+    burnSubroutine =
+        funStartBurn
+        ++ storeFunctionSignature Burn
+        ++ storeArgumentsBurn
+        ++ pushOutSize
+        ++ pushOutOffset
+        ++ pushInSizeT
+        ++ pushInOffset
+        ++ pushValue
+        ++ pushCalleeAddress
+        ++ pushGasAmount
+        ++ callInstruction
+        ++ checkExitCode
+        ++ removeExtraArg
+        ++ getReturnValueFromMemory
+        ++ funEnd
+
+
     funStartT               = [ FUNSTART "transfer_subroutine" 3 ]
     funStartTF              = [ FUNSTART "transferFrom_subroutine" 3 ]
+    funStartMint            = [ FUNSTART "mint_subroutine" 2 ]
+    funStartBurn            = [ FUNSTART "burn_subroutine" 2 ]
 
     storeFunctionSignature :: FunctionSignature -> [EvmOpcode]
     storeFunctionSignature Transfer =
@@ -340,6 +385,15 @@ subroutines = transferSubroutine ++ transferFromSubroutine
       [ PUSH32 (functionSignature "transferFrom(address,address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
       , push 0
       , MSTORE ]
+    storeFunctionSignature Mint =
+      [ PUSH32 (functionSignature "mint(uint256,address)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+      , push 0
+      , MSTORE ]
+    storeFunctionSignature Burn =
+      [ PUSH32 (functionSignature "burn(uint256,address)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+      , push 0
+      , MSTORE ]
+
     -- TODO: Missing 'Get' case.
 
     storeArgumentsT =
@@ -378,6 +432,21 @@ subroutines = transferSubroutine ++ transferFromSubroutine
       [ push 0x0
       , MLOAD ]
     funEnd = [FUNRETURN]
+
+    storeArgumentsMint =
+      [ push 0x04
+      , MSTORE -- store amount : uint256 in mem
+      , push 0x24
+      , MSTORE -- store msg.sender : address in mem
+      ]
+
+    storeArgumentsBurn =
+      [ push 0x04
+      , MSTORE -- store amount : uint256 in mem
+      , push 0x24
+      , MSTORE -- store msg.sender : address in mem
+      ]
+
 
 -- When calling execute(), PC must be set here
 -- to check if the DC is activated
@@ -784,6 +853,8 @@ activate = do
   return $
     [JUMPDESTFROM "activate_method"]
     ++ concatMap activateMapElementToTransferFromCall (Map.assocs am)
+    --- esr: call mint()
+    ++ [ FUNCALL "mint_subroutine" ]
     -- set activate bit to 0x01 (true)
     ++ [ push 0x01, push $ storageAddress Activated, SSTORE ]
     ++ saveTimestampToStorage
@@ -805,6 +876,9 @@ activateMapElementToTransferFromCall ((tokenAddress, partyIndex), amount) =
       getPartyFromStorage partyIndex
       ++ [ PUSH32 $ address2w256 tokenAddress
          , push amount ]
+      ++ [ PUSH1 0x4,    -- is PUSH1 sufficient
+           CALLDATALOAD] -- push the only argument given to "activate_method".
+      ++ [ MUL]
     subroutineCall =
       [ FUNCALL "transferFrom_subroutine" ]
     throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
