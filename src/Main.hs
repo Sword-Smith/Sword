@@ -109,11 +109,14 @@ getAbiDefinition =
   let
     constructor = Just $ AbiConstructorDefinition False "constructor" []
     execute     = AbiFunctionDefinition "execute" "function" False [] [] False
-    activate    = AbiFunctionDefinition "activate" "function" False [] [] False
+    pay         = AbiFunctionDefinition "pay" "function" False [] [] False
+    activate    = AbiFunctionDefinition "activate" "function" False [] [AbiVarDefinition "amount" "uint256"] False
+    mint        = AbiFunctionDefinition "mint" "function" False [] [AbiVarDefinition "amount" "uint256"] False
+    burn        = AbiFunctionDefinition "burn" "function" False [] [AbiVarDefinition "amount" "uint256"] False
     take        = AbiFunctionDefinition "take" "function" False [] [AbiVarDefinition "party" "uint256"] False
     activatedE  = AbiEventDefinition "Activated" "event" False []
   in
-    AbiDefinition constructor [execute, activate, take] [activatedE]
+    AbiDefinition constructor [execute, pay, activate, mint, burn, take] [activatedE] -- add Transfer event.
 
 -- This function writes an ABI definition of the contract.
 writeAbiDef :: String -> String -> IO()
