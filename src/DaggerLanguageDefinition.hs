@@ -23,7 +23,6 @@
 module DaggerLanguageDefinition where
 
 data Contract = Transfer { tokenAddress_ :: Address,
-                           from_         :: Party,
                            to_           :: Party
                          }
               | Scale { maxFactor_   :: Integer,

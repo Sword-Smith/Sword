@@ -28,8 +28,8 @@ data ExpType = BoolType
              | IntType deriving (Show, Eq)
 
 typeChecker :: Contract -> Either String Contract
-typeChecker (Transfer tokenAddress from to) =
-  return $ Transfer tokenAddress from to
+typeChecker (Transfer tokenAddress to) =
+  return $ Transfer tokenAddress to
 typeChecker (Both contractA contractB) = do
   cA <- typeChecker contractA
   cB <- typeChecker contractB
