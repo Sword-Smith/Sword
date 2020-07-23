@@ -118,9 +118,12 @@ evmCompile intermediateContract =
   where
     constructor'     = constructor intermediateContract
     codecopy'        = codecopy constructor' body
-    body             = jumpTable ++ subroutines ++ activateCheck ++ execute' ++ activate' ++ take'
+    body             = jumpTable ++ subroutines ++ activateCheck ++ execute' ++ activate' ++ take' ++ burn' ++ mint' ++ pay'
     execute'         = runCompiler intermediateContract initialEnv execute -- also contains selfdestruct when contract is fully executed
     activate'        = runCompiler intermediateContract initialEnv activate
+    mint'            = runCompiler intermediateContract initialEnv mint
+    burn'            = runCompiler intermediateContract initialEnv burn
+    pay'             = runCompiler intermediateContract initialEnv pay
     take'            = runCompiler intermediateContract initialEnv EvmCompiler.take
     -- The addresses of the constructor run are different from runs when DC is on BC
 
@@ -853,20 +856,35 @@ activate = do
   return $
     [JUMPDESTFROM "activate_method"]
     ++ concatMap activateMapElementToTransferFromCall (Map.assocs am)
-    --- esr: call mint()
-    ++ [ FUNCALL "mint_subroutine" ]
     -- set activate bit to 0x01 (true)
     ++ [ push 0x01, push $ storageAddress Activated, SSTORE ]
     ++ saveTimestampToStorage
     -- emit activated event
-    ++ emitEvent
-    ++ [STOP]
-  where emitEvent =
-          [ PUSH32 $ eventSignature "Activated()"
+    ++ emitEvent "Activated"
+    ++ emitEvent "Activated"
+    ++ emitEvent "Activated"
+    {-
+    ++ [ FUNCALL "mint_subroutine" ]
+    emitEvent "Minted()"
+    -}
+    ++ [ STOP]
+  where emitEvent eventName =
+          [ PUSH32 $ eventSignature eventName
           , push 0
           , push 0
           , LOG1
           ]
+
+
+burn :: Compiler [EvmOpcode]
+burn = return [JUMPDESTFROM "burn_method"]
+
+mint:: Compiler [EvmOpcode]
+mint = return [JUMPDESTFROM "mint_method"]
+
+pay :: Compiler [EvmOpcode]
+pay = return [JUMPDESTFROM "pay_method"]
+
 
 activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
 activateMapElementToTransferFromCall (tokenAddress, amount) =
@@ -879,8 +897,7 @@ activateMapElementToTransferFromCall (tokenAddress, amount) =
       ++ [ PUSH1 0x4,    -- is PUSH1 sufficient
            CALLDATALOAD] -- push the only argument given to "activate_method".
       ++ [ MUL]
-    subroutineCall =
-      [ FUNCALL "transferFrom_subroutine" ]
+    subroutineCall = [ FUNCALL "transferFrom_subroutine" ]
     throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
 
 take :: Compiler [EvmOpcode]

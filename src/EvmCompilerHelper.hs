@@ -32,6 +32,7 @@ import Data.Char
 import Data.Word
 import Numeric (showHex)
 import Text.Printf (printf)
+import Debug.Trace
 
 -- Given a list of things, t a, and a monadic function we map across that
 -- returns a list of values inside a monad (e.g. Compiler [EvmOpcode]),
@@ -99,7 +100,8 @@ string2w256 str =
 -- Return the code for a function call.
 -- This function should be used when generating the code
 -- for the transferFrom function call, to generate the code
--- that probes oracles, etc.
+-- that probes oracles (get datafeed), etc.
+-- These are inter-contract calls.
 getFunctionCallEvm :: Address -> Word32 -> [CallArgument] -> Word8 -> Word8 -> Word8 -> [EvmOpcode]
 getFunctionCallEvm calleeAddress funSig callArgs inMemOffset outMemOffset outSize =
   storeFunctionSignature
@@ -221,12 +223,15 @@ ppEvm instruction = case instruction of
     SELFDESTRUCT -> "ff"
     THROW        -> "fe"
     REVERT       -> "fd"
+    instr        -> traceFaultyInstruction instr
+{-
     FUNSTART _ _ -> undefined
     FUNSTARTA _  -> undefined
     FUNCALL _    -> undefined
     FUNRETURN    -> undefined
     JUMPTO _     -> undefined
     JUMPITO _    -> undefined
+-}
 
 push :: Integer -> EvmOpcode
 push = PUSHN . words'
@@ -244,3 +249,10 @@ push4BigEnd i =
   , EXP
   , MUL
   ]
+
+
+-- PMDish https://wiki.haskell.org/Debugging#Printf_and_friends
+traceFaultyInstruction :: EvmOpcode -> String
+traceFaultyInstruction instruction | trace ("ppEvm: " ++ show instruction) False = undefined
+
+
