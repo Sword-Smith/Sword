@@ -30,6 +30,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Char8(pack)
 import Data.Char
 import Data.Word
+import Data.List
 import Numeric (showHex)
 import Text.Printf (printf)
 import Debug.Trace
@@ -255,4 +256,7 @@ push4BigEnd i =
 traceFaultyInstruction :: EvmOpcode -> String
 traceFaultyInstruction instruction | trace ("ppEvm: " ++ show instruction) False = undefined
 
+
+functionSignature :: String -> Word32
+functionSignature funDecl = read $ "0x" ++ Data.List.take 8 (keccak256 funDecl)
 

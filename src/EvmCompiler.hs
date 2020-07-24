@@ -24,6 +24,7 @@ module EvmCompiler where
 
 import EvmCompilerHelper
 import EvmLanguageDefinition
+import EvmCompilerSubroutines (subroutines)
 import IntermediateLanguageDefinition
 import DaggerLanguageDefinition hiding (Transfer)
 import IntermediateCompiler (emptyContract)
@@ -167,9 +168,6 @@ transformPseudoInstructions = concatMap transformH
     swap 3 = SWAP3
     swap _ = undefined -- Only 2 or 3 args is accepted atm
 
-functionSignature :: String -> Word32
-functionSignature funDecl = read $ "0x" ++ Data.List.take 8 (keccak256 funDecl)
-
 eventSignature :: String -> Word256
 eventSignature eventDecl = hexString2w256 $ "0x" ++ keccak256 eventDecl
 
@@ -302,153 +300,7 @@ jumpTable =
   , REVERT
   ]
 
-subroutines :: [EvmOpcode]
-subroutines = transferSubroutine ++ transferFromSubroutine
-  where
-    transferFromSubroutine =
-      funStartTF
-      ++ storeFunctionSignature TransferFrom
-      ++ storeArgumentsTF -- transferFrom(_from, _to, _amount) = transferFrom(party, self, amount)
-      ++ pushOutSize
-      ++ pushOutOffset
-      ++ pushInSizeTF
-      ++ pushInOffset
-      ++ pushValue
-      ++ pushCalleeAddress
-      ++ pushGasAmount
-      ++ callInstruction
-      ++ checkExitCode
-      ++ removeExtraArg
-      ++ getReturnValueFromMemory
-      ++ funEnd
 
-    transferSubroutine =
-      funStartT
-      ++ storeFunctionSignature Transfer
-      ++ storeArgumentsT -- transfer(_to, _amount) = transfer(party, amount)
-      ++ pushOutSize
-      ++ pushOutOffset
-      ++ pushInSizeT
-      ++ pushInOffset
-      ++ pushValue
-      ++ pushCalleeAddress
-      ++ pushGasAmount
-      ++ callInstruction
-      ++ checkExitCode
-      ++ removeExtraArg
-      ++ getReturnValueFromMemory
-      ++ funEnd
-
-    mintSubroutine =
-        funStartMint
-        ++ storeFunctionSignature Mint
-        ++ storeArgumentsMint
-        ++ pushOutSize
-        ++ pushOutOffset
-        ++ pushInSizeT
-        ++ pushInOffset
-        ++ pushValue
-        ++ pushCalleeAddress
-        ++ pushGasAmount
-        ++ callInstruction
-        ++ checkExitCode
-        ++ removeExtraArg
-        ++ getReturnValueFromMemory
-        ++ funEnd
-
-    burnSubroutine =
-        funStartBurn
-        ++ storeFunctionSignature Burn
-        ++ storeArgumentsBurn
-        ++ pushOutSize
-        ++ pushOutOffset
-        ++ pushInSizeT
-        ++ pushInOffset
-        ++ pushValue
-        ++ pushCalleeAddress
-        ++ pushGasAmount
-        ++ callInstruction
-        ++ checkExitCode
-        ++ removeExtraArg
-        ++ getReturnValueFromMemory
-        ++ funEnd
-
-
-    funStartT               = [ FUNSTART "transfer_subroutine" 3 ]
-    funStartTF              = [ FUNSTART "transferFrom_subroutine" 3 ]
-    funStartMint            = [ FUNSTART "mint_subroutine" 2 ]
-    funStartBurn            = [ FUNSTART "burn_subroutine" 2 ]
-
-    storeFunctionSignature :: FunctionSignature -> [EvmOpcode]
-    storeFunctionSignature Transfer =
-      [ PUSH32 (functionSignature "transfer(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-      , push 0 -- TODO: We always use 0 here, since we don't use memory other places. Use monad to keep track of memory usage.
-      , MSTORE ]
-    storeFunctionSignature TransferFrom  =
-      [ PUSH32 (functionSignature "transferFrom(address,address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-      , push 0
-      , MSTORE ]
-    storeFunctionSignature Mint =
-      [ PUSH32 (functionSignature "mint(uint256,address)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-      , push 0
-      , MSTORE ]
-    storeFunctionSignature Burn =
-      [ PUSH32 (functionSignature "burn(uint256,address)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-      , push 0
-      , MSTORE ]
-
-    -- TODO: Missing 'Get' case.
-
-    storeArgumentsT =
-      [ push 0x04
-      , MSTORE -- store recipient (_to) in mem
-      , push 0x24
-      , MSTORE -- store amount in mem
-      ]
-
-    storeArgumentsTF =
-      [ push 0x04
-      , MSTORE -- store sender (_from) in mem
-      , ADDRESS
-      , push 0x24
-      , MSTORE -- store own address (_to) in mem (recipient of transferFrom transaction)
-      , push 0x44
-      , MSTORE -- store amount in mem
-      ]
-    pushOutSize        = [ push 0x20 ]
-    pushOutOffset      = [ push 0x0 ]
-    pushInSizeTF       = [ push 0x64 ]
-    pushInSizeT        = [ push 0x44 ]
-    pushInOffset       = [ push 0x0 ]
-    pushValue          = [ push 0x0 ]
-    pushCalleeAddress  = [ DUP6 ]
-    pushGasAmount      =
-      [ push 0x32
-      , GAS
-      , SUB ]
-    callInstruction    = [ CALL ]
-    checkExitCode      =
-      [ ISZERO
-      , JUMPITO "global_throw" ]
-    removeExtraArg           = [ POP ]
-    getReturnValueFromMemory =
-      [ push 0x0
-      , MLOAD ]
-    funEnd = [FUNRETURN]
-
-    storeArgumentsMint =
-      [ push 0x04
-      , MSTORE -- store amount : uint256 in mem
-      , push 0x24
-      , MSTORE -- store msg.sender : address in mem
-      ]
-
-    storeArgumentsBurn =
-      [ push 0x04
-      , MSTORE -- store amount : uint256 in mem
-      , push 0x24
-      , MSTORE -- store msg.sender : address in mem
-      ]
 
 
 -- When calling execute(), PC must be set here
@@ -859,10 +711,22 @@ activate = do
     -- set activate bit to 0x01 (true)
     ++ [ push 0x01, push $ storageAddress Activated, SSTORE ]
     ++ saveTimestampToStorage
-    -- emit activated event
     ++ emitEvent "Activated"
-    ++ emitEvent "Activated"
-    ++ emitEvent "Activated"
+
+    {-
+    ++ getFunctionCallEvm
+    let tranferFrom_caller = getFunctionCallEvm
+                         address
+                         (functionSignature "tranferFrom(address,address,uint256)")
+                         [Word256 (string2w256 key)]
+                         (fromInteger mo)
+                         (fromInteger mo)
+                         0x20
+        moveResToStack = [ push $ fromInteger mo, MLOAD ]
+
+    in functionCall ++ moveResToStack
+    -}
+
     {-
     ++ [ FUNCALL "mint_subroutine" ]
     emitEvent "Minted()"
@@ -875,12 +739,13 @@ activate = do
           , LOG1
           ]
 
+mint:: Compiler [EvmOpcode]
+mint = return [JUMPDESTFROM "mint_method"]
+
 
 burn :: Compiler [EvmOpcode]
 burn = return [JUMPDESTFROM "burn_method"]
 
-mint:: Compiler [EvmOpcode]
-mint = return [JUMPDESTFROM "mint_method"]
 
 pay :: Compiler [EvmOpcode]
 pay = return [JUMPDESTFROM "pay_method"]
@@ -890,15 +755,20 @@ activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
 activateMapElementToTransferFromCall (tokenAddress, amount) =
   pushArgsToStack ++ subroutineCall ++ throwIfReturnFalse
   where
+    -- Prepare stack for `transferFrom`
     pushArgsToStack =
       [CALLER]
       ++ [ PUSH32 $ address2w256 tokenAddress
          , push amount ]
-      ++ [ PUSH1 0x4,    -- is PUSH1 sufficient
-           CALLDATALOAD] -- push the only argument given to "activate_method".
+      ++ getArgument0
       ++ [ MUL]
     subroutineCall = [ FUNCALL "transferFrom_subroutine" ]
     throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
+    -- push the only argument given to "activate_method".
+    getArgument0 = [ PUSH1 0x4, CALLDATALOAD ]
+
+
+
 
 take :: Compiler [EvmOpcode]
 take = do
@@ -943,3 +813,4 @@ getMemExpById memExpId (me:mes) =
 -- returns true or false. Only of all function calls return true, should
 -- the activated bit be set. This bit has not yet been reserved in
 -- memory/defined.
+
