@@ -30,7 +30,7 @@ data CallArgument = Word256 Word256
                   | OwnAddress
                   | RawEvm [EvmOpcode]
 
--- Inter-contract methods
+-- Inter-contract messages/external calls
 data FunctionSignature = Transfer
                        | TransferFrom
                        | Mint
@@ -91,11 +91,14 @@ data EvmOpcode = STOP
                | SSTORE
                | JUMP
                | JUMPI
-               -- The integer in FUNSTART and FUNSTARTA represents the number of args
-               -- that this function takes.
+               -- The integer in FUNSTART and FUNSTARTA represents the number of
+               -- args, that have been pushed onto the stack at the call-side.
+               -- Note that when arguments come from instructructions such as
+               -- [ CALLER ], this is not to be counted, since this happens in
+               -- the subroutine and thus _after_ call-side.
                | FUNSTART Label Integer -- pre-linker pseudo instruction: JUMPDEST Label + SWAP logic
                | FUNSTARTA Integer -- post-linker pseudo instruction: JUMPDEST + SWAP logic
-               | FUNCALL Label -- pre-linker pseudo instruction: PC, JUMPTO Label (store PC on stack, jump)
+               | FUNCALL Label -- pre-linker pseudo instruction: PC, JUMPTO Label (store PC on stack, jump). This is in effect: PC, PUSH Addr(Label), JUMP.
                | FUNCALLA Integer -- post-linker pseudo instruction: PC, JUMPTOA i
                | FUNRETURN -- post-linker pseudo instruction: a synonyme for JUMP;
                | JUMPTO Label -- pre-linker pseudo instruction: PUSH Addr(label); JUMP;

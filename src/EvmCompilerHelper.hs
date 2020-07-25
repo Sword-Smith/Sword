@@ -241,6 +241,13 @@ push = PUSHN . words'
     words' i | i < 256 = [fromIntegral i]
     words' i = words' (i `div` 256) ++ [fromIntegral $ i `mod` 256]
 
+
+integerToWord8 :: Integer -> [Word8]
+integerToWord8 i | i < 256 = [fromIntegral i]
+integerToWord8 i = integerToWord8 (i `div` 256) ++ [fromIntegral $ i `mod` 256]
+
+
+
 -- Was: PUSH32 (0xffffffff, 0, 0, 0, 0, 0, 0, 0)
 push4BigEnd :: Integer -> [EvmOpcode]
 push4BigEnd i =
@@ -257,6 +264,33 @@ traceFaultyInstruction :: EvmOpcode -> String
 traceFaultyInstruction instruction | trace ("ppEvm: " ++ show instruction) False = undefined
 
 
+getMethodID = functionSignature
+
 functionSignature :: String -> Word32
 functionSignature funDecl = read $ "0x" ++ Data.List.take 8 (keccak256 funDecl)
 
+eventSignature :: String -> Word256
+eventSignature eventDecl = hexString2w256 $ "0x" ++ keccak256 eventDecl
+
+-- Emits a string
+emitEvent eventName =
+          [ PUSH32 $ eventSignature eventName
+          , push 0
+          , push 0
+          , LOG1
+          ]
+
+-- bits
+addressSizeBits = 160
+wordSizeBits    = 256
+solcSigSize     =   4
+byteSize        =   8
+
+-- Layout assuming 256bit args:
+-- 
+--              0x4  0x24 0x44
+-- [solcSigSize|arg0|arg1|arg2|..|argN]
+argNByteOffset n = solcSigSize + (n * wordSizeBits `div` byteSize)
+
+
+type FunDecl = String

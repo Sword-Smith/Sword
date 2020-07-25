@@ -33,6 +33,7 @@ import Control.Monad.State
 import Control.Monad.Reader
 
 import Data.List
+import Data.List.Split (splitOn)
 import qualified Data.Map.Strict as Map
 import Data.Word
 
@@ -161,15 +162,13 @@ transformPseudoInstructions = concatMap transformH
       FUNCALLA  i -> [ PC, PUSH1 10, ADD, PUSH4 (fromInteger i), JUMP, JUMPDEST ]
       FUNSTARTA n -> [ JUMPDEST, swap n ]
       FUNRETURN   -> [ SWAP1, JUMP ]
-      _          -> [ opcode ]
+      _           -> [ opcode ]
 
     swap :: Integer -> EvmOpcode
+    swap 1 = SWAP1
     swap 2 = SWAP2
     swap 3 = SWAP3
     swap _ = undefined -- Only 2 or 3 args is accepted atm
-
-eventSignature :: String -> Word256
-eventSignature eventDecl = hexString2w256 $ "0x" ++ keccak256 eventDecl
 
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
@@ -218,9 +217,10 @@ savePartyToStorage partyIndex (Bound address) =
 savePartyToStorage partyIndex (Free partyIdentifier) =
   saveToStorage (storageAddress PartyFreeMap) partyIdentifier (integer2w256 partyIndex)
 
-getPartyFromStorage :: PartyIndex -> [EvmOpcode]
-getPartyFromStorage partyIndex =
-  [ push partyIndex ] ++ (getFromStorageStack $ storageAddress PartyMap)
+getPartyFromStorage :: Address -> [EvmOpcode]
+getPartyFromStorage addr =
+  -- [ push partyIndex ] ++ (getFromStorageStack $ storageAddress PartyMap)
+  [ PUSH32 $ address2w256 addr ]
 
 saveToStorage :: Integer -> Integer -> Word256 -> [EvmOpcode]
 saveToStorage prefix key value =
@@ -267,6 +267,7 @@ codecopy con exe = [ PUSH4 $ fromInteger (sizeOfOpcodes exe) -- DO NOT REPLACE T
 jumpTable :: [EvmOpcode]
 jumpTable =
   checkNoValue "Contract_Header" ++
+
   [ push 0
   , CALLDATALOAD
   , PUSH32 (0xffffffff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
@@ -299,6 +300,50 @@ jumpTable =
   , push 0
   , REVERT
   ]
+
+
+{- Causes: WARN [07-24|23:15:39.917] Served eth_sendTransaction
+-  reqid=23 t=2.890408ms err="stack underflow (1 <=> 2)"
+getJumpTabelEntry :: FunDecl -> [EvmOpcode]
+getJumpTabelEntry funDecl =
+    let method = head $ splitOn "(" funDecl
+        label = method ++ "_method"
+    in
+    [ PUSH4 (getMethodID funDecl) -- e.g. "take(uint256)"
+    , EVM_EQ
+    , JUMPITO label ]              -- e.g. "take_method"
+
+
+jumpTable :: [EvmOpcode]
+jumpTable = concat [
+  checkNoValue "Contract_Header",
+
+  [ push 0
+  , CALLDATALOAD
+  , PUSH32 (0xffffffff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  --, PUSH4 0xffffffff -- Gas saving oppportunity. Can be used below as well
+  , AND
+  , DUP1
+  , DUP1
+  ],
+
+  getJumpTabelEntry "activate(uint256)",
+
+  getJumpTabelEntry "burn(uint256)",
+
+  getJumpTabelEntry "mint(uint256)",
+
+  getJumpTabelEntry "pay()",
+
+  getJumpTabelEntry "take(uint256)",
+
+  [ JUMPDESTFROM "global_throw"
+  , push 0
+  , push 0
+  , REVERT
+  ]
+  ]
+-}
 
 
 
@@ -411,6 +456,7 @@ type MarginCompiler a = State MrId a
 newMrId :: MarginCompiler MrId
 newMrId = get <* modify (+ 1)
 
+{-
 -- This method should compare the bits set in the MemoryExpression word
 -- in storage with the path which is the key of the element with which it
 -- is called.
@@ -463,6 +509,7 @@ executeMarginRefundM (path, refunds) = do
       , push $ storageAddress Activated
       , SSTORE
       ]
+-}
 
 -- Ensures that only the bits relevant for this path are checked
 otherBitMask :: [(Integer, Bool)] -> Integer
@@ -705,6 +752,7 @@ executeTransferCallsHH tc transferCounter = do
 activate :: Compiler [EvmOpcode]
 activate = do
   am <- reader getActivateMap
+  addrOfPT <- reader $ _to . head . getTransferCalls
   return $
     [JUMPDESTFROM "activate_method"]
     ++ concatMap activateMapElementToTransferFromCall (Map.assocs am)
@@ -712,35 +760,51 @@ activate = do
     ++ [ push 0x01, push $ storageAddress Activated, SSTORE ]
     ++ saveTimestampToStorage
     ++ emitEvent "Activated"
-
-    {-
-    ++ getFunctionCallEvm
-    let tranferFrom_caller = getFunctionCallEvm
-                         address
-                         (functionSignature "tranferFrom(address,address,uint256)")
-                         [Word256 (string2w256 key)]
-                         (fromInteger mo)
-                         (fromInteger mo)
-                         0x20
-        moveResToStack = [ push $ fromInteger mo, MLOAD ]
-
-    in functionCall ++ moveResToStack
-    -}
-
-    {-
-    ++ [ FUNCALL "mint_subroutine" ]
-    emitEvent "Minted()"
-    -}
+    -- call mint_method here, not mint_subroutine
+    ++ mintExt addrOfPT
+    -- start any timers
     ++ [ STOP]
-  where emitEvent eventName =
-          [ PUSH32 $ eventSignature eventName
-          , push 0
-          , push 0
-          , LOG1
-          ]
 
-mint:: Compiler [EvmOpcode]
-mint = return [JUMPDESTFROM "mint_method"]
+activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
+activateMapElementToTransferFromCall (tokenAddress, amount) =
+  pushArgsToStack ++ subroutineCall ++ throwIfReturnFalse
+  where
+    -- Prepare stack for `transferFrom`
+    pushArgsToStack =
+      [ CALLER ] -- CALLER is the originator of the currently executing call-chain.
+      ++ [ PUSH32 $ address2w256 tokenAddress
+         , push amount ]
+      ++ getArgument0
+      ++ [ MUL ]
+    subroutineCall = [ FUNCALL "transferFrom_subroutine" ]
+    throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
+    -- push the only argument given to "activate_method".
+    getArgument0 = [ PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
+
+
+-- send an external `mint` message to PT
+--mintExt :: TransferCall -> [EvmOpcode]
+mintExt addrOfPT = concat [
+      pushCalleeAddress
+    , subroutineCall
+    , throwIfReturnFalse
+    , [ STOP ]
+    ]
+    where
+        --pushCalleeAddress  = [ PUSH32 $ address2w256 addrOfPT]
+        pushCalleeAddress  = [ PUSH32 $ address2w256 addrOfPT]
+        subroutineCall = [ FUNCALL "mint_subroutine" ]
+        throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
+
+
+
+-- call an internal method `mint` on DC
+mint :: Compiler [EvmOpcode]
+mint = return $ concat [
+      [ JUMPDESTFROM "mint_method" ] 
+    , emitEvent "Minted"
+    , [ STOP ]
+    ]
 
 
 burn :: Compiler [EvmOpcode]
@@ -749,24 +813,6 @@ burn = return [JUMPDESTFROM "burn_method"]
 
 pay :: Compiler [EvmOpcode]
 pay = return [JUMPDESTFROM "pay_method"]
-
-
-activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
-activateMapElementToTransferFromCall (tokenAddress, amount) =
-  pushArgsToStack ++ subroutineCall ++ throwIfReturnFalse
-  where
-    -- Prepare stack for `transferFrom`
-    pushArgsToStack =
-      [CALLER]
-      ++ [ PUSH32 $ address2w256 tokenAddress
-         , push amount ]
-      ++ getArgument0
-      ++ [ MUL]
-    subroutineCall = [ FUNCALL "transferFrom_subroutine" ]
-    throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
-    -- push the only argument given to "activate_method".
-    getArgument0 = [ PUSH1 0x4, CALLDATALOAD ]
-
 
 
 

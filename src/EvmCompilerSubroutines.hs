@@ -33,9 +33,11 @@ import EvmLanguageDefinition
 - control to the desired subroutine.
 -}
 subroutines :: [EvmOpcode]
-subroutines = transferSubroutine
-            ++ transferFromSubroutine
-            ++ mintSubroutine
+subroutines = concat [
+                  transferSubroutine
+                , transferFromSubroutine
+                , mintSubroutine
+            ]
             {-
             ++ burnSubroutine
             ++ paySubroutine
@@ -162,39 +164,63 @@ storeArgumentsBurn =
     ]
 
 
-{- Assumptions about the stack, when this code is run:
-- 0x160 [     ]
-- 0x120 [     ]
-- 0x100 [     ]
--}
 mintSubroutine :: [EvmOpcode]
-mintSubroutine =
-        funStartMint
-        ++ storeFunctionSignature Mint
-        ++ storeArgumentsMint
-        ++ pushOutSize
-        ++ pushOutOffset
-        ++ pushInSizeT
-        ++ pushInOffset
-        ++ pushValue
-        ++ pushCalleeAddress
-        ++ pushGasAmount
-        ++ callInstruction
-        ++ checkExitCode
-        ++ removeExtraArg
-        ++ getReturnValueFromMemory
-        ++ funEnd
-    where
-    funStartMint       = [ FUNSTART "mint_subroutine" 2 ]
-    storeArgumentsMint =
-      [ push 0x04
-      , MSTORE -- store amount : uint256 in mem
-      , push 0x24
-      , MSTORE -- store msg.sender : address in mem
+mintSubroutine = concat [
+        funStartMint,
+        storeFunctionSignatureMint,
+        -- ++ storeArgumentsMint This is done at the call site.
+        copyMethodArgsToMem,
+        pushOutSize,
+        pushOutOffset,
+        pushInSizeMint,
+        pushInOffset,
+        pushValue,
+        --
+        pushCalleeAddress,
+        --
+        pushGasAmount,
+        callInstruction,
+        checkExitCode,
+        removeExtraArg,
+        getReturnValueFromMemory,
+        funEnd
+        ]
+    where 
+    pushCalleeAddress  = [ DUP6 ]
+    pushInSizeMint = [ push 0x44 ]
+    funStartMint = [ FUNSTART "mint_subroutine" 1 ]
+    storeFunctionSignatureMint =
+      [ PUSH32 (functionSignature "mint(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+      , push 0
+      , MSTORE
       ]
-    storeFunctionSignature Mint =
+      {-
+      [ PUSH4 $ getMethodID "mint(uint256,address)"
+      , PUSH1 0
+      , MSTORE
+      ]
+      -}
+    --
+    -- mint(amount,msg.sender)
+    copyMethodArgsToMem =
+        -- These values comes from the Solidity calling convention
+        let memOffset = 0x20 + solcSigSize
+            romOffset = solcSigSize
+            size      = 0x20 -- bytes
+        in
+        [ push size        -- amount
+        , push romOffset
+        , push memOffset
+        , CALLDATACOPY
+        , CALLER           -- msg.sender
+        , push 0x4
+        , MSTORE
+        ]
+
+        {-
       [ PUSH32 (functionSignature "mint(uint256,address)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
       , push 0
       , MSTORE
       ]
+      -}
 

@@ -115,12 +115,12 @@ intermediateCompileFinalizeParties contract = do
 intermediateCompileM :: Contract -> ICompiler IntermediateContract
 intermediateCompileM (Transfer token to) = do
   ScopeEnv maxFactor scaleFactor delayTerm memExpPath <- ask
-  toPartyId   <- insertIfMissing to
+  --toPartyId   <- insertIfMissing to
   let transferCall = TransferCall { _maxAmount     = maxFactor
                                   , _amount        = scaleFactor (Lit (IntVal 1))
                                   , _delay         = delayTerm
                                   , _tokenAddress  = token
-                                  , _to            = toPartyId
+                                  , _to            = to
                                   , _memExpPath    = memExpPath
                                   }
 
