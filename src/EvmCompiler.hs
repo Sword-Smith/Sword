@@ -33,7 +33,6 @@ import Control.Monad.State
 import Control.Monad.Reader
 
 import Data.List
-import Data.List.Split (splitOn)
 import qualified Data.Map.Strict as Map
 import Data.Word
 
@@ -306,7 +305,7 @@ jumpTable =
 -  reqid=23 t=2.890408ms err="stack underflow (1 <=> 2)"
 getJumpTabelEntry :: FunDecl -> [EvmOpcode]
 getJumpTabelEntry funDecl =
-    let method = head $ splitOn "(" funDecl
+    let method = head $ Data.List.splitOn "(" funDecl
         label = method ++ "_method"
     in
     [ PUSH4 (getMethodID funDecl) -- e.g. "take(uint256)"
@@ -764,7 +763,7 @@ activate = do
     ++ emitEvent "Activated"
     -- call mint_method here, not mint_subroutine
     -- ++ mintExt addrOfPT
-    ++ concatMap mintExt addrsOfPTs
+    ++ concatMap mintExt (nub addrsOfPTs)
     ++ [ STOP ] -- call chain ends here.
 
 activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
@@ -802,7 +801,7 @@ mintExt addrOfPT = concat [
 -- call an internal method `mint` on DC
 mint :: Compiler [EvmOpcode]
 mint = return $ concat [
-      [ JUMPDESTFROM "mint_method" ] 
+      [ JUMPDESTFROM "mint_method" ]
     , emitEvent "Minted"
     , [ STOP ]
     ]
@@ -818,8 +817,7 @@ pay = return [JUMPDESTFROM "pay_method"]
 
 
 take :: Compiler [EvmOpcode]
-take = do
-  return $
+take = return $
     [ JUMPDESTFROM "take_method" ]
     ++ notActivatedCheck
     ++ loadPartyName
@@ -836,9 +834,9 @@ take = do
                         , CALLDATALOAD
                         ]
 
-    loadPartyIndex    = (getFromStorageStack $ storageAddress PartyFreeMap)
+    loadPartyIndex    = getFromStorageStack (storageAddress PartyFreeMap)
                         ++ [ DUP1 ]
-    checkAddress      = (getFromStorageStack $ storageAddress PartyMap)
+    checkAddress      = getFromStorageStack  (storageAddress PartyMap)
                         ++ [ push 0
                            , EVM_LT
                            , JUMPITO "global_throw"
@@ -846,7 +844,7 @@ take = do
     saveAddress       = [ CALLER
                         , SWAP1
                         ]
-                        ++ (getStorageHashKeyStack $ storageAddress PartyMap)
+                        ++ getStorageHashKeyStack (storageAddress PartyMap)
                         ++ [ SSTORE ]
 
 getMemExpById :: MemExpId -> [IMemExp] -> IMemExp
