@@ -752,18 +752,20 @@ executeTransferCallsHH tc transferCounter = do
 activate :: Compiler [EvmOpcode]
 activate = do
   am <- reader getActivateMap
-  addrOfPT <- reader $ _to . head . getTransferCalls
+  --addrOfPT <- reader $ _to . head . getTransferCalls
+  addrsOfPTs <- reader $ map _to . getTransferCalls
   return $
     [JUMPDESTFROM "activate_method"]
     ++ concatMap activateMapElementToTransferFromCall (Map.assocs am)
     -- set activate bit to 0x01 (true)
     ++ [ push 0x01, push $ storageAddress Activated, SSTORE ]
+    -- start any timers
     ++ saveTimestampToStorage
     ++ emitEvent "Activated"
     -- call mint_method here, not mint_subroutine
-    ++ mintExt addrOfPT
-    -- start any timers
-    ++ [ STOP]
+    -- ++ mintExt addrOfPT
+    ++ concatMap mintExt addrsOfPTs
+    ++ [ STOP ] -- call chain ends here.
 
 activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
 activateMapElementToTransferFromCall (tokenAddress, amount) =
@@ -783,15 +785,14 @@ activateMapElementToTransferFromCall (tokenAddress, amount) =
 
 
 -- send an external `mint` message to PT
---mintExt :: TransferCall -> [EvmOpcode]
+--mintExt :: [TransferCall] -> [EvmOpcode]
 mintExt addrOfPT = concat [
       pushCalleeAddress
     , subroutineCall
     , throwIfReturnFalse
-    , [ STOP ]
+    --, [ STOP ]
     ]
     where
-        --pushCalleeAddress  = [ PUSH32 $ address2w256 addrOfPT]
         pushCalleeAddress  = [ PUSH32 $ address2w256 addrOfPT]
         subroutineCall = [ FUNCALL "mint_subroutine" ]
         throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
