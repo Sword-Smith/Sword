@@ -25,6 +25,8 @@ module EvmCompilerSubroutines where
 import EvmCompilerHelper
 import EvmLanguageDefinition
 
+
+
 {- These procedures are pasted as a _single_ chunk in the contract code. If we
 - parameterize their arguments like `generateCall method args ..` each call side
 - will get as a return value a list of opcodes. Thus resulting in code
@@ -37,16 +39,22 @@ subroutines = concat [
                   transferSubroutine
                 , transferFromSubroutine
                 , mintSubroutine
+                , burnSubroutine
+                --, transferSubroutineNew
             ]
             {-
-            ++ burnSubroutine
             ++ paySubroutine
+            -- TODO: Missing 'Get' case.
+            -- This is currently called in compileLit
             ++ getSubroutine
             -}
 
+
+-- OLD STYLE SUBROUTINES
+
 transferFromSubroutine =
       funStartTF
-      ++ storeFunctionSignature TransferFrom
+      ++ storeFunctionSignatureTransferFrom
       ++ storeArgumentsTF -- transferFrom(_from, _to, _amount) = transferFrom(party, self, amount)
       ++ pushOutSize
       ++ pushOutOffset
@@ -60,10 +68,25 @@ transferFromSubroutine =
       ++ removeExtraArg
       ++ getReturnValueFromMemory
       ++ funEnd
+          where
+            funStartTF              = [ FUNSTART "transferFrom_subroutine" 3 ]
+            storeFunctionSignatureTransferFrom  =
+                [ PUSH32 (functionSignature "transferFrom(address,address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+                , push 0
+                , MSTORE ]
+            storeArgumentsTF =
+                [ push 0x04
+                , MSTORE -- store sender (_from) in mem
+                , ADDRESS
+                , push 0x24
+                , MSTORE -- store own address (_to) in mem (recipient of transferFrom transaction)
+                , push 0x44
+                , MSTORE -- store amount in mem
+                ]
 
 transferSubroutine =
       funStartT
-      ++ storeFunctionSignature Transfer
+      ++ storeFunctionSignatureTransfer
       ++ storeArgumentsT -- transfer(_to, _amount) = transfer(party, amount)
       ++ pushOutSize
       ++ pushOutOffset
@@ -77,63 +100,20 @@ transferSubroutine =
       ++ removeExtraArg
       ++ getReturnValueFromMemory
       ++ funEnd
+          where
+            funStartT               = [ FUNSTART "transfer_subroutine" 3 ]
+            storeFunctionSignatureTransfer =
+                [ PUSH32 (functionSignature "transfer(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+                , push 0 -- TODO: We always use 0 here, since we don't use memory other places. Use monad to keep track of memory usage.
+                , MSTORE ]
+            storeArgumentsT =
+                [ push 0x04
+                , MSTORE -- store recipient (_to) in mem
+                , push 0x24
+                , MSTORE -- store amount in mem
+                ]
 
 
-burnSubroutine =
-    funStartBurn
-    ++ storeFunctionSignature Burn
-    ++ storeArgumentsBurn
-    ++ pushOutSize
-    ++ pushOutOffset
-    ++ pushInSizeT
-    ++ pushInOffset
-    ++ pushValue
-    ++ pushCalleeAddress
-    ++ pushGasAmount
-    ++ callInstruction
-    ++ checkExitCode
-    ++ removeExtraArg
-    ++ getReturnValueFromMemory
-    ++ funEnd
-
-
-funStartT               = [ FUNSTART "transfer_subroutine" 3 ]
-funStartTF              = [ FUNSTART "transferFrom_subroutine" 3 ]
-funStartBurn            = [ FUNSTART "burn_subroutine" 2 ]
-
-storeFunctionSignature :: FunctionSignature -> [EvmOpcode]
-storeFunctionSignature Transfer =
-    [ PUSH32 (functionSignature "transfer(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-    , push 0 -- TODO: We always use 0 here, since we don't use memory other places. Use monad to keep track of memory usage.
-    , MSTORE ]
-storeFunctionSignature TransferFrom  =
-    [ PUSH32 (functionSignature "transferFrom(address,address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-    , push 0
-    , MSTORE ]
-storeFunctionSignature Burn =
-    [ PUSH32 (functionSignature "burn(uint256,address)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-    , push 0
-    , MSTORE ]
-
--- TODO: Missing 'Get' case.
--- This is currently called in compileLit
-
-storeArgumentsT =
-    [ push 0x04
-    , MSTORE -- store recipient (_to) in mem
-    , push 0x24
-    , MSTORE -- store amount in mem
-    ]
-
-storeArgumentsTF =
-    [ push 0x04
-    , MSTORE -- store sender (_from) in mem
-    , ADDRESS
-    , push 0x24
-    , MSTORE -- store own address (_to) in mem (recipient of transferFrom transaction)
-    , push 0x44
-    , MSTORE -- store amount in mem
-    ]
 pushOutSize        = [ push 0x20 ]
 pushOutOffset      = [ push 0x0 ]
 pushInSizeTF       = [ push 0x64 ]
@@ -156,12 +136,8 @@ getReturnValueFromMemory =
 funEnd = [FUNRETURN]
 
 
-storeArgumentsBurn =
-    [ push 0x04
-    , MSTORE -- store amount : uint256 in mem
-    , push 0x24
-    , MSTORE -- store msg.sender : address in mem
-    ]
+
+-- NEW STYLE SUBROUTINES
 
 
 mintSubroutine :: [EvmOpcode]
@@ -175,9 +151,7 @@ mintSubroutine = concat [
         pushInSizeMint,
         pushInOffset,
         pushValue,
-        --
         pushCalleeAddress,
-        --
         pushGasAmount,
         callInstruction,
         checkExitCode,
@@ -223,4 +197,120 @@ mintSubroutine = concat [
       , MSTORE
       ]
       -}
+
+
+burnSubroutine :: [EvmOpcode]
+burnSubroutine = concat [
+        funStartBurn,
+        storeFunctionSignatureBurn,
+        -- ++ storeArgumentsBurn This is done at the call site.
+        copyMethodArgsToMem,
+        pushOutSize,
+        pushOutOffset,
+        pushInSizeBurn,
+        pushInOffset,
+        pushValue,
+        pushCalleeAddress,
+        pushGasAmount,
+        callInstruction,
+        checkExitCode,
+        removeExtraArg,
+        getReturnValueFromMemory,
+        funEnd
+        ]
+    where 
+    pushCalleeAddress  = [ DUP6 ]
+    pushInSizeBurn = [ push 0x44 ]
+    funStartBurn = [ FUNSTART "burn_subroutine" 1 ]
+
+    storeFunctionSignatureBurn =
+        [ PUSH32 (functionSignature "burn(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+        , push 0
+        , MSTORE ]
+
+    -- burn(address,amount)
+    copyMethodArgsToMem =
+        -- These values comes from the Solidity calling convention
+        let memOffset = 0x20 + solcSigSize
+            romOffset = solcSigSize
+            size      = 0x20 -- bytes
+        in
+        [ push size        -- amount
+        , push romOffset
+        , push memOffset
+        , CALLDATACOPY
+        , CALLER           -- msg.sender
+        , push 0x4
+        , MSTORE
+        ]
+
+
+
+transferSubroutineNew =
+      funStartT
+      ++ storeFunctionSignatureTransfer
+      -- ++ storeArgumentsT -- transfer(_to, _amount) = transfer(party, amount)
+      ++ copyMethodArgsToMem
+      ++ pushOutSize
+      ++ pushOutOffset
+      ++ pushInSizeTransfer
+      ++ pushInOffset
+      ++ pushValue
+      ++ pushCalleeAddress
+      ++ pushGasAmount
+      ++ callInstruction
+      ++ checkExitCode
+      ++ removeExtraArg
+      ++ getReturnValueFromMemory
+      ++ funEnd
+          where
+        funStartT = [ FUNSTART "newtransfer_subroutine" 1 ]
+
+        storeFunctionSignatureTransfer =
+            [ PUSH32 (functionSignature "transfer(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+            , push 0 -- TODO: We always use 0 here, since we don't use memory other places. Use monad to keep track of memory usage.
+            , MSTORE ]
+
+        pushOutSize        = [ push 0x20 ]
+        pushOutOffset      = [ push 0x0 ]
+        pushInSizeTransfer = [ push 0x44 ]
+        pushInOffset       = [ push 0x0 ]
+        pushValue          = [ push 0x0 ]
+        pushCalleeAddress  = [ DUP6 ]
+        pushGasAmount      =
+            [ push 0x32
+            , GAS
+            , SUB ]
+        callInstruction    = [ CALL ]
+        checkExitCode      =
+            [ ISZERO
+            , JUMPITO "global_throw" ]
+        removeExtraArg           = [ POP ]
+        getReturnValueFromMemory =
+            [ push 0x0
+            , MLOAD ]
+        funEnd = [FUNRETURN]
+        copyMethodArgsToMem =
+            -- These values comes from the Solidity calling convention
+            let memOffset = 0x20 + solcSigSize
+                romOffset = solcSigSize
+                size      = 0x20 -- bytes
+            in
+            [ push size        -- unint256 amount
+            , push romOffset
+            , push memOffset
+            , CALLDATACOPY
+            , CALLER           -- address msg.sender
+            , push 0x4
+            , MSTORE
+            ]
+        {-
+        storeArgumentsT =
+            [ push 0x04
+            , MSTORE -- store recipient (_to) in mem
+            , push 0x24
+            , MSTORE -- store amount in mem
+            ]
+        -}
+
 

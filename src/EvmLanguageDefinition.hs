@@ -98,7 +98,7 @@ data EvmOpcode = STOP
                -- the subroutine and thus _after_ call-side.
                | FUNSTART Label Integer -- pre-linker pseudo instruction: JUMPDEST Label + SWAP logic
                | FUNSTARTA Integer -- post-linker pseudo instruction: JUMPDEST + SWAP logic
-               | FUNCALL Label -- pre-linker pseudo instruction: PC, JUMPTO Label (store PC on stack, jump). This is in effect: PC, PUSH Addr(Label), JUMP.
+               | FUNCALL Label -- pre-linker pseudo instruction: PC, JUMPTO Label (push PC on stack, jump). This is in effect: PC, PUSH Addr(Label), JUMP.
                | FUNCALLA Integer -- post-linker pseudo instruction: PC, JUMPTOA i
                | FUNRETURN -- post-linker pseudo instruction: a synonyme for JUMP;
                | JUMPTO Label -- pre-linker pseudo instruction: PUSH Addr(label); JUMP;

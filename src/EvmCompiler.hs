@@ -751,8 +751,7 @@ executeTransferCallsHH tc transferCounter = do
 activate :: Compiler [EvmOpcode]
 activate = do
   am <- reader getActivateMap
-  --addrOfPT <- reader $ _to . head . getTransferCalls
-  addrsOfPTs <- reader $ map _to . getTransferCalls
+  m <- mint
   return $
     [JUMPDESTFROM "activate_method"]
     ++ concatMap activateMapElementToTransferFromCall (Map.assocs am)
@@ -760,11 +759,13 @@ activate = do
     ++ [ push 0x01, push $ storageAddress Activated, SSTORE ]
     -- start any timers
     ++ saveTimestampToStorage
+    {-
     ++ emitEvent "Activated"
-    -- call mint_method here, not mint_subroutine
-    -- ++ mintExt addrOfPT
     ++ concatMap mintExt (nub addrsOfPTs)
-    ++ [ STOP ] -- call chain ends here.
+    ++ emitEvent "Minted"
+    -}
+    ++ m
+    ++ [ STOP ]
 
 activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
 activateMapElementToTransferFromCall (tokenAddress, amount) =
@@ -772,9 +773,9 @@ activateMapElementToTransferFromCall (tokenAddress, amount) =
   where
     -- Prepare stack for `transferFrom`
     pushArgsToStack =
-      [ CALLER ] -- CALLER is the originator of the currently executing call-chain.
-      ++ [ PUSH32 $ address2w256 tokenAddress
-         , push amount ]
+      [ CALLER ] -- CALLER is the originator of the currently executing call-chain, aka User.
+      ++ [ PUSH32 $ address2w256 tokenAddress ]
+      ++ [ push amount ]
       ++ getArgument0
       ++ [ MUL ]
     subroutineCall = [ FUNCALL "transferFrom_subroutine" ]
@@ -783,33 +784,74 @@ activateMapElementToTransferFromCall (tokenAddress, amount) =
     getArgument0 = [ PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
 
 
+
+-- call an internal method `mint` on DC
+mint :: Compiler [EvmOpcode]
+mint = do
+  addrsOfPTs <- reader $ map _to . getTransferCalls
+  return $
+    [JUMPDESTFROM "mint_method"]
+    ++ concatMap mintExt (nub addrsOfPTs)
+    ++ emitEvent "Minted"
+    ++ [ STOP ]
+
+
+
 -- send an external `mint` message to PT
---mintExt :: [TransferCall] -> [EvmOpcode]
+mintExt :: Address -> [EvmOpcode]
 mintExt addrOfPT = concat [
       pushCalleeAddress
     , subroutineCall
     , throwIfReturnFalse
-    --, [ STOP ]
     ]
     where
         pushCalleeAddress  = [ PUSH32 $ address2w256 addrOfPT]
         subroutineCall = [ FUNCALL "mint_subroutine" ]
         throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
 
-
-
--- call an internal method `mint` on DC
-mint :: Compiler [EvmOpcode]
-mint = return $ concat [
-      [ JUMPDESTFROM "mint_method" ]
-    , emitEvent "Minted"
-    , [ STOP ]
-    ]
-
-
+-- call an internal method `burn` on DC
 burn :: Compiler [EvmOpcode]
-burn = return [JUMPDESTFROM "burn_method"]
+burn = do
+  addrsOfPTs <- reader $ map _to . getTransferCalls
+  (addrOfSA, amount) <- reader $  head . Map.assocs . getActivateMap
+  let pushCalleeAddress = [ PUSH32 $ address2w256 addrOfSA ]
+  return $
+    [JUMPDESTFROM "burn_method"]
 
+    -- burn PT
+    ++ concatMap burnExt (nub addrsOfPTs)
+
+    -- transfer SA.transfer(address user, amount)
+    ++ [ CALLER ]     -- User address
+    ++ pushCalleeAddress -- SA address
+    -- ++ [push amount] -- getArgument0   -- amount uint256
+    ++ getArgument0   -- amount uint256
+    ++ subroutineCall
+    ++ throwIfReturnFalse
+
+    -- finalise
+    ++ emitEvent "Burnt"
+    ++ [ STOP ]
+    where
+        subroutineCall     = [ FUNCALL "transfer_subroutine"  ]
+        throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
+        getArgument0       = [ PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
+
+
+
+
+
+-- send an external `burn` message to PT
+burnExt :: Address -> [EvmOpcode]
+burnExt addrOfPT = concat [
+      pushCalleeAddress
+    , subroutineCall
+    , throwIfReturnFalse
+    ]
+    where
+        pushCalleeAddress  = [ PUSH32 $ address2w256 addrOfPT]
+        subroutineCall = [ FUNCALL "burn_subroutine" ]
+        throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
 
 pay :: Compiler [EvmOpcode]
 pay = return [JUMPDESTFROM "pay_method"]
