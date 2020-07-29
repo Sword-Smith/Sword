@@ -40,10 +40,10 @@ subroutines = concat [
                 , transferFromSubroutine
                 , mintSubroutine
                 , burnSubroutine
-                --, transferSubroutineNew
+                --, paySubroutine
             ]
             {-
-            ++ paySubroutine
+            --, transferSubroutineNew
             -- TODO: Missing 'Get' case.
             -- This is currently called in compileLit
             ++ getSubroutine
@@ -314,3 +314,10 @@ transferSubroutineNew =
         -}
 
 
+-- paySubroutine
+--
+--
+
+
+
+-- getSubroutine

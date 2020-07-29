@@ -119,12 +119,12 @@ evmCompile intermediateContract =
   where
     constructor'     = constructor intermediateContract
     codecopy'        = codecopy constructor' body
-    body             = jumpTable ++ subroutines ++ activateCheck ++ execute' ++ activate' ++ take' ++ burn' ++ mint' ++ pay'
+    body             = jumpTable ++ subroutines ++ activateCheck ++ execute' ++ activate' {-includes mint'-} ++ take' ++ burn' ++ pay'
     execute'         = runCompiler intermediateContract initialEnv execute -- also contains selfdestruct when contract is fully executed
-    activate'        = runCompiler intermediateContract initialEnv activate
-    mint'            = runCompiler intermediateContract initialEnv mint
-    burn'            = runCompiler intermediateContract initialEnv burn
-    pay'             = runCompiler intermediateContract initialEnv pay
+    activate'        = runCompiler intermediateContract initialEnv activateABI
+    --mint'            = runCompiler intermediateContract initialEnv mint
+    burn'            = runCompiler intermediateContract initialEnv burnABI
+    pay'             = runCompiler intermediateContract initialEnv payABI
     take'            = runCompiler intermediateContract initialEnv EvmCompiler.take
     -- The addresses of the constructor run are different from runs when DC is on BC
 
@@ -748,23 +748,21 @@ executeTransferCallsHH tc transferCounter = do
 
 -- This might have to take place within the state monad to get unique labels for each TransferFrom call
 -- TODO: Add unique labels.
-activate :: Compiler [EvmOpcode]
-activate = do
-  am <- reader getActivateMap
+activateABI :: Compiler [EvmOpcode]
+activateABI = do
   m <- mint
   return $
     [JUMPDESTFROM "activate_method"]
-    ++ concatMap activateMapElementToTransferFromCall (Map.assocs am)
     -- set activate bit to 0x01 (true)
     ++ [ push 0x01, push $ storageAddress Activated, SSTORE ]
     -- start any timers
     ++ saveTimestampToStorage
-    {-
+    -- transferFrom and mint
     ++ emitEvent "Activated"
-    ++ concatMap mintExt (nub addrsOfPTs)
-    ++ emitEvent "Minted"
-    -}
+    -- mintABI methods jumps in here.
+    ++ [JUMPDESTFROM "mint_method"]
     ++ m
+    -- finalize
     ++ [ STOP ]
 
 activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
@@ -784,20 +782,30 @@ activateMapElementToTransferFromCall (tokenAddress, amount) =
     getArgument0 = [ PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
 
 
+{-
+-- DC.mint() call an ABI method `mint` on DC.mint
+mintABI :: Compiler [EvmOpcode]
+mintABI = do
+    m <- mint
+    return $
+        ++ m
+        ++ [ STOP ]
+-}
 
--- call an internal method `mint` on DC
+-- mint business logic
 mint :: Compiler [EvmOpcode]
 mint = do
-  addrsOfPTs <- reader $ map _to . getTransferCalls
-  return $
-    [JUMPDESTFROM "mint_method"]
-    ++ concatMap mintExt (nub addrsOfPTs)
-    ++ emitEvent "Minted"
-    ++ [ STOP ]
+    am <- reader getActivateMap
+    addrsOfPTs <- reader $ map _to . getTransferCalls
+    return $
+        -- SA.transferFrom
+        concatMap activateMapElementToTransferFromCall (Map.assocs am)
+        -- PT.mint
+        ++ concatMap mintExt (nub addrsOfPTs)
+        ++ emitEvent "Minted"
 
 
-
--- send an external `mint` message to PT
+-- PT.mint(). send an external `mint` message to each PT
 mintExt :: Address -> [EvmOpcode]
 mintExt addrOfPT = concat [
       pushCalleeAddress
@@ -809,29 +817,36 @@ mintExt addrOfPT = concat [
         subroutineCall = [ FUNCALL "mint_subroutine" ]
         throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
 
--- call an internal method `burn` on DC
+
+-- ABI call DC.burn()
+burnABI :: Compiler [EvmOpcode]
+burnABI = do
+  b <- burn
+  return $
+    [JUMPDESTFROM "burn_method"]
+    ++ b
+    -- finalise 
+    ++ emitEvent "Burnt"
+    ++ [ STOP ]
+
+
 burn :: Compiler [EvmOpcode]
 burn = do
   addrsOfPTs <- reader $ map _to . getTransferCalls
   (addrOfSA, amount) <- reader $  head . Map.assocs . getActivateMap
-  let pushCalleeAddress = [ PUSH32 $ address2w256 addrOfSA ]
+  let pushCalleeAddress = [ PUSH32 $ address2w256 addrOfSA ] 
   return $
-    [JUMPDESTFROM "burn_method"]
-
     -- burn PT
-    ++ concatMap burnExt (nub addrsOfPTs)
+    concatMap burnExt (nub addrsOfPTs)
 
     -- transfer SA.transfer(address user, amount)
     ++ [ CALLER ]     -- User address
     ++ pushCalleeAddress -- SA address
-    -- ++ [push amount] -- getArgument0   -- amount uint256
     ++ getArgument0   -- amount uint256
+    ++ [ push amount ]
+    ++ [ MUL ]
     ++ subroutineCall
     ++ throwIfReturnFalse
-
-    -- finalise
-    ++ emitEvent "Burnt"
-    ++ [ STOP ]
     where
         subroutineCall     = [ FUNCALL "transfer_subroutine"  ]
         throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
@@ -840,8 +855,7 @@ burn = do
 
 
 
-
--- send an external `burn` message to PT
+-- PT.burn() send an external `burn` message to PT
 burnExt :: Address -> [EvmOpcode]
 burnExt addrOfPT = concat [
       pushCalleeAddress
@@ -853,8 +867,25 @@ burnExt addrOfPT = concat [
         subroutineCall = [ FUNCALL "burn_subroutine" ]
         throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
 
-pay :: Compiler [EvmOpcode]
-pay = return [JUMPDESTFROM "pay_method"]
+-- DC.pay(). This queries the DataFeed, and conditionally executes a burn.
+payABI :: Compiler [EvmOpcode]
+payABI = do
+    g <- getDF
+    b <- burn
+    return $ 
+        [JUMPDESTFROM "pay_method"]
+        ++ g
+        -- [ Check condition ]
+        ++ b
+        -- finalise 
+        ++ emitEvent "Paid"
+        ++ [ STOP ]
+
+
+getDF :: Compiler [EvmOpcode]
+getDF = return []
+
+
 
 
 
