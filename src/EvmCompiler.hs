@@ -119,12 +119,12 @@ evmCompile intermediateContract =
   where
     constructor'     = constructor intermediateContract
     codecopy'        = codecopy constructor' body
-    body             = jumpTable ++ subroutines ++ activateCheck ++ execute' ++ activate' {-includes mint'-} ++ take' ++ burn' ++ pay'
-    execute'         = runCompiler intermediateContract initialEnv execute -- also contains selfdestruct when contract is fully executed
+    body             = jumpTable ++ subroutines ++ activate' {-includes mint'-} ++ take' ++ burn' ++ pay'
+    -- execute'         = runCompiler intermediateContract initialEnv execute -- also contains selfdestruct when contract is fully executed
     activate'        = runCompiler intermediateContract initialEnv activateABI
     --mint'            = runCompiler intermediateContract initialEnv mint
     burn'            = runCompiler intermediateContract initialEnv burnABI
-    pay'             = runCompiler intermediateContract initialEnv payABI
+    pay'             = runCompiler intermediateContract initialEnv pay
     take'            = runCompiler intermediateContract initialEnv EvmCompiler.take
     -- The addresses of the constructor run are different from runs when DC is on BC
 
@@ -164,6 +164,7 @@ transformPseudoInstructions = concatMap transformH
       _           -> [ opcode ]
 
     swap :: Integer -> EvmOpcode
+    swap 0 = JUMPDEST -- noop
     swap 1 = SWAP1
     swap 2 = SWAP2
     swap 3 = SWAP3
@@ -266,22 +267,24 @@ codecopy con exe = [ PUSH4 $ fromInteger (sizeOfOpcodes exe) -- DO NOT REPLACE T
 jumpTable :: [EvmOpcode]
 jumpTable =
   checkNoValue "Contract_Header" ++
+  -- assuming stack is empty here.
 
   [ push 0
   , CALLDATALOAD
   , PUSH32 (0xffffffff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-  , AND
-  , DUP1
-  , DUP1
+  , AND -- stack now holds a single item: solcc methodID from the rom.
 
+  , DUP1
   , PUSH32 (functionSignature "activate(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "activate_method"
 
+  , DUP1
   , PUSH32 (functionSignature "burn(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "burn_method"
 
+  , DUP1
   , PUSH32 (functionSignature "mint(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "mint_method"
@@ -290,6 +293,7 @@ jumpTable =
   , EVM_EQ
   , JUMPITO "pay_method"
 
+  , DUP1
   , PUSH32 (functionSignature "take(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "take_method"
@@ -346,25 +350,18 @@ jumpTable = concat [
 
 
 
+pay :: Compiler [EvmOpcode]
+pay = do
+    memExpCode <- concatMap executeMemExp <$> reader getMemExps
+    transferCallCode <- executeTransferCalls
+    return $
+        [ JUMPDESTFROM "pay_method" ]
+        ++ memExpCode
+        ++ transferCallCode
+        ++ emitEvent "Paid"
+        ++ [ STOP ]
 
--- When calling execute(), PC must be set here
--- to check if the DC is activated
--- throw iff activated bit is zero
-activateCheck :: [EvmOpcode]
-activateCheck =
-  [ JUMPDESTFROM "execute_method"
-  , push $ storageAddress Activated
-  , SLOAD
-  , push 1
-  , AND
-  , ISZERO
-  , JUMPITO "global_throw" ]
 
-execute :: Compiler [EvmOpcode]
-execute = do
-  memExpCode <- concatMap executeMemExp <$> reader getMemExps
-  transferCallCode <- executeTransferCalls
-  return (memExpCode ++ transferCallCode)
 
 -- This sets the relevant bits in the memory expression word in storage
 -- Here the IMemExp should be evaluated. But only iff it is NOT true atm.
@@ -633,16 +630,6 @@ executeTransferCallsHH tc transferCounter = do
                                  EVM_GT,
                                  JUMPITO $ "method_end" ++ show transferCounter ]
 
-        -- Skip tcall if method has been executed already
-        -- This only works for less than 2^8 transfer calls
-        checkIfTCHasBeenExecuted = [ push $ storageAddress Executed,
-                                     SLOAD,
-                                     push $ fromInteger transferCounter,
-                                     push 0x2,
-                                     EXP,
-                                     AND,
-                                     ISZERO,
-                                     JUMPITO $ "method_end" ++ show transferCounter ]
 
             -- This code can be represented with the following C-like code:
             -- if (memdibit == 00b) { GOTO YIELD } // Don't execute and don't set executed bit to zero.
@@ -673,77 +660,76 @@ executeTransferCallsHH tc transferCounter = do
                 yieldStatement ++ passAndSkipStatement
       in
         checkIfTimeHasPassed ++
-        checkIfTCHasBeenExecuted ++
         checkIfTcIsInActiveBranches (_memExpPath tc)
 
     callTransferToTcRecipient =
+        -- Contains the code to calculate the SA ammount paid for each party
+        -- token in this transfercall.
       runExprCompiler (CompileEnv 0 transferCounter 0x44 "amount_exp") (_amount tc)
       ++ [ push (_maxAmount tc)
          , DUP2
          , DUP2
-         , EVM_GT
+         , SGT -- Security check needed
          , JUMPITO $ "use_exp_res" ++ show transferCounter
          , SWAP1
          , JUMPDESTFROM $ "use_exp_res" ++ show transferCounter
-         , POP ]
+         , POP ] -- Top of stack now has value `a`
 
-      ++ getPartyFromStorage (_to tc)
+
+     {-  0. Get `b:=PT.balanceOf(CALLER)`, where `PT.address:= _to tc`.
+         1. First call DUP1,
+         2. then call PT.burn(CALLER,b),
+         3. then call MUL to get c:=a*b, where a is the amount per position from above.
+         4. then call SA.transfer(CALLER,c) -}
+
+         ++ [ CALLER
+           , PUSH32 $ address2w256 (_tokenAddress tc)
+           , push 8
+         , FUNCALL "transfer_subroutine"
+         , ISZERO
+         , JUMPITO "global_throw" ] -- error happens in this block
+
+             {-
+      ++ [ PUSH32 $ address2w256 (_to tc)
+         , FUNCALL "balanceOf_subroutine"]  -- pops 1, pushes 1:  b is on the stack 
+      ++ [ DUP1
+         , PUSH32 $ address2w256 (_to tc)
+         , FUNCALL "burn_subroutine"  -- pops 2, pushes 1
+         , POP ] 
+         -}
+      -- ++ [ MUL  -- c is on stack
+          {- ++ [ PUSH32 $ address2w256 (_tokenAddress tc)
+         , CALLER -- User
+         , SWAP2
+         , FUNCALL "transfer_subroutine"
+         , ISZERO
+         , JUMPITO "global_throw" ] -- error happens in this block
+         -}
+
+    {-
+      -- getPartyFromStorage (_to tc)
       ++ [ PUSH32 $ address2w256 (_tokenAddress tc)
          , DUP3
 
          , FUNCALL "transfer_subroutine"
          , ISZERO, JUMPITO "global_throw" ]
+         -}
 
-    checkIfTransferToTcSenderShouldBeMade =
-      [ push (_maxAmount tc)
-      , SUB
-      , DUP1
-      , push 0x0
-      , EVM_EQ
-      , JUMPITO $ "skip_call_to_sender" ++ show transferCounter ]
-      -- TODO: Here, we should call transfer to the
-      -- TC originator (transfer back unspent margin)
-      -- but we do not want to recalculate the amount
-      -- so we should locate the amount on the stack.
-      -- And make sure it is preserved on the stack
-      -- for the next call to transfer.
-
-      {-
-    callTransferToTcOriginator =
-      getPartyFromStorage (_from tc)
-      ++ [ PUSH32 $ address2w256 (_tokenAddress tc)
-         , DUP3
-         , FUNCALL "transfer_subroutine" ]
-      ++ [ ISZERO, JUMPITO "global_throw" ] -- check ret val
-      -}
 
     -- Flip correct bit from one to zero and call selfdestruct if all tcalls compl.
     skipCallToTcSenderJumpDest = [ JUMPDESTFROM $ "skip_call_to_sender" ++ show transferCounter
-                                 , POP ] -- pop return amount from stack
+                                 ]--                         , POP ] -- pop return amount from stack
 
-    updateExecutedWord = [
-      JUMPDESTFROM $ "tc_SKIP" ++ show transferCounter,
-      push $ storageAddress Executed,
-      SLOAD,
-      push $ fromInteger transferCounter,
-      push 0x2,
-      EXP,
-      XOR,
-      DUP1,
-      ISZERO,
-      JUMPITO "selfdestruct",
-      push $ storageAddress Executed,
-      SSTORE ]
 
-    functionEndLabel = [ JUMPDESTFROM  $ "method_end" ++ show transferCounter ]
+    functionEndLabel =
+        [ JUMPDESTFROM $ "tc_SKIP" ++ show transferCounter]
+        ++ [ JUMPDESTFROM  $ "method_end" ++ show transferCounter ]
 
   return $
     checkIfCallShouldBeMade ++
     callTransferToTcRecipient ++
-    checkIfTransferToTcSenderShouldBeMade ++
     -- callTransferToTcOriginator ++
     skipCallToTcSenderJumpDest ++
-    updateExecutedWord ++
     functionEndLabel
 
 -- This might have to take place within the state monad to get unique labels for each TransferFrom call
@@ -781,16 +767,6 @@ activateMapElementToTransferFromCall (tokenAddress, amount) =
     -- push the only argument given to "activate_method".
     getArgument0 = [ PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
 
-
-{-
--- DC.mint() call an ABI method `mint` on DC.mint
-mintABI :: Compiler [EvmOpcode]
-mintABI = do
-    m <- mint
-    return $
-        ++ m
-        ++ [ STOP ]
--}
 
 -- mint business logic
 mint :: Compiler [EvmOpcode]
@@ -842,7 +818,7 @@ burn = do
     -- transfer SA.transfer(address user, amount)
     ++ [ CALLER ]     -- User address
     ++ pushCalleeAddress -- SA address
-    ++ getArgument0   -- amount uint256
+    ++ pushArgument0   -- amount uint256
     ++ [ push amount ]
     ++ [ MUL ]
     ++ subroutineCall
@@ -850,7 +826,7 @@ burn = do
     where
         subroutineCall     = [ FUNCALL "transfer_subroutine"  ]
         throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
-        getArgument0       = [ PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
+        pushArgument0       = [ PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
 
 
 
@@ -858,7 +834,8 @@ burn = do
 -- PT.burn() send an external `burn` message to PT
 burnExt :: Address -> [EvmOpcode]
 burnExt addrOfPT = concat [
-      pushCalleeAddress
+      pushArgument0
+    , pushCalleeAddress
     , subroutineCall
     , throwIfReturnFalse
     ]
@@ -866,24 +843,7 @@ burnExt addrOfPT = concat [
         pushCalleeAddress  = [ PUSH32 $ address2w256 addrOfPT]
         subroutineCall = [ FUNCALL "burn_subroutine" ]
         throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
-
--- DC.pay(). This queries the DataFeed, and conditionally executes a burn.
-payABI :: Compiler [EvmOpcode]
-payABI = do
-    g <- getDF
-    b <- burn
-    return $ 
-        [JUMPDESTFROM "pay_method"]
-        ++ g
-        -- [ Check condition ]
-        ++ b
-        -- finalise 
-        ++ emitEvent "Paid"
-        ++ [ STOP ]
-
-
-getDF :: Compiler [EvmOpcode]
-getDF = return []
+        pushArgument0       = [ PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
 
 
 

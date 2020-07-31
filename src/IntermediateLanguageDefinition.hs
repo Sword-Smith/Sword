@@ -45,8 +45,8 @@ data TransferCall =
      TransferCall { _maxAmount    :: Integer
                   , _amount       :: Expr
                   , _delay        :: Integer
-                  , _tokenAddress :: Address
-                  , _to           :: Address
+                  , _tokenAddress :: Address -- SA
+                  , _to           :: Address -- PT
                   , _memExpPath   :: MemExpPath
                   } deriving (Show, Eq)
 

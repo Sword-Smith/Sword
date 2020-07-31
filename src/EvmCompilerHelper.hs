@@ -296,4 +296,4 @@ argNByteOffset n = solcSigSize + (n * wordSizeBits `div` byteSize)
 type FunDecl = String
 
 
-
+stahp = [ STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP, STOP]

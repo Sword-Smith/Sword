@@ -35,6 +35,7 @@ data FunctionSignature = Transfer
                        | TransferFrom
                        | Mint
                        | Burn
+                       | Pay
                        | Get
 
 type Label = String
@@ -126,7 +127,10 @@ data EvmOpcode = STOP
                | LOG0
                | LOG1
                | LOG2
+               | LOG3
+               | LOG4
                | CREATE
+               | CREATE2
                | CALL
                | CALLCODE
                | RETURN
