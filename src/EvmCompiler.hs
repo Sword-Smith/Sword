@@ -119,10 +119,8 @@ evmCompile intermediateContract =
   where
     constructor'     = constructor intermediateContract
     codecopy'        = codecopy constructor' body
-    body             = jumpTable ++ subroutines ++ activate' {-includes mint'-} ++ take' ++ burn' ++ pay'
-    -- execute'         = runCompiler intermediateContract initialEnv execute -- also contains selfdestruct when contract is fully executed
+    body             = jumpTable ++ subroutines ++ activate' {-activate' includes mint'-} ++ take' ++ burn' ++ pay'
     activate'        = runCompiler intermediateContract initialEnv activateABI
-    --mint'            = runCompiler intermediateContract initialEnv mint
     burn'            = runCompiler intermediateContract initialEnv burnABI
     pay'             = runCompiler intermediateContract initialEnv pay
     take'            = runCompiler intermediateContract initialEnv EvmCompiler.take
@@ -248,7 +246,6 @@ getStorageHashKeyStack prefix = [ push 8
     -- TODO: Proper memory handling in state monad, instead of guessing free space
     freeSpaceOffset = 0x2000
 
-
 -- Returns the code needed to transfer code from *init* to I_b in the EVM
 -- 22 is the length of itself, right now we are just saving in mem0
 -- TODO: Change '22' to a calculated length.
@@ -267,7 +264,7 @@ codecopy con exe = [ PUSH4 $ fromInteger (sizeOfOpcodes exe) -- DO NOT REPLACE T
 jumpTable :: [EvmOpcode]
 jumpTable =
   checkNoValue "Contract_Header" ++
-  -- assuming stack is empty here.
+  -- Stack is empty here.
 
   [ push 0
   , CALLDATALOAD
@@ -304,52 +301,6 @@ jumpTable =
   , REVERT
   ]
 
-
-{- Causes: WARN [07-24|23:15:39.917] Served eth_sendTransaction
--  reqid=23 t=2.890408ms err="stack underflow (1 <=> 2)"
-getJumpTabelEntry :: FunDecl -> [EvmOpcode]
-getJumpTabelEntry funDecl =
-    let method = head $ Data.List.splitOn "(" funDecl
-        label = method ++ "_method"
-    in
-    [ PUSH4 (getMethodID funDecl) -- e.g. "take(uint256)"
-    , EVM_EQ
-    , JUMPITO label ]              -- e.g. "take_method"
-
-
-jumpTable :: [EvmOpcode]
-jumpTable = concat [
-  checkNoValue "Contract_Header",
-
-  [ push 0
-  , CALLDATALOAD
-  , PUSH32 (0xffffffff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-  --, PUSH4 0xffffffff -- Gas saving oppportunity. Can be used below as well
-  , AND
-  , DUP1
-  , DUP1
-  ],
-
-  getJumpTabelEntry "activate(uint256)",
-
-  getJumpTabelEntry "burn(uint256)",
-
-  getJumpTabelEntry "mint(uint256)",
-
-  getJumpTabelEntry "pay()",
-
-  getJumpTabelEntry "take(uint256)",
-
-  [ JUMPDESTFROM "global_throw"
-  , push 0
-  , push 0
-  , REVERT
-  ]
-  ]
--}
-
-
-
 pay :: Compiler [EvmOpcode]
 pay = do
     memExpCode <- concatMap executeMemExp <$> reader getMemExps
@@ -360,8 +311,6 @@ pay = do
         ++ transferCallCode
         ++ emitEvent "Paid"
         ++ [ STOP ]
-
-
 
 -- This sets the relevant bits in the memory expression word in storage
 -- Here the IMemExp should be evaluated. But only iff it is NOT true atm.
@@ -451,61 +400,6 @@ type MarginCompiler a = State MrId a
 
 newMrId :: MarginCompiler MrId
 newMrId = get <* modify (+ 1)
-
-{-
--- This method should compare the bits set in the MemoryExpression word
--- in storage with the path which is the key of the element with which it
--- is called.
--- If we are smart here, we set the entire w32 (256 bit value) to represent
--- a path and load the word and XOR it with what was found in storage
--- This word can be set at compile time
-executeMarginRefundM :: MarginRefundMapElement -> MarginCompiler [EvmOpcode]
-executeMarginRefundM (path, refunds) = do
-  i <- newMrId
-  return $ concat [ checkIfMarginHasAlreadyBeenRefunded i
-                  , checkIfPathIsChosen path i
-                  , payBackMargin refunds
-                  , setMarginRefundBit i
-                  , [JUMPDESTFROM $ "mr_end" ++ show i]
-                  ]
-  where
-    -- Skip the rest of the call if the margin has already been repaid
-    checkIfMarginHasAlreadyBeenRefunded i =
-      [ push $ 2 ^ ( i + 1 ) -- add 1 since right-most bit is used to indicate an active DC
-      , push $ storageAddress Activated
-      , SLOAD
-      , AND
-      , JUMPITO $ "mr_end" ++ show i
-      ]
-    -- leaves 1 or 0 on top of stack to show if path is chosen
-    checkIfPathIsChosen mrme i =
-      [ push $ path2Bitmask mrme
-      , push $ storageAddress MemoryExpressionRefs
-      , SLOAD
-      , push $ otherBitMask mrme
-      , AND
-      , XOR
-      , JUMPITO $ "mr_end" ++ show i -- iff non-zero refund; if 0, refund
-      ]
-    payBackMargin [] = []
-    payBackMargin ((tokenAddr, recipient, amount):ls) = -- push args, call transfer, check ret val
-      getPartyFromStorage recipient -- TODO: This hould be PUSH20, not PUSH32. Will save gas.
-      ++ [ PUSH32 $ address2w256 tokenAddr
-         , push amount
-         , FUNCALL "transfer_subroutine"
-         , ISZERO,
-           JUMPITO "global_throw" ]
-      ++ payBackMargin ls
-
-    setMarginRefundBit i =
-      [ push $ 2 ^ (i + 1)
-      , push $ storageAddress Activated
-      , SLOAD
-      , XOR
-      , push $ storageAddress Activated
-      , SSTORE
-      ]
--}
 
 -- Ensures that only the bits relevant for this path are checked
 otherBitMask :: [(Integer, Bool)] -> Integer
@@ -675,74 +569,41 @@ executeTransferCallsHH tc transferCounter = do
          , JUMPDESTFROM $ "use_exp_res" ++ show transferCounter
          , POP ] -- Top of stack now has value `a`
 
-
-     {-  0. Get `b:=PT.balanceOf(CALLER)`, where `PT.address:= _to tc`.
+    {-  0. Get `b:=PT.balanceOf(CALLER)`, where `PT.address:= _to tc`.
          1. First call DUP1,
          2. then call PT.burn(CALLER,b),
          3. then call MUL to get c:=a*b, where a is the amount per position from above.
          4. then call SA.transfer(CALLER,c) -}
 
-        ++ [ PUSH32 $ address2w256 (_to tc)
-           , FUNCALL "balanceOf_subroutine" ]  -- pops 1, pushes 1:  b is on the stack
-
-            -- Prepare burn call
-         ++ [ DUP1
-           , PUSH32 $ address2w256 (_to tc)
-           -- make burn call
-           , FUNCALL "burn_subroutine"  -- pops 2, pushes 1
-            ]
-
-            ++ [ POP ] -- discard return value
-
-
-            -- Prepare stack and call transfer subroutine
-            ++ [ MUL  -- c is on stack -- security needs to be checked
-            , PUSH32 $ address2w256 (_tokenAddress tc)
-            , CALLER
-            , SWAP2]
-
-            ++ [ FUNCALL "transfer_subroutine"
-           , ISZERO
-           , JUMPITO "global_throw" ] -- error happens in this block
-
-
-
-
-
-         {-
       ++ [ PUSH32 $ address2w256 (_to tc)
-         , FUNCALL "balanceOf_subroutine"]  -- pops 1, pushes 1:  b is on the stack
+         , FUNCALL "balanceOf_subroutine" ]  -- pops 1, pushes 1:  b is on the stack
+
+      -- Prepare stack and call burn subroutine
       ++ [ DUP1
          , PUSH32 $ address2w256 (_to tc)
-         , FUNCALL "burn_subroutine"  -- pops 2, pushes 1
-         , POP ]
-         -}
-          {- ++ [ PUSH32 $ address2w256 (_tokenAddress tc)
-         , CALLER -- User
+         , FUNCALL "burn_subroutine"] -- pops 2, pushes 1
+
+      ++ [ POP ] -- discard return value from burn
+
+      -- Prepare stack and call transfer subroutine
+      ++ [ MUL  -- c is on stack -- security needs to be checked
+         , PUSH32 $ address2w256 (_tokenAddress tc)
+         , CALLER
          , SWAP2
          , FUNCALL "transfer_subroutine"
-         , ISZERO
+         ]
+
+      -- Care about the return value
+      ++ [ ISZERO
          , JUMPITO "global_throw" ] -- error happens in this block
-         -}
-
-    {-
-      -- getPartyFromStorage (_to tc)
-      ++ [ PUSH32 $ address2w256 (_tokenAddress tc)
-         , DUP3
-
-         , FUNCALL "transfer_subroutine"
-         , ISZERO, JUMPITO "global_throw" ]
-         -}
-
 
     -- Flip correct bit from one to zero and call selfdestruct if all tcalls compl.
     skipCallToTcSenderJumpDest = [ JUMPDESTFROM $ "skip_call_to_sender" ++ show transferCounter
                                  ]--                         , POP ] -- pop return amount from stack
 
-
     functionEndLabel =
-        [ JUMPDESTFROM $ "tc_SKIP" ++ show transferCounter]
-        ++ [ JUMPDESTFROM  $ "method_end" ++ show transferCounter ]
+        [ JUMPDESTFROM $ "tc_SKIP" ++ show transferCounter
+        , JUMPDESTFROM $ "method_end" ++ show transferCounter ]
 
   return $
     checkIfCallShouldBeMade ++
@@ -786,7 +647,6 @@ activateMapElementToTransferFromCall (tokenAddress, amount) =
     -- push the only argument given to "activate_method".
     getArgument0 = [ PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
 
-
 -- mint business logic
 mint :: Compiler [EvmOpcode]
 mint = do
@@ -799,19 +659,11 @@ mint = do
         ++ concatMap mintExt (nub addrsOfPTs)
         ++ emitEvent "Minted"
 
-
 -- PT.mint(). send an external `mint` message to each PT
 mintExt :: Address -> [EvmOpcode]
-mintExt addrOfPT = concat [
-      pushPT
-    , subroutineCall
-    -- throwIfReturnFalse
-    ]
-    where
-        pushPT  = [ PUSH32 $ address2w256 addrOfPT]
-        subroutineCall = [ FUNCALL "mint_subroutine" ]
-        throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
-
+mintExt addrOfPT =
+        [ PUSH32 $ address2w256 addrOfPT
+        , FUNCALL "mint_subroutine" ]
 
 -- ABI call DC.burn()
 burnABI :: Compiler [EvmOpcode]
@@ -820,53 +672,39 @@ burnABI = do
   return $
     [JUMPDESTFROM "burn_method"]
     ++ b
-    -- finalise 
     ++ emitEvent "Burnt"
     ++ [ STOP ]
-
 
 burn :: Compiler [EvmOpcode]
 burn = do
   addrsOfPTs <- reader $ map _to . getTransferCalls
   (addrOfSA, amount) <- reader $  head . Map.assocs . getActivateMap
-  let pushCalleeAddress = [ PUSH32 $ address2w256 addrOfSA ] 
+  let pushCalleeAddress = [ PUSH32 $ address2w256 addrOfSA ]
   return $
-    -- burn PT
+    -- PT.burn()
     concatMap burnExt (nub addrsOfPTs)
 
-    -- transfer SA.transfer(address user, amount)
-    ++ [ CALLER ]     -- User address
+    -- SA.transfer(address user, amount)
+    ++ [ CALLER ]        -- User address
     ++ pushCalleeAddress -- SA address
-    ++ pushArgument0   -- amount uint256
-    ++ [ push amount ]
-    ++ [ MUL ]
+    ++ pushArgument0     -- amount uint256
+    ++ [ push amount
+       , MUL ]
     ++ subroutineCall
-    -- ++ throwIfReturnFalse
     where
         subroutineCall     = [ FUNCALL "transfer_subroutine"  ]
-        throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
         pushArgument0       = [ PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
-
-
-
 
 -- PT.burn() send an external `burn` message to PT
 burnExt :: Address -> [EvmOpcode]
-burnExt addrOfPT = concat [
-      pushArgument0
-    , pushPT
-    , subroutineCall
-    -- , throwIfReturnFalse
-    ]
+burnExt addrOfPT =
+       pushArgument0
+    ++ pushPT
+    ++ subroutineCall
     where
         pushPT = [ PUSH32 $ address2w256 addrOfPT]
         subroutineCall = [ FUNCALL "burn_subroutine" ]
-        throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
-        pushArgument0       = [ PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
-
-
-
-
+        pushArgument0 = [ PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
 
 take :: Compiler [EvmOpcode]
 take = return $
