@@ -119,11 +119,10 @@ evmCompile intermediateContract =
   where
     constructor'     = constructor intermediateContract
     codecopy'        = codecopy constructor' body
-    body             = jumpTable ++ subroutines ++ activate' {-activate' includes mint'-} ++ take' ++ burn' ++ pay'
+    body             = jumpTable ++ subroutines ++ activate' {-activate' includes mint'-} ++ burn' ++ pay'
     activate'        = runCompiler intermediateContract initialEnv activateABI
     burn'            = runCompiler intermediateContract initialEnv burnABI
     pay'             = runCompiler intermediateContract initialEnv pay
-    take'            = runCompiler intermediateContract initialEnv EvmCompiler.take
     -- The addresses of the constructor run are different from runs when DC is on BC
 
 linker :: [EvmOpcode] -> [EvmOpcode]
@@ -289,11 +288,6 @@ jumpTable =
   , PUSH32 (functionSignature "pay()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "pay_method"
-
-  , DUP1
-  , PUSH32 (functionSignature "take(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-  , EVM_EQ
-  , JUMPITO "take_method"
 
   , JUMPDESTFROM "global_throw"
   , push 0
@@ -705,37 +699,6 @@ burnExt addrOfPT =
         pushPT = [ PUSH32 $ address2w256 addrOfPT]
         subroutineCall = [ FUNCALL "burn_subroutine" ]
         pushArgument0 = [ PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
-
-take :: Compiler [EvmOpcode]
-take = return $
-    [ JUMPDESTFROM "take_method" ]
-    ++ notActivatedCheck
-    ++ loadPartyName
-    ++ loadPartyIndex
-    ++ checkAddress
-    ++ saveAddress
-    ++ [ STOP ]
-  where
-    notActivatedCheck = [ push $ storageAddress Activated
-                        , SLOAD
-                        , JUMPITO "global_throw"
-                        ]
-    loadPartyName     = [ push 0x4 -- Skip the method signature
-                        , CALLDATALOAD
-                        ]
-
-    loadPartyIndex    = getFromStorageStack (storageAddress PartyFreeMap)
-                        ++ [ DUP1 ]
-    checkAddress      = getFromStorageStack  (storageAddress PartyMap)
-                        ++ [ push 0
-                           , EVM_LT
-                           , JUMPITO "global_throw"
-                           ]
-    saveAddress       = [ CALLER
-                        , SWAP1
-                        ]
-                        ++ getStorageHashKeyStack (storageAddress PartyMap)
-                        ++ [ SSTORE ]
 
 getMemExpById :: MemExpId -> [IMemExp] -> IMemExp
 getMemExpById memExpId [] = error $ "Could not find IMemExp with ID " ++ show memExpId

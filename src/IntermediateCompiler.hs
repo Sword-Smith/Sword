@@ -173,17 +173,10 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
 
   -- MarginRefundMap
   memExpPath <- reader _currentMemExpPath
-  {-
-  let marginRefundMap = Map.filter (not . Prelude.null) $
-                          Map.insert (memExpPath ++ [(memExpId, True)])  (iw am2 am1) $
-                          Map.insert (memExpPath ++ [(memExpId, False)]) (iw am1 am2) $
-                          Map.union mrm1 mrm2
-                          -}
 
   return $ IntermediateContract [] (tcs1 ++ tcs2)
                                 (me0 : mes1 ++ mes2)
                                 (Map.unionWith max am1 am2)
-                                --     marginRefundMap
 
   where
     extendMemExpPath :: (MemExpId, Branch) -> ScopeEnv -> ScopeEnv
