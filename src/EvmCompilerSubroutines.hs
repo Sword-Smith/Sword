@@ -208,7 +208,7 @@ burnSubroutine = concat [
     callInstruction,
     checkExitCode,
     removeExtraArg,
-    getReturnValueFromMemory,
+    getReturnValueFromMemory, -- ERC20.sol
     funEnd
     ]
     where
@@ -274,8 +274,8 @@ balanceOfSubroutine =
         , MLOAD ]
     funEnd = [FUNRETURN]
     prepareArgs =
-        [ -- CALLER
-          push 0x4
+        [ CALLER
+        , push 0x4
         , MSTORE
         ]
 

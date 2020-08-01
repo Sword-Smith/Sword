@@ -682,22 +682,41 @@ executeTransferCallsHH tc transferCounter = do
          3. then call MUL to get c:=a*b, where a is the amount per position from above.
          4. then call SA.transfer(CALLER,c) -}
 
-         ++ [ CALLER
-           , PUSH32 $ address2w256 (_tokenAddress tc)
-           , push 8
-         , FUNCALL "transfer_subroutine"
-         , ISZERO
-         , JUMPITO "global_throw" ] -- error happens in this block
+        ++ [ PUSH32 $ address2w256 (_to tc)
+           , FUNCALL "balanceOf_subroutine" ]  -- pops 1, pushes 1:  b is on the stack
 
-             {-
+            -- Prepare burn call
+         ++ [ DUP1
+           , PUSH32 $ address2w256 (_to tc)
+           -- make burn call
+           , FUNCALL "burn_subroutine"  -- pops 2, pushes 1
+            ]
+
+            ++ [ POP ] -- discard return value
+
+
+            -- Prepare stack and call transfer subroutine
+            ++ [ MUL  -- c is on stack -- security needs to be checked
+            , PUSH32 $ address2w256 (_tokenAddress tc)
+            , CALLER
+            , SWAP2]
+
+            ++ [ FUNCALL "transfer_subroutine"
+           , ISZERO
+           , JUMPITO "global_throw" ] -- error happens in this block
+
+
+
+
+
+         {-
       ++ [ PUSH32 $ address2w256 (_to tc)
-         , FUNCALL "balanceOf_subroutine"]  -- pops 1, pushes 1:  b is on the stack 
+         , FUNCALL "balanceOf_subroutine"]  -- pops 1, pushes 1:  b is on the stack
       ++ [ DUP1
          , PUSH32 $ address2w256 (_to tc)
          , FUNCALL "burn_subroutine"  -- pops 2, pushes 1
-         , POP ] 
+         , POP ]
          -}
-      -- ++ [ MUL  -- c is on stack
           {- ++ [ PUSH32 $ address2w256 (_tokenAddress tc)
          , CALLER -- User
          , SWAP2
@@ -784,12 +803,12 @@ mint = do
 -- PT.mint(). send an external `mint` message to each PT
 mintExt :: Address -> [EvmOpcode]
 mintExt addrOfPT = concat [
-      pushCalleeAddress
+      pushPT
     , subroutineCall
-    , throwIfReturnFalse
+    -- throwIfReturnFalse
     ]
     where
-        pushCalleeAddress  = [ PUSH32 $ address2w256 addrOfPT]
+        pushPT  = [ PUSH32 $ address2w256 addrOfPT]
         subroutineCall = [ FUNCALL "mint_subroutine" ]
         throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
 
@@ -822,7 +841,7 @@ burn = do
     ++ [ push amount ]
     ++ [ MUL ]
     ++ subroutineCall
-    ++ throwIfReturnFalse
+    -- ++ throwIfReturnFalse
     where
         subroutineCall     = [ FUNCALL "transfer_subroutine"  ]
         throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
@@ -835,12 +854,12 @@ burn = do
 burnExt :: Address -> [EvmOpcode]
 burnExt addrOfPT = concat [
       pushArgument0
-    , pushCalleeAddress
+    , pushPT
     , subroutineCall
-    , throwIfReturnFalse
+    -- , throwIfReturnFalse
     ]
     where
-        pushCalleeAddress  = [ PUSH32 $ address2w256 addrOfPT]
+        pushPT = [ PUSH32 $ address2w256 addrOfPT]
         subroutineCall = [ FUNCALL "burn_subroutine" ]
         throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
         pushArgument0       = [ PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
