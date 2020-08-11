@@ -1,17 +1,17 @@
 -- MIT License
--- 
+--
 -- Copyright (c) 2019 Thorkil Værge and Mads Gram
--- 
+--
 -- Permission is hereby granted, free of charge, to any person obtaining a copy
 -- of this software and associated documentation files (the "Software"), to deal
 -- in the Software without restriction, including without limitation the rights
 -- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 -- copies of the Software, and to permit persons to whom the Software is
 -- furnished to do so, subject to the following conditions:
--- 
+--
 -- The above copyright notice and this permission notice shall be included in all
 -- copies or substantial portions of the Software.
--- 
+--
 -- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 -- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 -- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -155,6 +155,7 @@ transformPseudoInstructions = concatMap transformH
     transformH opcode = case opcode of
       JUMPTOA   i -> [ PUSH4 (fromInteger i), JUMP ]
       JUMPITOA  i -> [ PUSH4 (fromInteger i), JUMPI ]
+      -- TODO: relevant with SAFE_ADD?
       FUNCALLA  i -> [ PC, PUSH1 10, ADD, PUSH4 (fromInteger i), JUMP, JUMPDEST ]
       FUNSTARTA n -> [ JUMPDEST, swap n ]
       FUNRETURN   -> [ SWAP1, JUMP ]
@@ -447,7 +448,6 @@ newLabel desc = do
 
 -- Compile intermediate expression into EVM opcodes
 -- THIS IS THE ONLY PLACE IN THE COMPILER WHERE EXPRESSION ARE HANDLED
-
 compileExp :: Expr -> Compiler [EvmOpcode]
 compileExp e = case e of
   Lit lit -> do mo <- gets memOffset
@@ -465,10 +465,13 @@ compileExp e = case e of
                     label <- newLabel "max_is_e1"
                     return [DUP2, DUP2, EVM_LT, JUMPITO label, SWAP1, JUMPDESTFROM label, POP]
 
-  MultExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [MUL]
-  DiviExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [DIV]
-  AddiExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [ADD]
-  SubtExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [SUB]
+  MultExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> do
+                    label_return <- newLabel "return"
+                    label_skip <- newLabel "skip"
+                    return [DUP1, JUMPITO label_skip, POP, POP, PUSH1 0, JUMPITO label_return, JUMPDESTFROM label_skip, DUP2, DUP2, DUP2, DUP2, MUL, DIV, SUB, JUMPITO "global_throw", DUP2, PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0), EVM_EQ, DUP2, PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF), EVM_EQ, AND, JUMPITO "global_throw", MUL, JUMPDESTFROM label_return]
+  DiviExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [DUP2, ISZERO, JUMPITO "global_throw", DUP1, PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0), EVM_EQ, DUP3, PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF), EVM_EQ, AND, JUMPITO "global_throw", SDIV]
+  AddiExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [DUP1, DUP1, DUP4, ADD, SLT, PUSH1 0, DUP4, SLT, XOR, JUMPITO "global_throw", ADD]
+  SubtExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [DUP1, DUP3, DUP2, SUB, SGT, PUSH1 0, DUP4, SLT, XOR, JUMPITO "global_throw", SUB]
   EqExp     e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [EVM_EQ]
   LtExp     e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [EVM_LT]
   GtExp     e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [EVM_GT]
@@ -711,4 +714,3 @@ getMemExpById memExpId (me:mes) =
 -- returns true or false. Only of all function calls return true, should
 -- the activated bit be set. This bit has not yet been reserved in
 -- memory/defined.
-

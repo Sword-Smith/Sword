@@ -39,7 +39,7 @@ be used which avoids large amounts of tokens in this manner.
 
 ### Overview
 Before we give the full definition of the langauge, let's go through a few of
-the functions. 
+the functions.
 
 To transfer a unit token from address `p1` to address `p2`, the `transfer(a, p1,
 p2)` function is used, where `a` is the token constract address (e.g. eToroUSD).
@@ -88,7 +88,7 @@ uop ::=  not
 operator types:
 ot ::= int | bool
 ```
-where 
+where
 
 * n is a natural number
 * p is a party to the contract identified by an Ethereum address
@@ -221,7 +221,7 @@ We now describe how to set up the various components needed to get the
 demonstration frontend up and running.
 
 At a high level, the system is comprised of three main components:
- 
+
 1. **Frontend** implements the web interface which is used for visualizing and
    manipulating the contracts.<br>
 2. **Backend server** provides the data storage and compilation services for the
