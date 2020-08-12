@@ -459,11 +459,11 @@ compileExp e = case e of
 
   MinExp e1 e2 -> compileExp e1 <++> compileExp e2 <++> do
                     label <- newLabel "min_is_e1"
-                    return [DUP2, DUP2, EVM_GT, JUMPITO label, SWAP1, JUMPDESTFROM label, POP]
+                    return [DUP2, DUP2, SGT, JUMPITO label, SWAP1, JUMPDESTFROM label, POP]
 
   MaxExp e1 e2 -> compileExp e1 <++> compileExp e2 <++> do
                     label <- newLabel "max_is_e1"
-                    return [DUP2, DUP2, EVM_LT, JUMPITO label, SWAP1, JUMPDESTFROM label, POP]
+                    return [DUP2, DUP2, SLT, JUMPITO label, SWAP1, JUMPDESTFROM label, POP]
 
   MultExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> do
                     label_return <- newLabel "return"
@@ -473,10 +473,10 @@ compileExp e = case e of
   AddiExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [DUP1, DUP1, DUP4, ADD, SLT, PUSH1 0, DUP4, SLT, XOR, JUMPITO "global_throw", ADD]
   SubtExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [DUP1, DUP3, DUP2, SUB, SGT, PUSH1 0, DUP4, SLT, XOR, JUMPITO "global_throw", SUB]
   EqExp     e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [EVM_EQ]
-  LtExp     e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [EVM_LT]
-  GtExp     e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [EVM_GT]
-  GtOrEqExp e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [EVM_LT, ISZERO]
-  LtOrEqExp e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [EVM_GT, ISZERO]
+  LtExp     e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [SLT]
+  GtExp     e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [SGT]
+  GtOrEqExp e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [SLT, ISZERO]
+  LtOrEqExp e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [SGT, ISZERO]
   NotExp    e1    -> compileExp e1 <++> return [ISZERO]
   AndExp    e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [AND]
   OrExp     e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [OR]
