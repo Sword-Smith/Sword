@@ -261,6 +261,17 @@ codecopy con exe = [ PUSH4 $ fromInteger (sizeOfOpcodes exe) -- DO NOT REPLACE T
                    , STOP
                    ]
 
+throwIfNotActivated :: [EvmOpcode]
+throwIfNotActivated = [push $ storageAddress CreationTimestamp,
+                      SLOAD,
+                      ISZERO,
+                      JUMPITO "global_throw"]
+
+throwIfActivated :: [EvmOpcode]
+throwIfActivated = [push $ storageAddress CreationTimestamp,
+                   SLOAD,
+                   JUMPITO "global_throw"]
+
 -- This does not allow for multiple calls.
 jumpTable :: [EvmOpcode]
 jumpTable =
@@ -313,6 +324,7 @@ pay = do
     transferCallCode <- executeTransferCalls
     return $
         [ JUMPDESTFROM "pay_method" ]
+        ++ throwIfNotActivated
         ++ memExpCode
         ++ transferCallCode
         ++ emitEvent "Paid"
@@ -627,6 +639,7 @@ activateABI = do
   m <- mint
   return $
     [JUMPDESTFROM "activate_method"]
+    ++ throwIfActivated
     -- set activate bit to 0x01 (true)
     ++ [ push 0x01, push $ storageAddress Activated, SSTORE ]
     -- start any timers
@@ -635,6 +648,7 @@ activateABI = do
     ++ emitEvent "Activated"
     -- mintABI methods jumps in here.
     ++ [JUMPDESTFROM "mint_method"]
+    ++ throwIfNotActivated
     ++ m
     -- finalize
     ++ [ STOP ]
