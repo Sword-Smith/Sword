@@ -272,6 +272,21 @@ jumpTable =
   , AND -- stack now holds a single item: solcc methodID from the rom.
 
   , DUP1
+  , PUSH32 (functionSignature "pay()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "pay_method"
+
+  -- the three remaining methods each take an argument,
+  -- and it must be strictly positive
+  -- this snippet puts the arg. on the stack, and checks if its zero
+  , PUSH1 0x4
+  , CALLDATALOAD
+  , push 0
+  , SLT
+  , ISZERO
+  , JUMPITO "global_throw"
+
+  , DUP1
   , PUSH32 (functionSignature "activate(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "activate_method"
@@ -281,14 +296,9 @@ jumpTable =
   , EVM_EQ
   , JUMPITO "burn_method"
 
-  , DUP1
   , PUSH32 (functionSignature "mint(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "mint_method"
-
-  , PUSH32 (functionSignature "pay()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-  , EVM_EQ
-  , JUMPITO "pay_method"
 
   , JUMPDESTFROM "global_throw"
   , push 0
