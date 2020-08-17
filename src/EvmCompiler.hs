@@ -63,8 +63,6 @@ runExprCompiler env expr = runCompiler emptyContract env (compileExp expr)
 -- ATM, "Executed" does not have an integer. If it should be able to handle more
 -- than 256 tcalls, it must take an integer also.
 data StorageType = CreationTimestamp
-                 | Executed
-                 | Activated
                  | MemoryExpressionRefs
                  | PartyMap
                  | PartyFreeMap
@@ -74,11 +72,9 @@ data StorageType = CreationTimestamp
 -- Storage is word addressed, not byte addressed
 storageAddress :: Integral i => StorageType -> i
 storageAddress CreationTimestamp      = 0x0
-storageAddress Activated              = 0x1
-storageAddress Executed               = 0x2
-storageAddress MemoryExpressionRefs   = 0x3
-storageAddress PartyMap               = 0x4
-storageAddress PartyFreeMap           = 0x5
+storageAddress MemoryExpressionRefs   = 0x1
+storageAddress PartyMap               = 0x2
+storageAddress PartyFreeMap           = 0x3
 
 sizeOfOpcodes :: [EvmOpcode] -> Integer
 sizeOfOpcodes = sum . map sizeOfOpcode
@@ -173,7 +169,6 @@ transformPseudoInstructions = concatMap transformH
 constructor :: IntermediateContract -> [EvmOpcode]
 constructor (IntermediateContract parties tcs _ _) =
   checkNoValue "Constructor_Header"
-  ++ setExecutedWord tcs
   ++ saveParties parties
 
 -- Checks that no value (ether) is sent when executing contract method
@@ -192,15 +187,6 @@ saveTimestampToStorage :: [EvmOpcode]
 saveTimestampToStorage =  [TIMESTAMP,
                            push $ storageAddress CreationTimestamp,
                            SSTORE]
-
--- Given a number of transfercalls, set executed word in storage
--- A setMemExpWord is not needed since that word is initialized to zero automatically
-setExecutedWord :: [TransferCall] -> [EvmOpcode]
-setExecutedWord []  = undefined
-setExecutedWord tcs = [ push $ 2^length tcs - 1,
-                        push $ storageAddress Executed,
-                        SSTORE ]
-
 
 saveParties :: [Party] -> [EvmOpcode]
 saveParties parties = savePartiesH $ zip [toInteger 0..] parties
@@ -640,8 +626,6 @@ activateABI = do
   return $
     [JUMPDESTFROM "activate_method"]
     ++ throwIfActivated
-    -- set activate bit to 0x01 (true)
-    ++ [ push 0x01, push $ storageAddress Activated, SSTORE ]
     -- start any timers
     ++ saveTimestampToStorage
     -- transferFrom and mint
