@@ -475,9 +475,36 @@ compileExp e = case e of
                     return [DUP2, DUP2, SLT, JUMPITO label, SWAP1, JUMPDESTFROM label, POP]
 
   MultExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> do
-                    label_return <- newLabel "return"
-                    label_skip <- newLabel "skip"
-                    return [DUP1, JUMPITO label_skip, POP, POP, PUSH1 0, JUMPITO label_return, JUMPDESTFROM label_skip, DUP2, DUP2, DUP2, DUP2, MUL, DIV, SUB, JUMPITO "global_throw", DUP2, PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0), EVM_EQ, DUP2, PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF), EVM_EQ, AND, JUMPITO "global_throw", MUL, JUMPDESTFROM label_return]
+    label_return <- newLabel "return"
+    label_skip <- newLabel "skip"
+    label_skip2 <- newLabel "skip"
+    return [
+      DUP1,
+      JUMPITO label_skip,
+      POP,
+      POP,
+      PUSH1 0,
+      JUMPITO label_return,
+      JUMPDESTFROM label_skip,
+      DUP2,
+      DUP2,
+      DUP2,
+      DUP2,
+      MUL, --c = a*b
+      DIV,
+      SUB,
+      JUMPITO "global_throw",
+      DUP2,
+      PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
+      SUB,
+      JUMPITO label_skip2,
+      DUP1,
+      PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF),
+      EVM_EQ,
+      JUMPITO "global_throw",
+      JUMPDESTFROM label_skip2,
+      MUL,
+      JUMPDESTFROM label_return]
   DiviExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [DUP2, ISZERO, JUMPITO "global_throw", DUP1, PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0), EVM_EQ, DUP3, PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF), EVM_EQ, AND, JUMPITO "global_throw", SDIV]
   AddiExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [DUP1, DUP1, DUP4, ADD, SLT, PUSH1 0, DUP4, SLT, XOR, JUMPITO "global_throw", ADD]
   SubtExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [DUP1, DUP3, DUP2, SUB, SGT, PUSH1 0, DUP4, SLT, XOR, JUMPITO "global_throw", SUB]
