@@ -217,8 +217,7 @@ getFromStorageStack prefix = getStorageHashKeyStack prefix ++ [ SLOAD ]
 
 getStorageHashKeyStack :: Integer -> [EvmOpcode]
 getStorageHashKeyStack prefix = [ push 8
-                                , SHL --TODO: make this one command rather than two
-                                -- push 16??
+                                , SHL
 
                                 , push prefix
                                 , OR
