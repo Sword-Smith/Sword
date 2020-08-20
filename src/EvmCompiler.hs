@@ -454,6 +454,39 @@ newLabel desc = do
   put compileEnv { labelCount = i + 1 }
   return $ desc ++ "_" ++ show i ++ "_" ++ show j ++ "_" ++ show k
 
+safeMul :: Compiler [EvmOpcode]
+safeMul = do
+  label_return <- newLabel "return"
+  label_skip <- newLabel "skip"
+  label_skip2 <- newLabel "skip"
+  return [
+    DUP1,
+    JUMPITO label_skip,
+    POP,
+    POP,
+    PUSH1 0,
+    JUMPTO label_return,
+    JUMPDESTFROM label_skip,
+    DUP2,
+    DUP2,
+    DUP2,
+    DUP2,
+    MUL, --c = a*b
+    SDIV,
+    SUB,
+    JUMPITO "global_throw",
+    DUP2,
+    PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
+    SUB,
+    JUMPITO label_skip2,
+    DUP1,
+    PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF),
+    EVM_EQ,
+    JUMPITO "global_throw",
+    JUMPDESTFROM label_skip2,
+    MUL,
+    JUMPDESTFROM label_return]
+
 -- Compile intermediate expression into EVM opcodes
 -- THIS IS THE ONLY PLACE IN THE COMPILER WHERE EXPRESSION ARE HANDLED
 compileExp :: Expr -> Compiler [EvmOpcode]
@@ -473,37 +506,7 @@ compileExp e = case e of
                     label <- newLabel "max_is_e1"
                     return [DUP2, DUP2, SLT, JUMPITO label, SWAP1, JUMPDESTFROM label, POP]
 
-  MultExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> do
-    label_return <- newLabel "return"
-    label_skip <- newLabel "skip"
-    label_skip2 <- newLabel "skip"
-    return [
-      DUP1,
-      JUMPITO label_skip,
-      POP,
-      POP,
-      PUSH1 0,
-      JUMPTO label_return,
-      JUMPDESTFROM label_skip,
-      DUP2,
-      DUP2,
-      DUP2,
-      DUP2,
-      MUL, --c = a*b
-      SDIV,
-      SUB,
-      JUMPITO "global_throw",
-      DUP2,
-      PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
-      SUB,
-      JUMPITO label_skip2,
-      DUP1,
-      PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF),
-      EVM_EQ,
-      JUMPITO "global_throw",
-      JUMPDESTFROM label_skip2,
-      MUL,
-      JUMPDESTFROM label_return]
+  MultExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> safeMul
   DiviExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> do
     label_skip <- newLabel "skip"
     return [
@@ -725,6 +728,8 @@ burnABI = do
 burn :: Compiler [EvmOpcode]
 burn = do
   addrsOfPTs <- reader $ map _to . getTransferCalls
+  -- TODO: I think this will only pay back one settlement asset.
+  -- if multiple SAs are used, maybe only one will be paid back? -Thorkil
   (addrOfSA, amount) <- reader $  head . Map.assocs . getActivateMap
   let pushCalleeAddress = [ PUSH32 $ address2w256 addrOfSA ]
   return $
