@@ -504,7 +504,22 @@ compileExp e = case e of
       JUMPDESTFROM label_skip2,
       MUL,
       JUMPDESTFROM label_return]
-  DiviExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [DUP2, ISZERO, JUMPITO "global_throw", DUP1, PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0), EVM_EQ, DUP3, PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF), EVM_EQ, AND, JUMPITO "global_throw", SDIV]
+  DiviExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> do
+    label_skip <- newLabel "skip"
+    return [
+      DUP2,
+      ISZERO,
+      JUMPITO "global_throw",
+      DUP1,
+      PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
+      SUB,
+      JUMPITO label_skip,
+      DUP2,
+      PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF),
+      EVM_EQ,
+      JUMPITO "global_throw",
+      JUMPDESTFROM label_skip,
+      SDIV]
   AddiExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [DUP1, DUP1, DUP4, ADD, SLT, PUSH1 0, DUP4, SLT, XOR, JUMPITO "global_throw", ADD]
   SubtExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [DUP1, DUP3, DUP2, SUB, SGT, PUSH1 0, DUP4, SLT, XOR, JUMPITO "global_throw", SUB]
   EqExp     e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [EVM_EQ]
