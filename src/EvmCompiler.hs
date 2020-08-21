@@ -731,21 +731,15 @@ burn = do
   -- TODO: I think this will only pay back one settlement asset.
   -- if multiple SAs are used, maybe only one will be paid back? -Thorkil
   (addrOfSA, amount) <- reader $  head . Map.assocs . getActivateMap
-  let pushCalleeAddress = [ PUSH32 $ address2w256 addrOfSA ]
+  safemul <- safeMul
   return $
-    -- PT.burn()
-    concatMap burnExt (nub addrsOfPTs)
-
-    -- SA.transfer(address user, amount)
-    ++ [ CALLER ]        -- User address
-    ++ pushCalleeAddress -- SA address
-    ++ pushArgument0     -- amount uint256
-    ++ [ push amount
-       , MUL ]
-    ++ subroutineCall
-    where
-        subroutineCall     = [ FUNCALL "transfer_subroutine"  ]
-        pushArgument0       = [ PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
+    concatMap burnExt (nub addrsOfPTs) ++
+    [ CALLER
+    , PUSH32 $ address2w256 addrOfSA
+    , PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY -- amount uint256
+    , push amount ]
+    ++ [ MUL ] ++
+    [ FUNCALL "transfer_subroutine" ]
 
 -- PT.burn() send an external `burn` message to PT
 burnExt :: Address -> [EvmOpcode]
