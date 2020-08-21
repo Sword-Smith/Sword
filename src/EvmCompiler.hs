@@ -184,9 +184,9 @@ checkNoValue target = [ CALLVALUE
 
 -- Stores timestamp of creation of contract in storage
 saveTimestampToStorage :: [EvmOpcode]
-saveTimestampToStorage =  [TIMESTAMP,
-                           push $ storageAddress CreationTimestamp,
-                           SSTORE]
+saveTimestampToStorage = [ TIMESTAMP
+                         , push $ storageAddress CreationTimestamp
+                         , SSTORE ]
 
 saveParties :: [Party] -> [EvmOpcode]
 saveParties parties = savePartiesH $ zip [toInteger 0..] parties
@@ -208,9 +208,10 @@ getPartyFromStorage addr =
 
 saveToStorage :: Integer -> Integer -> Word256 -> [EvmOpcode]
 saveToStorage prefix key value =
-  [ PUSH32 value ]
-  ++ [ push key ] ++ getStorageHashKeyStack prefix
-  ++ [ SSTORE ]
+                    [ PUSH32 value
+                    , push key ]
+                    ++ getStorageHashKeyStack prefix ++
+                    [ SSTORE ]
 
 getFromStorageStack :: Integer -> [EvmOpcode]
 getFromStorageStack prefix = getStorageHashKeyStack prefix ++ [ SLOAD ]
@@ -218,16 +219,13 @@ getFromStorageStack prefix = getStorageHashKeyStack prefix ++ [ SLOAD ]
 getStorageHashKeyStack :: Integer -> [EvmOpcode]
 getStorageHashKeyStack prefix = [ push 8
                                 , SHL
-
                                 , push prefix
                                 , OR
-
                                 , push freeSpaceOffset
                                 , MSTORE
                                 , push 0x32
                                 , push freeSpaceOffset
-                                , SHA3
-                                ]
+                                , SHA3 ]
   where
     -- TODO: Proper memory handling in state monad, instead of guessing free space
     freeSpaceOffset = 0x2000
@@ -243,19 +241,18 @@ codecopy con exe = [ PUSH4 $ fromInteger (sizeOfOpcodes exe) -- DO NOT REPLACE T
                    , PUSH4 $ fromInteger (sizeOfOpcodes exe) -- DO NOT REPLACE THIS WITH A push :: Integer -> EvmOpcode!
                    , push 0
                    , RETURN
-                   , STOP
-                   ]
+                   , STOP ]
 
 throwIfNotActivated :: [EvmOpcode]
-throwIfNotActivated = [push $ storageAddress CreationTimestamp,
-                      SLOAD,
-                      ISZERO,
-                      JUMPITO "global_throw"]
+throwIfNotActivated = [ push $ storageAddress CreationTimestamp
+                      , SLOAD
+                      , ISZERO
+                      , JUMPITO "global_throw" ]
 
 throwIfActivated :: [EvmOpcode]
-throwIfActivated = [push $ storageAddress CreationTimestamp,
-                   SLOAD,
-                   JUMPITO "global_throw"]
+throwIfActivated = [ push $ storageAddress CreationTimestamp
+                   , SLOAD
+                   , JUMPITO "global_throw" ]
 
 -- This does not allow for multiple calls.
 jumpTable :: [EvmOpcode]
@@ -376,8 +373,8 @@ executeMemExp (IMemExp beginTime endTime count exp) =
     evaulateExpression  = runExprCompiler (CompileEnv 0 count 0x0 "mem_exp") exp
 
      -- eval to false but time not run out: don't set memdibit
-    checkEvalResult     = [ ISZERO,
-                            JUMPITO $ "memExp_end" ++ show count ]
+    checkEvalResult     = [ ISZERO
+                          , JUMPITO $ "memExp_end" ++ show count ]
 
     setToTrue           = [ push $ storageAddress MemoryExpressionRefs
                           , SLOAD
@@ -459,33 +456,33 @@ safeMul = do
   label_return <- newLabel "return"
   label_skip <- newLabel "skip"
   label_skip2 <- newLabel "skip"
-  return [
-    DUP1,
-    JUMPITO label_skip,
-    POP,
-    POP,
-    PUSH1 0,
-    JUMPTO label_return,
-    JUMPDESTFROM label_skip,
-    DUP2,
-    DUP2,
-    DUP2,
-    DUP2,
-    MUL, --c = a*b
-    SDIV,
-    SUB,
-    JUMPITO "global_throw",
-    DUP2,
-    PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
-    SUB,
-    JUMPITO label_skip2,
-    DUP1,
-    PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF),
-    EVM_EQ,
-    JUMPITO "global_throw",
-    JUMPDESTFROM label_skip2,
-    MUL,
-    JUMPDESTFROM label_return]
+  return
+    [ DUP1
+    , JUMPITO label_skip
+    , POP
+    , POP
+    , PUSH1 0
+    , JUMPTO label_return
+    , JUMPDESTFROM label_skip
+    , DUP2
+    , DUP2
+    , DUP2
+    , DUP2
+    , MUL
+    , SDIV
+    , SUB
+    , JUMPITO "global_throw"
+    , DUP2
+    , PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+    , SUB
+    , JUMPITO label_skip2
+    , DUP1
+    , PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF)
+    , EVM_EQ
+    , JUMPITO "global_throw"
+    , JUMPDESTFROM label_skip2
+    , MUL
+    , JUMPDESTFROM label_return ]
 
 -- Compile intermediate expression into EVM opcodes
 -- THIS IS THE ONLY PLACE IN THE COMPILER WHERE EXPRESSION ARE HANDLED
@@ -509,22 +506,43 @@ compileExp e = case e of
   MultExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> safeMul
   DiviExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> do
     label_skip <- newLabel "skip"
-    return [
-      DUP2,
-      ISZERO,
-      JUMPITO "global_throw",
-      DUP1,
-      PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0),
-      SUB,
-      JUMPITO label_skip,
-      DUP2,
-      PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF),
-      EVM_EQ,
-      JUMPITO "global_throw",
-      JUMPDESTFROM label_skip,
-      SDIV]
-  AddiExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [DUP1, DUP1, DUP4, ADD, SLT, PUSH1 0, DUP4, SLT, XOR, JUMPITO "global_throw", ADD]
-  SubtExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [DUP1, DUP3, DUP2, SUB, SGT, PUSH1 0, DUP4, SLT, XOR, JUMPITO "global_throw", SUB]
+    return  [ DUP2
+            , ISZERO
+            , JUMPITO "global_throw"
+            , DUP1
+            , PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+            , SUB
+            , JUMPITO label_skip
+            , DUP2
+            , PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF)
+            , EVM_EQ
+            , JUMPITO "global_throw"
+            , JUMPDESTFROM label_skip
+            , SDIV ]
+  AddiExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++>
+    return  [ DUP1
+            , DUP1
+            , DUP4
+            , ADD
+            , SLT
+            , PUSH1 0
+            , DUP4
+            , SLT
+            , XOR
+            , JUMPITO "global_throw"
+            , ADD ]
+  SubtExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++>
+    return [ DUP1
+           , DUP3
+           , DUP2
+           , SUB
+           , SGT
+           , PUSH1 0
+           , DUP4
+           , SLT
+           , XOR
+           , JUMPITO "global_throw"
+           , SUB ]
   EqExp     e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [EVM_EQ]
   LtExp     e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [SLT]
   GtExp     e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [SGT]
@@ -632,7 +650,7 @@ executeTransferCallsHH tc transferCounter = do
       -- Prepare stack and call burn subroutine
       ++ [ DUP1
          , PUSH32 $ address2w256 (_to tc)
-         , FUNCALL "burn_subroutine"] -- pops 2, pushes 1
+         , FUNCALL "burn_subroutine" ] -- pops 2, pushes 1
 
       ++ [ POP ] -- discard return value from burn
 
@@ -641,8 +659,7 @@ executeTransferCallsHH tc transferCounter = do
       ++ [ PUSH32 $ address2w256 (_tokenAddress tc)
          , CALLER
          , SWAP2
-         , FUNCALL "transfer_subroutine"
-         ]
+         , FUNCALL "transfer_subroutine" ]
 
       -- Care about the return value
       ++ [ ISZERO
@@ -744,13 +761,9 @@ burn = do
 -- PT.burn() send an external `burn` message to PT
 burnExt :: Address -> [EvmOpcode]
 burnExt addrOfPT =
-       pushArgument0
-    ++ pushPT
-    ++ subroutineCall
-    where
-        pushPT = [ PUSH32 $ address2w256 addrOfPT]
-        subroutineCall = [ FUNCALL "burn_subroutine" ]
-        pushArgument0 = [ PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
+       [ PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY
+       , PUSH32 $ address2w256 addrOfPT
+       , FUNCALL "burn_subroutine" ]
 
 getMemExpById :: MemExpId -> [IMemExp] -> IMemExp
 getMemExpById memExpId [] = error $ "Could not find IMemExp with ID " ++ show memExpId
