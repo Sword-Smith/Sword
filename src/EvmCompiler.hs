@@ -563,6 +563,7 @@ compileLit lit mo _label = case lit of
 executeTransferCallsHH :: TransferCall -> Integer -> Compiler [EvmOpcode]
 executeTransferCallsHH tc transferCounter = do
   mes <- reader getMemExps
+  safemul <- safeMul
   let
     checkIfCallShouldBeMade =
       let
@@ -636,8 +637,8 @@ executeTransferCallsHH tc transferCounter = do
       ++ [ POP ] -- discard return value from burn
 
       -- Prepare stack and call transfer subroutine
-      ++ [ MUL  -- c is on stack -- security needs to be checked
-         , PUSH32 $ address2w256 (_tokenAddress tc)
+      ++ safemul -- c is on stack -- security needs to be checked
+      ++ [ PUSH32 $ address2w256 (_tokenAddress tc)
          , CALLER
          , SWAP2
          , FUNCALL "transfer_subroutine"
