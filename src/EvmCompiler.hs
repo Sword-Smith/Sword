@@ -682,30 +682,29 @@ activateABI = do
     -- finalize
     ++ [ STOP ]
 
-activateMapElementToTransferFromCall :: ActivateMapElement -> [EvmOpcode]
-activateMapElementToTransferFromCall (tokenAddress, amount) =
-  pushArgsToStack ++ subroutineCall ++ throwIfReturnFalse
-  where
-    -- Prepare stack for `transferFrom`
-    pushArgsToStack =
-      [ CALLER ] -- CALLER is the originator of the currently executing call-chain, aka User.
-      ++ [ PUSH32 $ address2w256 tokenAddress ]
-      ++ [ push amount ]
-      ++ getArgument0
-      ++ [ MUL ]
-    subroutineCall = [ FUNCALL "transferFrom_subroutine" ]
-    throwIfReturnFalse = [ ISZERO, JUMPITO "global_throw" ]
-    -- push the only argument given to "activate_method".
-    getArgument0 = [ PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
+activateMapElementToTransferFromCall :: ActivateMapElement -> Compiler [EvmOpcode]
+activateMapElementToTransferFromCall (tokenAddress, amount) = do
+  safemul <- safeMul
+  return $
+      -- Prepare stack for `transferFrom`
+      [ CALLER  -- CALLER is the originator of the currently executing call-chain, aka User.
+      , PUSH32 $ address2w256 tokenAddress
+      , push amount
+      -- push the only argument given to "activate_method".
+      , PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
+      ++ safemul ++
+      [ FUNCALL "transferFrom_subroutine"
+      , ISZERO, JUMPITO "global_throw" ]
 
 -- mint business logic
 mint :: Compiler [EvmOpcode]
 mint = do
     am <- reader getActivateMap
     addrsOfPTs <- reader $ map _to . getTransferCalls
+    thing <- concatMapM activateMapElementToTransferFromCall (Map.assocs am)
     return $
         -- SA.transferFrom
-        concatMap activateMapElementToTransferFromCall (Map.assocs am)
+        thing
         -- PT.mint
         ++ concatMap mintExt (nub addrsOfPTs)
         ++ emitEvent "Minted"
