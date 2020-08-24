@@ -451,6 +451,31 @@ newLabel desc = do
   put compileEnv { labelCount = i + 1 }
   return $ desc ++ "_" ++ show i ++ "_" ++ show j ++ "_" ++ show k
 
+safeMulShort :: Compiler [EvmOpcode]
+safeMulShort = do
+  label_skip <- newLabel "skip"
+  return
+    [ DUP2
+    , DUP2
+    , DUP2
+    , DUP2
+    , MUL
+    , SDIV
+    , SUB
+    , JUMPITO "global_throw"
+    , DUP2
+    , PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+    , SUB
+    , JUMPITO label_skip
+    , DUP1
+    , PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF)
+    , EVM_EQ
+    , JUMPITO "global_throw"
+    , JUMPDESTFROM label_skip
+    , MUL ]
+
+
+
 safeMul :: Compiler [EvmOpcode]
 safeMul = do
   label_return <- newLabel "return"
@@ -748,14 +773,14 @@ burn = do
   -- TODO: I think this will only pay back one settlement asset.
   -- if multiple SAs are used, maybe only one will be paid back? -Thorkil
   (addrOfSA, amount) <- reader $  head . Map.assocs . getActivateMap
-  safemul <- safeMul
+  safemulshort <- safeMulShort
   return $
     concatMap burnExt (nub addrsOfPTs) ++
     [ CALLER
     , PUSH32 $ address2w256 addrOfSA
     , PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY -- amount uint256
     , push amount ]
-    ++ [ MUL ] ++
+    ++ safemulshort ++
     [ FUNCALL "transfer_subroutine" ]
 
 -- PT.burn() send an external `burn` message to PT
