@@ -511,6 +511,8 @@ safeMul = do
 
 -- Compile intermediate expression into EVM opcodes
 -- THIS IS THE ONLY PLACE IN THE COMPILER WHERE EXPRESSION ARE HANDLED
+-- The internal representation of numbers are two-complement signed integers
+
 compileExp :: Expr -> Compiler [EvmOpcode]
 compileExp e = case e of
   Lit lit -> do mo <- gets memOffset
