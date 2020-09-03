@@ -1,17 +1,17 @@
 -- MIT License
--- 
+--
 -- Copyright (c) 2019 Thorkil Værge and Mads Gram
--- 
+--
 -- Permission is hereby granted, free of charge, to any person obtaining a copy
 -- of this software and associated documentation files (the "Software"), to deal
 -- in the Software without restriction, including without limitation the rights
 -- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 -- copies of the Software, and to permit persons to whom the Software is
 -- furnished to do so, subject to the following conditions:
--- 
+--
 -- The above copyright notice and this permission notice shall be included in all
 -- copies or substantial portions of the Software.
--- 
+--
 -- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 -- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 -- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -64,7 +64,7 @@ initialGlobal = GlobalEnv { _parties = []
                           }
 
 emptyContract :: IntermediateContract
-emptyContract = IntermediateContract [] [] [] Map.empty Map.empty
+emptyContract = IntermediateContract [] [] [] Map.empty
 
 newMemExpId :: ICompiler MemExpId
 newMemExpId = do
@@ -113,21 +113,19 @@ intermediateCompileFinalizeParties contract = do
   return $ contract { getParties = _parties }
 
 intermediateCompileM :: Contract -> ICompiler IntermediateContract
-intermediateCompileM (Transfer token from to) = do
+intermediateCompileM (Transfer token to) = do
   ScopeEnv maxFactor scaleFactor delayTerm memExpPath <- ask
-  fromPartyId <- insertIfMissing from
-  toPartyId   <- insertIfMissing to
+  --toPartyId   <- insertIfMissing to
   let transferCall = TransferCall { _maxAmount     = maxFactor
                                   , _amount        = scaleFactor (Lit (IntVal 1))
                                   , _delay         = delayTerm
                                   , _tokenAddress  = token
-                                  , _from          = fromPartyId
-                                  , _to            = toPartyId
+                                  , _to            = to
                                   , _memExpPath    = memExpPath
                                   }
 
-  let activateMap = Map.fromList [((token, fromPartyId), maxFactor)]
-  return (IntermediateContract [] [transferCall] [] activateMap Map.empty)
+  let activateMap = Map.fromList [(token, maxFactor)]
+  return (IntermediateContract [] [transferCall] [] activateMap)
 
 intermediateCompileM (Scale maxFactor factorExp contract) =
   local adjustScale $ intermediateCompileM contract
@@ -139,12 +137,11 @@ intermediateCompileM (Scale maxFactor factorExp contract) =
                }
 
 intermediateCompileM (Both contractA contractB) = do
-  IntermediateContract _ tcs1 mes1 am1 mrm1 <- intermediateCompileM contractA
-  IntermediateContract _ tcs2 mes2 am2 mrm2 <- intermediateCompileM contractB
+  IntermediateContract _ tcs1 mes1 am1 <- intermediateCompileM contractA
+  IntermediateContract _ tcs2 mes2 am2 <- intermediateCompileM contractB
   return $ IntermediateContract [] (tcs1 ++ tcs2)
                                 (mes1 ++ mes2)
                                 (Map.unionWith (+) am1 am2)
-                                (Map.union mrm1 mrm2)
 
 intermediateCompileM (Translate time contract) =
   local adjustDelay $ intermediateCompileM contract
@@ -163,10 +160,10 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
   let delayEnd = toSeconds time + delay
 
   icA <- local (extendMemExpPath (memExpId, True)) $ intermediateCompileM contractA
-  let IntermediateContract _ tcs1 mes1 am1 mrm1 = icA
+  let IntermediateContract _ tcs1 mes1 am1 = icA
 
   icB <- local (extendMemExpPath (memExpId, False)) $ intermediateCompileM contractB
-  let IntermediateContract _ tcs2 mes2 am2 mrm2 = icB
+  let IntermediateContract _ tcs2 mes2 am2 = icB
 
   let me0 = IMemExp { _IMemExpBegin = delay
                     , _IMemExpEnd   = delayEnd
@@ -176,15 +173,10 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
 
   -- MarginRefundMap
   memExpPath <- reader _currentMemExpPath
-  let marginRefundMap = Map.filter (not . Prelude.null) $
-                          Map.insert (memExpPath ++ [(memExpId, True)])  (iw am2 am1) $
-                          Map.insert (memExpPath ++ [(memExpId, False)]) (iw am1 am2) $
-                          Map.union mrm1 mrm2
 
   return $ IntermediateContract [] (tcs1 ++ tcs2)
                                 (me0 : mes1 ++ mes2)
                                 (Map.unionWith max am1 am2)
-                                marginRefundMap
 
   where
     extendMemExpPath :: (MemExpId, Branch) -> ScopeEnv -> ScopeEnv
@@ -197,9 +189,8 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
     -- Hence the subtraction. If no margin is present in the
     -- RC and margin is present in the LC, the entire margin can be
     -- returned, hence the Map.differenceWith.
-    iw :: ActivateMap -> ActivateMap -> [(Address, PartyIndex, Integer)]
-    iw am1 am2 = map (\((a,b), c) -> (a,b,c))
-      $ Map.toList
+    iw :: ActivateMap -> ActivateMap -> [(Address, Integer)]
+    iw am1 am2 = Map.toList
       $ Map.differenceWith (\x y -> if x - y > 0 then Just (x - y) else Nothing) am1 am2
 
 intermediateCompileM Zero = return emptyContract

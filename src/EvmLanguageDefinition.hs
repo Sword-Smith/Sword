@@ -1,17 +1,17 @@
 -- MIT License
--- 
+--
 -- Copyright (c) 2019 Thorkil Værge and Mads Gram
--- 
+--
 -- Permission is hereby granted, free of charge, to any person obtaining a copy
 -- of this software and associated documentation files (the "Software"), to deal
 -- in the Software without restriction, including without limitation the rights
 -- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 -- copies of the Software, and to permit persons to whom the Software is
 -- furnished to do so, subject to the following conditions:
--- 
+--
 -- The above copyright notice and this permission notice shall be included in all
 -- copies or substantial portions of the Software.
--- 
+--
 -- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 -- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 -- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -30,8 +30,12 @@ data CallArgument = Word256 Word256
                   | OwnAddress
                   | RawEvm [EvmOpcode]
 
+-- Inter-contract messages/external calls
 data FunctionSignature = Transfer
                        | TransferFrom
+                       | Mint
+                       | Burn
+                       | Pay
                        | Get
 
 type Label = String
@@ -88,11 +92,14 @@ data EvmOpcode = STOP
                | SSTORE
                | JUMP
                | JUMPI
-               -- The integer in FUNSTART and FUNSTARTA represents the number of args
-               -- that this function takes.
+               -- The integer in FUNSTART and FUNSTARTA represents the number of
+               -- args, that have been pushed onto the stack at the call-side.
+               -- Note that when arguments come from instructructions such as
+               -- [ CALLER ], this is not to be counted, since this happens in
+               -- the subroutine and thus _after_ call-side.
                | FUNSTART Label Integer -- pre-linker pseudo instruction: JUMPDEST Label + SWAP logic
                | FUNSTARTA Integer -- post-linker pseudo instruction: JUMPDEST + SWAP logic
-               | FUNCALL Label -- pre-linker pseudo instruction: PC, JUMPTO Label (store PC on stack, jump)
+               | FUNCALL Label -- pre-linker pseudo instruction: PC, JUMPTO Label (push PC on stack, jump). This is in effect: PC, PUSH Addr(Label), JUMP.
                | FUNCALLA Integer -- post-linker pseudo instruction: PC, JUMPTOA i
                | FUNRETURN -- post-linker pseudo instruction: a synonyme for JUMP;
                | JUMPTO Label -- pre-linker pseudo instruction: PUSH Addr(label); JUMP;
@@ -120,7 +127,10 @@ data EvmOpcode = STOP
                | LOG0
                | LOG1
                | LOG2
+               | LOG3
+               | LOG4
                | CREATE
+               | CREATE2
                | CALL
                | CALLCODE
                | RETURN

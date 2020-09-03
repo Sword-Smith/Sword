@@ -1,17 +1,17 @@
 -- MIT License
--- 
+--
 -- Copyright (c) 2019 Thorkil Værge and Mads Gram
--- 
+--
 -- Permission is hereby granted, free of charge, to any person obtaining a copy
 -- of this software and associated documentation files (the "Software"), to deal
 -- in the Software without restriction, including without limitation the rights
 -- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 -- copies of the Software, and to permit persons to whom the Software is
 -- furnished to do so, subject to the following conditions:
--- 
+--
 -- The above copyright notice and this permission notice shall be included in all
 -- copies or substantial portions of the Software.
--- 
+--
 -- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 -- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 -- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -108,12 +108,17 @@ getAbiDefinition :: AbiDefinition
 getAbiDefinition =
   let
     constructor = Just $ AbiConstructorDefinition False "constructor" []
-    execute     = AbiFunctionDefinition "execute" "function" False [] [] False
-    activate    = AbiFunctionDefinition "activate" "function" False [] [] False
-    take        = AbiFunctionDefinition "take" "function" False [] [AbiVarDefinition "party" "uint256"] False
-    activatedE  = AbiEventDefinition "Activated" "event" False []
+    execute     = AbiFunctionDefinition "execute"  "function" False [] [] False
+    pay         = AbiFunctionDefinition "pay"      "function" False [] [] False
+    activate    = AbiFunctionDefinition "activate" "function" False [] [AbiVarDefinition "amount" "uint256"] False
+    mint        = AbiFunctionDefinition "mint"     "function" False [] [AbiVarDefinition "amount" "uint256"] False
+    burn        = AbiFunctionDefinition "burn"     "function" False [] [AbiVarDefinition "amount" "uint256"] False
+    activatedE  = AbiEventDefinition    "Activated"   "event" False []
+    mintedE     = AbiEventDefinition    "Minted"      "event" False []
+    burntE      = AbiEventDefinition    "Burnt"       "event" False []
+    paidE       = AbiEventDefinition    "Paid"        "event" False []
   in
-    AbiDefinition constructor [execute, activate, take] [activatedE]
+    AbiDefinition constructor [execute, pay, activate, mint, burn] [activatedE, mintedE, burntE, paidE] -- add Transfer event.
 
 -- This function writes an ABI definition of the contract.
 writeAbiDef :: String -> String -> IO()
