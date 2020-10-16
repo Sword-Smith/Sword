@@ -57,9 +57,23 @@ problem of low liquidity: Positions in a derivative are expressed as ownership
 of tokens in token contracts.
 
 Restating the above example of a financial contract based on the oil price, the
-corresponding Sword contract would be: Owners of the B token is, for each token
+corresponding Sword contract could be: Owners of the B token are, for each token
 they own, in 90 days owed the value of oil minus USD $40 up to a maximum of e.g.
-USD $20.
+USD $20. Or, in the syntax of Sword,
+
+<!-- FIXME: This example is still futuristic.
+```
+let asset USD = 100 cent at 0x7070796520e4b883e5bda9e7a59ee4bb99e9b1bacab
+let oracle OIL = observe(0xbacab1b9e99bb4ee95a7e9adb5e388b4e0256970707, OILUSD) in USD
+let expr derp = OIL - 40 USD
+
+delay(
+  90 days,
+  scale(
+    bound(0 USD, OIL - 40 USD, 20 USD),
+    transfer(USD, B)))
+```
+-->
 
 **TODO:**
  - Deliberately simple / not Turing-complete:
