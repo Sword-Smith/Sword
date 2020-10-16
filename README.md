@@ -1,45 +1,139 @@
-# The Dagger Programming Language
+# Sword
 
-This document describes the Dagger language and its compiler and protocol. The use of
-the protocol illustrated through examples of how derivative contracts can be
-created.
+**Pick a title:**
+ - The Sword Language
+ - The Sword Smart Contract Language
+ - The Sword Derivative Language
+ - The Sword Smart Derivative Language
+ - The Sword Blockchain Derivative Language
+ - ...
 
-This protocol centers around a Domain Specific Language (DSL) called
-Dagger which is used to specify the derivative contracts and has been adapted
-from the contract language of [Bahr et all
-(2015)](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.720.1324&rep=rep1&type=pdf)
-and [Egelund-Müller et all
-(2017)](https://www.researchgate.net/publication/321327355_Automated_Execution_of_Financial_Contracts_on_Blockchains).
+This README is being rewritten.
 
-Using a non-Turing complete DSL for this purpose has several advantages. In
-particular, the language is restricted such that using it to specify unintended
-behavior is impossible. Further, as the semantics of the language are formally
-verified, contracts specified in the language is guaranteed to behave as
-intended and to only have a single interpretation.
+## References
 
-To show a possible integration of the language, we provide a graphical frontend
-for creating, deploying and monitoring future contracts. Behind the scenes, the
-frontend will generate corresponding Dagger code which is subsequently
-compiled to EVM and deployed to a local Ethereum testnet. By generating
-Dagger, we ensure that the static guarantees of the language applies
-regardless of frontend functionality. Additionally, the frontend makes it
-possible to view both the generated Dagger code and the compiled EVM code.
+ - [Composing contracts: an adventure in financial engineering][spj00] by Simon Peyton Jones, Jean-Marc Eber, Julian Seward (2000)
+ - [Certified Symbolic Management of Financial Multi-party Contracts][bahr15icfp] by Patrick Bahr, Jost Berthold, Martin Elsman (2015)
+ - [Automated Execution of Financial Contracts on Blockchains][benjamin17] by Benjamin Egelund-Müller, Martin Elsman, Fritz Henglein, Omri Ross (2017)
+ - [Secure Execution of Financial Contracts on Ethereum][tfp17] by Thorkil Værge, Mads Gram, Omri Ross (2017)
 
-The frontend is for demonstration purposes only and relies on being able to act
-as a signatory on behalf of the accounts representing both parties agreeing to
-the contract. In an actual deployment of the system, a separate signing step by
-each individual signatory is required before they can enter into agreement.
-Further, the demonstration frontend will always create a contractual agreement
-between two predefined parties. Finally, the demostration implementation of the
-on-chain contracts will take the amount of tokens held by the contract into
-escrow. In an actual implementation of the system, an alternative method would
-be used which avoids large amounts of tokens in this manner.
+[spj00]: https://www.microsoft.com/en-us/research/publication/composing-contracts-an-adventure-in-financial-engineering/
+[bahr15icfp]: https://bahr.io/pubs/entries/bahr15icfp.html
+[benjamin17]: https://github.com/sshine/lira/blob/master/docs/ross.pdf
+[tfp17]: https://www.cs.kent.ac.uk/events/tfp17/cfpapers.html
 
-## The Dagger (Dagger)
+## Points to expand on
 
-### Overview
-Before we give the full definition of the langauge, let's go through a few of
-the functions.
+ - Deliberately simple / not Turing-complete:
+    - Easy to reason about outcome
+    - Hard to express unintended behavior
+    - Possible to formally verify semantics and implementation
+
+## Examples
+
+First some simple examples that cover all the language elements:
+
+ - `transfer(WBTC, A)` transfers 1 wrapped Satoshi to party `A`.
+ - `scale(100_000_000, transfer(WBTC, A))` transfers 1 wrapped Bitcoin to party `A`.
+ - ```
+   scale(
+     100_000_000,
+     both(
+       transfer(WBTC, A),
+       transfer(WBTC, B)))
+   ```
+   transfers 1 wrapped Bitcoin to each of parties `A` and `B`.
+ - `delay(1 hour, transfer(WBTC, A))` transfers 1 wrapped Satoshi to party `A` in one hour.
+ - ```
+   if 2 + 2 == 4 within now
+   then transfer(WBTC, A)
+   else transfer(WBTC, B)
+   ```
+   transfers 1 wrapped Satoshi to party `A` after contract activation.
+
+**TODO:**
+
+ - Examples that involve observables once they have been modified.
+ - Examples that provide valid/invalid bounds over observables.
+ - Examples that cover more of `Expr`.
+ - Examples that describe realistic derivatives.
+ - Consider, once some maturity is reached, to release on [readthedocs.io][https://readthedocs.org/].
+
+## Execution model
+
+## Grammar
+
+**Proposals (from Dagger to Sword):**:
+ - Remove second `Party` of `transfer`.
+ - Remove maximum constant of `scale`.
+ - Remove `zero` contract.
+ - Rename `translate` into `delay`.
+ - Turn `Asset` and `Party` from addresses into placeholders.
+ - Turn `Observable` into something nicer, to be determined.
+
+```
+Contract ::=
+  | 'transfer' '(' Asset    ',' Party    ')'
+  | 'scale'    '(' Expr     ',' Contract ')'
+  | 'both'     '(' Contract ',' Contract ')'
+  | 'delay'    '(' Time     ',' Contract ')'
+  | 'if' Expr 'within' Time 'then' Contract 'else' Contract
+
+Asset ::= Ident
+
+Party ::= Ident
+
+Oracle ::= ...
+
+Time ::=
+  | 'now'
+  | Nat TimeUnit (',' Nat TimeUnit)*
+
+TimeUnit ::=
+  | 'second' | 'seconds'
+  | 'minute' | 'minutes'
+  | 'hour'   | 'hours'
+  | 'day'    | 'days'
+  | 'week'   | 'weeks'
+
+Expr ::=
+  | 'true' | 'false'
+  | Const
+  | Var
+
+  | Expr '+' Expr
+  | Expr '-' Expr
+  | Expr '*' Expr
+  | Expr '/' Expr
+  | 'min' '(' Expr ',' Expr ')'
+  | 'max' '(' Expr ',' Expr ')'
+  
+  | Expr '&&' Expr
+  | Expr '||' Expr
+  | '!' Expr
+
+  | Expr '==' Expr
+  | Expr '<'  Expr
+  | Expr '>'  Expr
+  | Expr '<=' Expr
+  | Expr '>=' Expr
+
+  | Var
+  | Const
+  | Oracle
+
+Nat ::=
+  | ['0' - '9']+
+
+Ident ::=
+  | ['a'-'z', 'A'-'Z'] ['a'-'z', 'A'-'Z', '0'-'9', '_']*
+```
+
+## Deprecated sections not yet merged
+
+### Overview (deprecated)
+
+**This section is outdated and needs to be completely merged into the simple examples above.**
 
 To transfer a unit token from address `p1` to address `p2`, the `transfer(a, p1,
 p2)` function is used, where `a` is the token constract address (e.g. eToroUSD).
@@ -61,47 +155,12 @@ If a contract should be excecuted at a specific time in the future,
 Notice how the contracts can be composed of simpler contracts by the
 constructors `transfer`, `scale` and `translate` (and a few more defined below).
 
-### Definition
-Below is the full definition of the language written as a context free grammar
-definition of the language in which the derivative contracts are written:
+### Examples (deprecated)
 
-```
-contracts:
-c ::= scale(n,e,c1) | zero | both(c1,c2) |
-      transfer(a, p1, p2) | translate(t,c1) |
-      if e within t1
-      then c1 else c2
-
-expressions:      
-e ::= b | obs(ot, f, t) | e1 op e2 | uop e1
-
-time:
-t ::= now | u(n)
-
-time unit:
-u ::= seconds | minutes | hours | days | weeks
-
-operators:
-op ::= + | - | x | / | = | if | or | and
-uop ::=  not
-
-operator types:
-ot ::= int | bool
-```
-where
-
-* n is a natural number
-* p is a party to the contract identified by an Ethereum address
-* a is a token contract address
-* f is the address of a feed
-* b is a whole number
-* obs is an observable depending on external information
-
-Addresses are written as `0x[0-9a-f]{40}`
-
-## Examples
+**This section is outdated and needs to be completely merged into the simple examples above.**
 
 ### Example 1: Binary Option, a Simple Bet
+
 The simplest useful example is a binary option. Two parties are involved in the
 contract, and the contract holds a specific amount of tokens which either of the
 party will receive in full amount at the maturity of the contract. This contract
@@ -129,7 +188,7 @@ contract of the tokens being transferred, the party that makes this payment, and
 the last argument is the party to receive this payment.
 
 The amounts are deposited through the function calls `approve` on the ERC20, and
-`activate` on the contract generated by `Daggerc` (see section "ABI of the produced
+`activate` on the contract generated by `Swordc` (see section "ABI of the produced
 contracts").
 
 The observable `obs` depends on some external information, for example the
@@ -191,99 +250,36 @@ translate(
 )
 ```
 
-## Application Binary Interface (ABI) of the produced contracts
+### ABI of the Derivative Contract
 
-The Dagger (Dagger) contract compiles into the Ethereum's ABI and has two
+**TODO:** Also format ABI as code block.
+
+- `constructor()` Runs when the derivative contract is deployed on the blockchain.
+  Creates the two PT ERC20 contracts with an initial supply of 0 and some descriptive
+  names and symbols. The PTs must have `mint(amount,recipient)` and `burn(amount,address)` functions which are
+  only callable by DC, other than `mint` and `burn` they are minimal ERC20 contracts.
+- `activate(amount)` transfers SA from caller to DC through `transferFrom(msg.sender,DC,X*amount)`, where `X` is the size
+  of each contract. calls `mint(amount,msg.sender)` on both deployed PTs. Starts any timers.
+- `mint(amount)` Increases the total supply of both PTs by the same amount. Caller is charged in SA and paid in PTs.
+  Requires a successful `transferFrom(msg.sender,DC,X*amount)` call to the SA ERC20 contract with DC as the recipient and `msg.sender` as sender.
+  So the `transferFrom` call transfers SA from caller to DC.
+  calls `mint(amount,msg.sender)` on both PTs.
+- `burn(amount)` Decreases the total supply of both PTs by the same amount. Caller is charged in PTs and paid in SA.
+  calls `burn(amount,msg.sender)` on both PTs.
+- `pay()` Caller is rewarded in the SA which they are owed if the contract is settled or partly settled.
+  Calls `burn(balanceOf(msg.sender),msg.sender)` on both PTs. Calls `transfer(msg.sender, Y)` on SA ERC20 to pay `Y` to
+  caller where `Y` is the amount owed.
+The Sword (Sword) contract compiles into the Ethereum's ABI and has two
 methods: `activate()` and `execute()`.
  * `activate()` collects the margin from the parties' accounts and starts the
-   timer. Will only succeed if the parties have allowed the Dagger contract to
-   withdraw from their balance through the ERC20 contract call `approve`.
+    timer. Will only succeed if the parties have allowed the Sword contract to
+    withdraw from their balance through the ERC20 contract call `approve`.
  * `execute()` checks whether any subparts of the contracts are ready to be paid
-   out to the parties or any margins can be paid back.
+    out to the parties or any margins can be paid back.
 
  `activate()` and `execute()` may change state.
 
-## Online DEMO
-A working demo can be found at
-[https://sandbox.firmo.network/](https://sandbox.firmo.network/). Below is a
-screenshot of the frontend<br> ![Frontend
-screenshot](https://raw.githubusercontent.com/Firmo-Network/etlc/master/docs/frontend.png?token=AABFWOQJMDDFRAKTDADEXHC432VAC)
+## Installation
 
-### Example 1: Future
+git, stack, ghc
 
-In this example, we will show how two parties not knowning each other can trade
-a future on the blockchain.
-
-TODO (steps, screenshots, ...)
-
-## Running the system locally
-We now describe how to set up the various components needed to get the
-demonstration frontend up and running.
-
-At a high level, the system is comprised of three main components:
-
-1. **Frontend** implements the web interface which is used for visualizing and
-   manipulating the contracts.<br>
-2. **Backend server** provides the data storage and compilation services for the
-   frontend.<br>
-3. **Compiler** compiles the Dagger source code to EVM binary code providing
-   the contract features described above.
-
-### Dependencies
-Before proceeding, make sure that you have the following installed
-
- * `git`
- * `yarn`
- * `node.js` version [10.xx](https://nodejs.org) (12.x is not supported)
- * A browser with the [Metamask](http://metamask.io) extension installed
-
-### Running and installing
-In order to compile and run the demo client you need to go through the following
-steps.
-
-#### Starting the server
- 1. Clone the etorolang-demo-server repository:  
-    `git clone https://github.com/Firmo-Network/etorolang-demo-server`
- 1. Change diretory:  
-    `cd etorolang-demo-server`
- 1. Install dependencies:  
-    `yarn install`
- 1. Start the server  
-    `yarn start`
-
-#### Starting the client
-In a separate terminal window do:
-
- 1. Clone the etorolang-demo-server repository:  
-    `git clone https://github.com/Firmo-Network/etorolang-demo-client`
- 1. Change diretory:  
-    `cd etorolang-demo-client`
- 1. Install dependencies:  
-    `yarn install`
- 1. Start the client (will launch a browser)  
-    `yarn start`
-
-### Setting up Metamask
-Metamask is a convenient way to handle and create wallets and managing your
-private keys. Change the endpoint address private keys as follows:
-
-* Connect to a custom RPC endpoint with the address (*Networks -> Custom
-  RPC*):<br> `http://127.0.0.1:9545`
-* Import the accounts with the private keys below into Metamask (*Accounts ->
-  Import Account*):<br>
-  `ae6ae8e5ccbfb04590405997ee2d52d2b330726137b875053c36d94e974d162f`<br>
-  `0dbbe8e4ae425a6d2687f1a7e3ba17bc98c673636790f1b8ad91193c05875ef1`   
-
-You are now able to create contracts using the interface.
-
-(TODO: ethereum.enable() needs to be called manually, but should be implemented
-on the frontend)
-
-### Notes
-
-* Since this is a demo only, all contracts are entered between the two parties
-  represented by the accounts belonging to the private keys, as the server
-  manages the keys for easy experience (for a more realistic demo, use the
-  [online sandbox demo](https://sandbox.firmo.network/)).
-* After a contract has expired, you will be able to see the change of the
-  balances of the two accounts according to the outcome of the contract.
