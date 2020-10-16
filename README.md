@@ -1,6 +1,6 @@
 # The Sword Financial Contract Language
 
-Sword is a declarative domain-specic language (DSL) for expressing financial
+Sword is a declarative domain-specific language (DSL) for expressing financial
 contracts (derivatives). It distinguishes itself from existing financial
 contract languages by being adapted to the blockchain by solving fundamental
 issues.
@@ -10,7 +10,7 @@ Sword, the language, is inspired by the work of Peyton-Jones et al. (2000)
 implementation, is a work in progress, and the work presented here extends both
 efforts.
 
-Several attempts to create a domain-specic language to represent financial
+Several attempts to create a domain-specific language to represent financial
 contracts have run into the same two issues: **negative balances** and **poor
 liquidity** of the financial contracts, in part caused by high transaction
 fees.
