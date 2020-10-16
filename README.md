@@ -1,59 +1,124 @@
-# Sword
+# The Sword Financial Contract Language
 
-**Pick a title:**
- - The Sword Language
- - The Sword Smart Contract Language
- - The Sword Derivative Language
- - The Sword Smart Derivative Language
- - The Sword Blockchain Derivative Language
- - ...
+Sword is a declarative domain-specic language (DSL) for expressing financial
+contracts (derivatives). It distinguishes itself from existing financial
+contract languages by being adapted to the blockchain by solving fundamental
+issues.
 
-This README is being rewritten.
+Sword, the language, is inspired by the work of Peyton-Jones et al. (2000)
+([ref][spj00]), as well as Bahr et al. (2015) ([ref][bahr15icfp]). Sword, the
+implementation, is a work in progress, and the work presented here extends both
+efforts.
 
-## References
+Several attempts to create a domain-specic language to represent financial
+contracts have run into the same two issues: **negative balances** and **poor
+liquidity** of the financial contracts, in part caused by high transaction
+fees.
 
- - [Composing contracts: an adventure in financial engineering][spj00]
-   by Simon Peyton Jones, Jean-Marc Eber, Julian Seward (2000)
- - [Certified Symbolic Management of Financial Multi-party Contracts][bahr15icfp]
-   by Patrick Bahr, Jost Berthold, Martin Elsman (2015)
- - [Automated Execution of Financial Contracts on Blockchains][benjamin17]
-   by Benjamin Egelund-Müller, Martin Elsman, Fritz Henglein, Omri Ross (2017)
- - [Secure Execution of Financial Contracts on Ethereum][tfp17]
-   by Thorkil Værge, Mads Gram, Omri Ross (2017)
+ - **Negative balances** can arise since the contract languages for the legacy
+   financial sector do not cap the potential negative value of a contract. An
+   example of this would be a cash-settled contract-for-difference where party
+   A in 90 days owes party B the value of a barrel of oil minus USD $40. Since
+   the value of oil in 90 days has no upper boundary, the negative value of
+   this contract for party A is not downward restricted. A negative balance is
+   not enforceable on the blockchain.
 
-[spj00]: https://www.microsoft.com/en-us/research/publication/composing-contracts-an-adventure-in-financial-engineering/
-[bahr15icfp]: https://bahr.io/pubs/entries/bahr15icfp.html
-[benjamin17]: https://github.com/sshine/lira/blob/master/docs/ross.pdf
-[tfp17]: https://www.cs.kent.ac.uk/events/tfp17/cfpapers.html
+ - The **poor liquidity** of derivatives developed in previous attempts arise
+   since the derivative contracts are published with hard-coded parties
+   identified through blockchain addresses which cannot be changed. So the
+   derivative must be owned in full by a single entity until maturity and
+   cannot be traded like derivatives in the legacy financial sector can. This
+   also creates the problem of matching parties with each other as they must
+   agree on terms and contract size in order to meet. *(This problem is
+   equivalent to the double coincidence of wants in economic theory.)*
 
-## Points to expand on
+## Competition
 
+The Findel contract language and execution environment faced the problem of
+negative balances, high gas cost, and poor liquidity. Findel's execution
+environment was not deployed ([ref][findel-youtube]), and has not been actively
+developed on since 2017 ([ref][findel-youtube]).
+
+The Lira contract language, a predecessor to Sword sponsored by eToroX Labs,
+solved the problem of negative balances but not the problem of poor liquidity.
+
+Simon Peyton-Jones' financial contract language, and others derived from it,
+are not designed with the blockchain in mind. They are designed for a world of
+well-identied legal entities functioning as parties and government- sanctioned
+enforcement to deal with the potential of negative balances and breach of
+contract. A successful financial DSL for the blockchain must abandon these
+implicit premises.
+
+## Design
+
+Sword solves the problem of negative balances: Asset quantities are bounded,
+and financial contracts are always fully-collateralized. And Sword solves the
+problem of low liquidity: Positions in a derivative are expressed as ownership
+of tokens in token contracts.
+
+Restating the above example of a financial contract based on the oil price, the
+corresponding Sword contract would be: Owners of the B token is, for each token
+they own, in 90 days owed the value of oil minus USD $40 up to a maximum of e.g.
+USD $20.
+
+**TODO:**
  - Deliberately simple / not Turing-complete:
     - Easy to reason about outcome
     - Hard to express unintended behavior
-    - Possible to formally verify semantics and implementation
+    - (Possible to formally verify semantics and implementation)
+
+## Nomenclature
+
+ - **Derivative contract:** A Sword contract that contains the names of assets
+   and parties, and the logic that pays out the **settlement asset** to parties
+   at specified points in time. This contract is expressed in the Sword DSL.
+
+ - **Settlement asset:** An asset (token contract, "*stablecoin*") in which
+   parties are paid upon the maturation of the **derivative contract**. These
+   are the assets that parties pay for **party tokens** to participate in the
+   contract.
+
+   Settlement assets exist prior to creation of a derivative contract.  On
+   Ethereum these will be existing ERC20 or ERC1155 tokens. On Tezos these will
+   be existing FA1.2 and FA2 tokens.
+
+ - **Party token:** An asset (token contract) that represents positions in a
+   **derivative contract**. Party token contracts have a `mint()` and `burn()`
+   entrypoint for increasing and decreasing the "shares" of each party.
+
+   A derivative contract will usually have multiple parties, and therefor
+   multiple party tokens, associated with it. For that reason, multi-token
+   contract standards like ERC1155 on Ethereum and FA2 on Tezos are preferred.
+
+   Party tokens are created and minted for the occasion of representing parties
+   in each derivative contract, and they are burned for converting ownership to
+   the underlying **settlement asset**.
+
+   Party tokens are either published as part of a derivative contract, by a
+   derivative contract or next to a derivative contract. (We currently publish
+   party tokens next to, but we aim for a deeper integration.)
 
 ## Examples
 
 First some simple examples that cover all the language elements:
 
- - `transfer(WBTC, A)` transfers 1 wrapped Satoshi to party `A`.
- - `scale(100_000_000, transfer(WBTC, A))` transfers 1 wrapped Bitcoin to party `A`.
+ - `transfer(WBTC, A)` transfers 1 wrapped Bitcoin to party `A`.
+ - `scale(10, transfer(WBTC, A))` transfers 10 wrapped Bitcoin to party `A`.
  - ```
    scale(
-     100_000_000,
+     10,
      both(
        transfer(WBTC, A),
        transfer(WBTC, B)))
    ```
-   transfers 1 wrapped Bitcoin to each of parties `A` and `B`.
- - `delay(1 hour, transfer(WBTC, A))` transfers 1 wrapped Satoshi to party `A` in one hour.
+   transfers 10 wrapped Bitcoin to each of parties `A` and `B`.
+ - `delay(1 hour, transfer(WBTC, A))` transfers 1 wrapped Bitcoin to party `A` in one hour.
  - ```
    if 2 + 2 == 4 within now
    then transfer(WBTC, A)
    else transfer(WBTC, B)
    ```
-   transfers 1 wrapped Satoshi to party `A` after contract activation.
+   transfers 1 wrapped Bitcoin to party `A` after contract activation.
 
 **TODO:**
 
@@ -111,6 +176,7 @@ Expr ::=
   | Expr '/' Expr
   | 'min' '(' Expr ',' Expr ')'
   | 'max' '(' Expr ',' Expr ')'
+  | 'bound' '(' Expr ',' Expr ',' Expr ')'
   
   | Expr '&&' Expr
   | Expr '||' Expr
@@ -273,17 +339,40 @@ translate(
 - `pay()` Caller is rewarded in the SA which they are owed if the contract is settled or partly settled.
   Calls `burn(balanceOf(msg.sender),msg.sender)` on both PTs. Calls `transfer(msg.sender, Y)` on SA ERC20 to pay `Y` to
   caller where `Y` is the amount owed.
+
 The Sword (Sword) contract compiles into the Ethereum's ABI and has two
 methods: `activate()` and `execute()`.
- * `activate()` collects the margin from the parties' accounts and starts the
+ - `activate()` collects the margin from the parties' accounts and starts the
     timer. Will only succeed if the parties have allowed the Sword contract to
     withdraw from their balance through the ERC20 contract call `approve`.
- * `execute()` checks whether any subparts of the contracts are ready to be paid
+ - `execute()` checks whether any subparts of the contracts are ready to be paid
     out to the parties or any margins can be paid back.
 
- `activate()` and `execute()` may change state.
+`activate()` and `execute()` may change state.
 
 ## Installation
 
 git, stack, ghc
 
+## References
+
+ - [Composing contracts: an adventure in financial engineering][spj00]<br>
+   by Simon Peyton Jones, Jean-Marc Eber, Julian Seward (2000)
+ - [Certified Symbolic Management of Financial Multi-party Contracts][bahr15icfp]<br>
+   by Patrick Bahr, Jost Berthold, Martin Elsman (2015)
+ - [Automated Execution of Financial Contracts on Blockchains][benjamin17]<br>
+   by Benjamin Egelund-Müller, Martin Elsman, Fritz Henglein, Omri Ross (2017)
+ - [Findel: Secure Derivative Contracts for Ethereum][findel17]<br>
+   by Alex Biryukov, Dmitry Khovratovich, Sergei Tikhomirov (2017)
+ - [Secure Execution of Financial Contracts on Ethereum][tfp17]<br>
+   by Thorkil Værge, Mads Gram, Omri Ross (2017)
+
+[spj00]: https://www.microsoft.com/en-us/research/publication/composing-contracts-an-adventure-in-financial-engineering/
+[bahr15icfp]: https://bahr.io/pubs/entries/bahr15icfp.html
+[benjamin17]: https://github.com/sshine/lira/blob/master/docs/ross.pdf
+[findel17]: https://ifca.ai/fc17/wtsc/Findel%20-%20Secure%20Derivative%20Contracts%20for%20Ethereum.pdf
+[tfp17]: https://www.cs.kent.ac.uk/events/tfp17/cfpapers.html
+
+[findel-github]: https://github.com/cryptolu/findel
+[findel-youtube]: https://www.youtube.com/watch?v=D4sa9U2HXMQ
+[lira-github]: https://github.com/etoroxlabs/lira
