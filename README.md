@@ -12,10 +12,14 @@ This README is being rewritten.
 
 ## References
 
- - [Composing contracts: an adventure in financial engineering][spj00] by Simon Peyton Jones, Jean-Marc Eber, Julian Seward (2000)
- - [Certified Symbolic Management of Financial Multi-party Contracts][bahr15icfp] by Patrick Bahr, Jost Berthold, Martin Elsman (2015)
- - [Automated Execution of Financial Contracts on Blockchains][benjamin17] by Benjamin Egelund-Müller, Martin Elsman, Fritz Henglein, Omri Ross (2017)
- - [Secure Execution of Financial Contracts on Ethereum][tfp17] by Thorkil Værge, Mads Gram, Omri Ross (2017)
+ - [Composing contracts: an adventure in financial engineering][spj00]
+   by Simon Peyton Jones, Jean-Marc Eber, Julian Seward (2000)
+ - [Certified Symbolic Management of Financial Multi-party Contracts][bahr15icfp]
+   by Patrick Bahr, Jost Berthold, Martin Elsman (2015)
+ - [Automated Execution of Financial Contracts on Blockchains][benjamin17]
+   by Benjamin Egelund-Müller, Martin Elsman, Fritz Henglein, Omri Ross (2017)
+ - [Secure Execution of Financial Contracts on Ethereum][tfp17]
+   by Thorkil Værge, Mads Gram, Omri Ross (2017)
 
 [spj00]: https://www.microsoft.com/en-us/research/publication/composing-contracts-an-adventure-in-financial-engineering/
 [bahr15icfp]: https://bahr.io/pubs/entries/bahr15icfp.html
