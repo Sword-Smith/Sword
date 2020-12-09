@@ -117,6 +117,7 @@ transferSubroutine =
             ]
         pushInSizeT = [ push 0x44 ]
 
+-- TODO: ERC1155: When minting a party token, instead of making external contract calls, create an entry in an internal Party Token map.
 mintSubroutine :: [EvmOpcode]
 mintSubroutine = concat [
     funStartMint,
@@ -132,7 +133,7 @@ mintSubroutine = concat [
     pushGasAmount,
     callInstruction,
     checkExitCode,
-    removeExtraArg,
+    removeExtraArg, -- FIXME: What's this?
     getReturnValueFromMemory,
     funEnd ]
         where
@@ -158,6 +159,7 @@ mintSubroutine = concat [
             , push 0x4
             , MSTORE ]
 
+-- TODO: ERC1155: When burning Party Tokens for a caller, don't make an external function call. Instead, reduce quantity in an internal balance map.
 burnSubroutine :: [EvmOpcode]
 burnSubroutine = concat [
     funStartBurn,
@@ -191,6 +193,7 @@ burnSubroutine = concat [
             , push 0x24
             , MSTORE ] -- store (amount) in mem
 
+-- TODO: ERC1155: When getting the Party Token balance for a caller, don't make an external function call. Instead, make a lookup in an internal balance map.
 balanceOfSubroutine :: [EvmOpcode]
 balanceOfSubroutine =
   funStartBalanceOf

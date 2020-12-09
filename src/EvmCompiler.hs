@@ -665,18 +665,18 @@ executeTransferCallsHH tc transferCounter = do
          , JUMPDESTFROM $ "use_exp_res" ++ show transferCounter
          , POP ] -- Top of stack now has value `a`
 
-    {-  0. Get `b:=PT.balanceOf(CALLER)`, where `PT.address:= _to tc`.
+     {-  0. Get `b:=PT.balanceOf(CALLER)`, where `PT.address:= _to tc`.
          1. First call DUP1,
          2. then call PT.burn(CALLER,b),
          3. then call MUL to get c:=a*b, where a is the amount per position from above.
          4. then call SA.transfer(CALLER,c) -}
 
-      ++ [ PUSH32 $ address2w256 (_to tc)
+      ++ [ PUSH32 $ integer2w256 (_to tc)
          , FUNCALL "balanceOf_subroutine" ]  -- pops 1, pushes 1:  b is on the stack
 
       -- Prepare stack and call burn subroutine
       ++ [ DUP1
-         , PUSH32 $ address2w256 (_to tc)
+         , PUSH32 $ integer2w256 (_to tc)
          , FUNCALL "burn_subroutine" ] -- pops 2, pushes 1
 
       ++ [ POP ] -- discard return value from burn
@@ -744,19 +744,18 @@ activateMapElementToTransferFromCall (tokenAddress, amount) = do
 mint :: Compiler [EvmOpcode]
 mint = do
     am <- reader getActivateMap
-    addrsOfPTs <- reader $ map _to . getTransferCalls
+    partyTokenIDs <- reader $ map _to . getTransferCalls
     thing <- concatMapM activateMapElementToTransferFromCall (Map.assocs am)
     return $
         -- SA.transferFrom
         thing
         -- PT.mint
-        ++ concatMap mintExt (nub addrsOfPTs)
+        ++ concatMap mintExt (nub partyTokenIDs)
         ++ emitEvent "Minted"
 
--- PT.mint(). send an external `mint` message to each PT
-mintExt :: Address -> [EvmOpcode]
-mintExt addrOfPT =
-        [ PUSH32 $ address2w256 addrOfPT
+mintExt :: Integer -> [EvmOpcode]
+mintExt partyTokenID =
+        [ PUSH32 $ integer2w256 partyTokenID
         , FUNCALL "mint_subroutine" ]
 
 -- ABI call DC.burn()
@@ -771,13 +770,13 @@ burnABI = do
 
 burn :: Compiler [EvmOpcode]
 burn = do
-  addrsOfPTs <- reader $ map _to . getTransferCalls
+  partyTokenIDs <- reader $ map _to . getTransferCalls
   -- TODO: I think this will only pay back one settlement asset.
   -- if multiple SAs are used, maybe only one will be paid back? -Thorkil
   (addrOfSA, amount) <- reader $  head . Map.assocs . getActivateMap
   safemulshort <- safeMulShort
   return $
-    concatMap burnExt (nub addrsOfPTs) ++
+    concatMap burnExt (nub partyTokenIDs) ++
     [ CALLER
     , PUSH32 $ address2w256 addrOfSA
     , PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY -- amount uint256
@@ -785,11 +784,10 @@ burn = do
     ++ safemulshort ++
     [ FUNCALL "transfer_subroutine" ]
 
--- PT.burn() send an external `burn` message to PT
-burnExt :: Address -> [EvmOpcode]
-burnExt addrOfPT =
+burnExt :: Integer -> [EvmOpcode]
+burnExt partyTokenID =
        [ PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY
-       , PUSH32 $ address2w256 addrOfPT
+       , PUSH32 $ integer2w256 partyTokenID
        , FUNCALL "burn_subroutine" ]
 
 getMemExpById :: MemExpId -> [IMemExp] -> IMemExp

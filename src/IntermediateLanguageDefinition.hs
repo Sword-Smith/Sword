@@ -46,7 +46,7 @@ data TransferCall =
                   , _amount       :: Expr
                   , _delay        :: Integer
                   , _tokenAddress :: Address -- SA
-                  , _to           :: Address -- PT
+                  , _to           :: Integer -- Party Token index (TokenID)
                   , _memExpPath   :: MemExpPath
                   } deriving (Show, Eq)
 
