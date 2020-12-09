@@ -142,6 +142,38 @@ getFunctionCallEvm calleeAddress funSig callArgs inMemOffset outMemOffset outSiz
             storeArgumentsHH OwnAddress     = [ ADDRESS, PUSH1 (inMemOffset + 0x4 + counter * 0x20), MSTORE ]
             storeArgumentsHH (RawEvm evmOpcodes) = evmOpcodes
 
+
+-- pre: S = [ a, b, ... ]
+safeAdd :: [EvmOpcode]
+safeAdd =
+  [ -- S = [ b, a, a, a, b, ... ]
+    DUP1
+  , DUP1
+  , DUP4
+
+    -- S = [ b + a, a, a, b, ... ]
+  , ADD
+
+    -- S = [ b + a < a, a, b, ... ]
+  , SLT
+
+    -- S = [ 0, b + a < a, a, b, ... ]
+  , PUSH1 0
+
+    -- S = [ b, 0, b + a < a, a, b, ... ]
+  , DUP4
+
+    -- S = [ b < 0, b + a < a, a, b, ... ]
+  , SLT
+
+    -- (b < 0) xor (b + a < a), S = [ a, b, ... ]
+  , XOR
+  , JUMPITO "global_throw"
+
+    -- S = [ a + b, ...]
+  , ADD
+  ]
+
 ppEvm :: EvmOpcode -> String
 ppEvm instruction = case instruction of
     STOP         -> "00"

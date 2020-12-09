@@ -40,7 +40,8 @@ subroutines = concat
             , transferFromSubroutine
             , mintSubroutine
             , burnSubroutine
-            , balanceOfSubroutine ]
+            , balanceOfSubroutine -- TODO: Deprecate.
+            , getBalanceSubroutine ]
 
 pushOutSize              = [ push 0x20 ]
 pushOutOffset            = [ push 0x0 ]
@@ -193,7 +194,7 @@ burnSubroutine = concat [
             , push 0x24
             , MSTORE ] -- store (amount) in mem
 
--- TODO: ERC1155: When getting the Party Token balance for a caller, don't make an external function call. Instead, make a lookup in an internal balance map.
+-- DEPRECATE: This function gets the balance of an external ERC20 contract.
 balanceOfSubroutine :: [EvmOpcode]
 balanceOfSubroutine =
   funStartBalanceOf
@@ -223,3 +224,72 @@ balanceOfSubroutine =
             , push 0x4
             , MSTORE ]
 
+-- This function gets the balance of an internal ERC1155 map.
+-- TODO: ERC1155: When getting the Party Token balance for a caller, don't make an external function call. Instead, make a lookup in an internal balance map.
+getBalanceSubroutine :: [EvmOpcode]
+getBalanceSubroutine =
+  [ FUNSTART "getBalance_subroutine" 2 -- Stack layout: S[0] = account, S[1] = id, S[2] = return address, ...
+
+    -- Put 'account' in M[0..31] and 'id' in M[32..63]
+  , push 0x00
+  , MSTORE
+  , push 0x20
+  , MSTORE
+
+    -- Stack layout: S[0] = SHA3(account ++ id), S[1] = return address, ...
+  , push 0x00
+  , push 0x40
+  , SHA3
+
+    -- _balances[id][account]
+  , SLOAD
+  , FUNRETURN
+  ]
+
+incrementBalanceSubroutine :: [EvmOpcode]
+incrementBalanceSubroutine =
+  [ FUNSTART "incrementBalance_subroutine" 1 -- Stack layout: S[0] = party token id, S[1] = return address, ...
+
+    -- S = [ id, account, id, account, ... ]
+  , CALLER
+  , SWAP1
+  , DUP2
+  , DUP2
+
+    -- S = [ balance, id, account, ... ]
+  , FUNCALL "getBalance_subroutine"
+
+    -- S = [ account, id, balance, ... ]
+  , SWAP2
+
+    -- M[0..31] = account, S = [ id, balance, ... ]
+  , push 0x00
+  , MSTORE
+
+    -- M[32..63] = id, S = [ balance, ... ]
+  , push 0x20
+  , MSTORE
+
+    -- S = [ SHA3(account ++ id), balance, ... ]
+  , push 0x00
+  , push 0x40
+  , SHA3
+
+    -- S = [ amount, hash, balance, ... ]
+  , push 0x04
+  , CALLDATALOAD
+
+    -- S = [ balance, amount, hash, ... ]
+  , SWAP1
+  , SWAP2
+
+    -- S = [ balance + amount, hash, ... ]
+  ] ++ safeAdd ++
+  [
+    -- Storage[hash] = balance + amount, Stack = [ ... ]
+    SWAP1
+  , SSTORE
+
+    -- We would have liked to use FUNRETURN, but it assumes a return value is present on the stack.
+  , JUMP
+  ]

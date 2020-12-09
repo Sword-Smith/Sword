@@ -115,10 +115,11 @@ evmCompile intermediateContract =
   where
     constructor'     = constructor intermediateContract
     codecopy'        = codecopy constructor' body
-    body             = jumpTable ++ subroutines ++ activate' {-activate' includes mint'-} ++ burn' ++ pay'
+    body             = jumpTable ++ subroutines ++ activate' {-activate' includes mint'-} ++ burn' ++ pay' ++ balanceOf'
     activate'        = runCompiler intermediateContract initialEnv activateABI
     burn'            = runCompiler intermediateContract initialEnv burnABI
     pay'             = runCompiler intermediateContract initialEnv pay
+    balanceOf'       = runCompiler intermediateContract initialEnv balanceOfABI
     -- The addresses of the constructor run are different from runs when DC is on BC
 
 linker :: [EvmOpcode] -> [EvmOpcode]
@@ -151,7 +152,6 @@ transformPseudoInstructions = concatMap transformH
     transformH opcode = case opcode of
       JUMPTOA   i -> [ PUSH4 (fromInteger i), JUMP ]
       JUMPITOA  i -> [ PUSH4 (fromInteger i), JUMPI ]
-      -- TODO: relevant with SAFE_ADD?
       FUNCALLA  i -> [ PC, PUSH1 10, ADD, PUSH4 (fromInteger i), JUMP, JUMPDEST ]
       FUNSTARTA n -> [ JUMPDEST, swap n ]
       FUNRETURN   -> [ SWAP1, JUMP ]
@@ -269,6 +269,11 @@ jumpTable =
   , PUSH32 (functionSignature "pay()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "pay_method"
+
+  , DUP1
+  , PUSH32 (functionSignature "balanceOf(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "balanceOf_method"
 
   -- the three remaining methods each take an argument,
   -- and it must be strictly positive
@@ -546,18 +551,7 @@ compileExp e = case e of
             , JUMPITO "global_throw"
             , JUMPDESTFROM label_skip
             , SDIV ]
-  AddiExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++>
-    return  [ DUP1
-            , DUP1
-            , DUP4
-            , ADD
-            , SLT
-            , PUSH1 0
-            , DUP4
-            , SLT
-            , XOR
-            , JUMPITO "global_throw"
-            , ADD ]
+  AddiExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return safeAdd
   SubtExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++>
     return [ DUP1
            , DUP3
@@ -751,7 +745,7 @@ mint = do
         thing
         -- PT.mint
         ++ concatMap mintExt (nub partyTokenIDs)
-        ++ emitEvent "Minted"
+        ++ emitEvent "Minted" -- TODO: Change to ERC1155 minted event
 
 mintExt :: PartyTokenID -> [EvmOpcode]
 mintExt (PartyTokenID partyTokenID) =
@@ -789,6 +783,29 @@ burnExt (PartyTokenID partyTokenID) =
        [ PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY
        , PUSH32 $ integer2w256 partyTokenID
        , FUNCALL "burn_subroutine" ]
+
+balanceOfABI :: Compiler [EvmOpcode]
+balanceOfABI =
+  return . concat $
+    [ putArgsOnStack
+    , [ FUNCALL "getBalance_subroutine" ]
+    , storeBalanceInMemory
+    , [ RETURN ]
+    ]
+  where
+    putArgsOnStack =
+      [ push 0x04
+      , CALLDATALOAD -- address account
+      , push 0x24
+      , CALLDATALOAD -- uint256 id
+      ]
+
+    storeBalanceInMemory =
+      [ push 0x00
+      , MSTORE
+      , push 0x20
+      , push 0x00
+      ]
 
 getMemExpById :: MemExpId -> [IMemExp] -> IMemExp
 getMemExpById memExpId [] = error $ "Could not find IMemExp with ID " ++ show memExpId
