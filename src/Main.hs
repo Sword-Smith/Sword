@@ -113,7 +113,7 @@ getAbiDefinition =
     activate    = AbiFunctionDefinition "activate" "function" False [] [AbiVarDefinition "amount" "uint256"] False
     mint        = AbiFunctionDefinition "mint"     "function" False [] [AbiVarDefinition "amount" "uint256"] False
     burn        = AbiFunctionDefinition "burn"     "function" False [] [AbiVarDefinition "amount" "uint256"] False
-    balanceOf   = AbiFunctionDefinition "balanceOf" "function" False [] [ AbiVarDefinition "account" "address"
+    balanceOf   = AbiFunctionDefinition "balanceOf" "function" False [AbiVarDefinition "amount" "uint256"] [ AbiVarDefinition "account" "address"
                                                                         , AbiVarDefinition "id" "uint256"
                                                                         ] True
     activatedE  = AbiEventDefinition    "Activated"   "event" False []

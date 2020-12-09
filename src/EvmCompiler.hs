@@ -787,7 +787,8 @@ burnExt (PartyTokenID partyTokenID) =
 balanceOfABI :: Compiler [EvmOpcode]
 balanceOfABI =
   return . concat $
-    [ putArgsOnStack
+    [ [JUMPDESTFROM "balanceOf_method"],
+      putArgsOnStack
     , [ FUNCALL "getBalance_subroutine" ]
     , storeBalanceInMemory
     , [ RETURN ]
