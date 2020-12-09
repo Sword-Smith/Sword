@@ -67,7 +67,7 @@ transferParser = do
   parens $ do
     ta <- getAddress
     symbol ","
-    to <- getInt
+    to <- PartyTokenID <$> getInt
     return $ Transfer ta to
 
 scaleParser :: Parser Contract

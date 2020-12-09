@@ -23,7 +23,7 @@
 module DaggerLanguageDefinition where
 
 data Contract = Transfer { tokenAddress_ :: Address,
-                           to_           :: Integer
+                           to_           :: PartyTokenID
                          }
               | Scale { maxFactor_   :: Integer,
                         scaleFactor_ :: Expr,
@@ -87,6 +87,9 @@ data Party = Bound Address
 type TokenSymbol = String
 type Address = String
 
+-- Party Token IDs are ERC1155 index values
+newtype PartyTokenID = PartyTokenID { getPartyTokenID :: Integer }
+  deriving (Eq, Ord, Show)
 
 getSubExps :: Expr -> [Expr]
 getSubExps e = case e of

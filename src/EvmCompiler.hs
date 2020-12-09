@@ -671,12 +671,12 @@ executeTransferCallsHH tc transferCounter = do
          3. then call MUL to get c:=a*b, where a is the amount per position from above.
          4. then call SA.transfer(CALLER,c) -}
 
-      ++ [ PUSH32 $ integer2w256 (_to tc)
+      ++ [ PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
          , FUNCALL "balanceOf_subroutine" ]  -- pops 1, pushes 1:  b is on the stack
 
       -- Prepare stack and call burn subroutine
       ++ [ DUP1
-         , PUSH32 $ integer2w256 (_to tc)
+         , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
          , FUNCALL "burn_subroutine" ] -- pops 2, pushes 1
 
       ++ [ POP ] -- discard return value from burn
@@ -753,8 +753,8 @@ mint = do
         ++ concatMap mintExt (nub partyTokenIDs)
         ++ emitEvent "Minted"
 
-mintExt :: Integer -> [EvmOpcode]
-mintExt partyTokenID =
+mintExt :: PartyTokenID -> [EvmOpcode]
+mintExt (PartyTokenID partyTokenID) =
         [ PUSH32 $ integer2w256 partyTokenID
         , FUNCALL "mint_subroutine" ]
 
@@ -784,8 +784,8 @@ burn = do
     ++ safemulshort ++
     [ FUNCALL "transfer_subroutine" ]
 
-burnExt :: Integer -> [EvmOpcode]
-burnExt partyTokenID =
+burnExt :: PartyTokenID -> [EvmOpcode]
+burnExt (PartyTokenID partyTokenID) =
        [ PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY
        , PUSH32 $ integer2w256 partyTokenID
        , FUNCALL "burn_subroutine" ]
