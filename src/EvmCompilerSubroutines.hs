@@ -41,7 +41,8 @@ subroutines = concat
             , mintSubroutine
             , burnSubroutine
             , balanceOfSubroutine -- TODO: Deprecate.
-            , getBalanceSubroutine ]
+            , getBalanceSubroutine
+            , incrementBalanceSubroutine ]
 
 pushOutSize              = [ push 0x20 ]
 pushOutOffset            = [ push 0x0 ]
@@ -237,8 +238,8 @@ getBalanceSubroutine =
   , MSTORE
 
     -- Stack layout: S[0] = SHA3(account ++ id), S[1] = return address, ...
-  , push 0x00
   , push 0x40
+  , push 0x00
   , SHA3
 
     -- _balances[id][account]
@@ -271,8 +272,8 @@ incrementBalanceSubroutine =
   , MSTORE
 
     -- S = [ SHA3(account ++ id), balance, ... ]
-  , push 0x00
   , push 0x40
+  , push 0x00
   , SHA3
 
     -- S = [ amount, hash, balance, ... ]

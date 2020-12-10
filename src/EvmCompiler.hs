@@ -749,8 +749,8 @@ mint = do
 
 mintExt :: PartyTokenID -> [EvmOpcode]
 mintExt (PartyTokenID partyTokenID) =
-        [ PUSH32 $ integer2w256 partyTokenID
-        , FUNCALL "mint_subroutine" ]
+  [ push partyTokenID
+  , FUNCALL "incrementBalance_subroutine" ]
 
 -- ABI call DC.burn()
 burnABI :: Compiler [EvmOpcode]
