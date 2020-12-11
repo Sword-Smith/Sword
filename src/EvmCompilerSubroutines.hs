@@ -20,7 +20,9 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 --
-module EvmCompilerSubroutines where
+module EvmCompilerSubroutines
+  ( subroutines
+  ) where
 
 import EvmCompilerHelper
 import EvmLanguageDefinition
@@ -42,6 +44,7 @@ subroutines = concat
             , burnSubroutine
             , balanceOfSubroutine -- TODO: Deprecate.
             , getBalanceSubroutine
+            , setBalanceSubroutine
             , incrementBalanceSubroutine ]
 
 pushOutSize              = [ push 0x20 ]
@@ -225,11 +228,16 @@ balanceOfSubroutine =
             , push 0x4
             , MSTORE ]
 
--- This function gets the balance of an internal ERC1155 map.
--- TODO: ERC1155: When getting the Party Token balance for a caller, don't make an external function call. Instead, make a lookup in an internal balance map.
+-- | Get the balance of an account.
+--
+-- Stack before: [ account, id, return address, ... ]
+-- Stack after: [ balance, ... ]
+--
+-- Accepts account as an argument on the stack instead of via 'CALLER' so that
+-- it can get the balance of accounts from other sources than 'CALLER', too.
 getBalanceSubroutine :: [EvmOpcode]
 getBalanceSubroutine =
-  [ FUNSTART "getBalance_subroutine" 2 -- Stack layout: S[0] = account, S[1] = id, S[2] = return address, ...
+  [ FUNSTART "getBalance_subroutine" 2
 
     -- Put 'account' in M[0..31] and 'id' in M[32..63]
   , push 0x00
@@ -245,6 +253,25 @@ getBalanceSubroutine =
     -- _balances[id][account]
   , SLOAD
   , FUNRETURN
+  ]
+
+setBalanceSubroutine :: [EvmOpcode]
+setBalanceSubroutine =
+  [ FUNSTART "setBalance_subroutine" 2 -- Stack layout: S = [id, newBalance, return address, ... ]
+
+  , CALLER
+  , push 0x00
+  , MSTORE
+
+  , push 0x20
+  , MSTORE
+
+  , push 0x40
+  , push 0x00
+  , SHA3  -- Stack = [ Keccak256(account ++ id), newBalance, ... ]
+
+  , SSTORE -- Storage[hash] = newBalance
+  , JUMP
   ]
 
 incrementBalanceSubroutine :: [EvmOpcode]
