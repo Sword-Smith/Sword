@@ -659,12 +659,6 @@ executeTransferCallsHH tc transferCounter = do
          , JUMPDESTFROM $ "use_exp_res" ++ show transferCounter
          , POP ] -- Top of stack now has value `a`
 
-     {-  0. Get `b:=PT.balanceOf(CALLER)`, where `PT.address:= _to tc`.
-         1. First call DUP1,
-         2. then call PT.burn(CALLER,b),
-         3. then call MUL to get c:=a*b, where a is the amount per position from above.
-         4. then call SA.transfer(CALLER,c) -}
-
       ++ [ CALLER
          , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
          , FUNCALL "getBalance_subroutine" ]  -- pops 1, pushes 1:  b is on the stack
@@ -681,10 +675,6 @@ executeTransferCallsHH tc transferCounter = do
       ++ [ ISZERO
          , JUMPITO "global_throw" ] -- error happens in this block
 
-    -- Flip correct bit from one to zero and call selfdestruct if all tcalls compl.
-    skipCallToTcSenderJumpDest = [ JUMPDESTFROM $ "skip_call_to_sender" ++ show transferCounter
-                                 ]
-
     setPTBalanceToZero = [
       JUMPDESTFROM $ "tc_SKIP" ++ show transferCounter
       , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
@@ -697,8 +687,6 @@ executeTransferCallsHH tc transferCounter = do
   return $
     checkIfCallShouldBeMade ++
     callTransferToTcRecipient ++
-    -- callTransferToTcOriginator ++
-    skipCallToTcSenderJumpDest ++
     setPTBalanceToZero ++
     functionEndLabel
 
