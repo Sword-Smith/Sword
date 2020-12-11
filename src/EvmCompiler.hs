@@ -665,18 +665,13 @@ executeTransferCallsHH tc transferCounter = do
          3. then call MUL to get c:=a*b, where a is the amount per position from above.
          4. then call SA.transfer(CALLER,c) -}
 
-      ++ [ PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
-         , FUNCALL "balanceOf_subroutine" ]  -- pops 1, pushes 1:  b is on the stack
-
-      -- Prepare stack and call burn subroutine
-      ++ [ DUP1
+      ++ [ CALLER
          , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
-         , FUNCALL "burn_subroutine" ] -- pops 2, pushes 1
-
-      ++ [ POP ] -- discard return value from burn
+         , FUNCALL "getBalance_subroutine" ]  -- pops 1, pushes 1:  b is on the stack
 
       -- Prepare stack and call transfer subroutine
-      ++ safemul -- c is on stack -- security needs to be checked
+      -- ++ safemul
+      ++ [ MUL ] -- replace with safeMul!
       ++ [ PUSH32 $ address2w256 (_tokenAddress tc)
          , CALLER
          , SWAP2
@@ -688,17 +683,23 @@ executeTransferCallsHH tc transferCounter = do
 
     -- Flip correct bit from one to zero and call selfdestruct if all tcalls compl.
     skipCallToTcSenderJumpDest = [ JUMPDESTFROM $ "skip_call_to_sender" ++ show transferCounter
-                                 ]--                         , POP ] -- pop return amount from stack
+                                 ]
+
+    setPTBalanceToZero = [
+      JUMPDESTFROM $ "tc_SKIP" ++ show transferCounter
+      , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
+      , push 0
+      , FUNCALL "setBalance_subroutine" ]
 
     functionEndLabel =
-        [ JUMPDESTFROM $ "tc_SKIP" ++ show transferCounter
-        , JUMPDESTFROM $ "method_end" ++ show transferCounter ]
+        [ JUMPDESTFROM $ "method_end" ++ show transferCounter ]
 
   return $
     checkIfCallShouldBeMade ++
     callTransferToTcRecipient ++
     -- callTransferToTcOriginator ++
     skipCallToTcSenderJumpDest ++
+    setPTBalanceToZero ++
     functionEndLabel
 
 -- This might have to take place within the state monad to get unique labels for each TransferFrom call
