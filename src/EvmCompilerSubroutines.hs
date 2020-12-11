@@ -38,14 +38,16 @@ import EvmLanguageDefinition
 -}
 subroutines :: [EvmOpcode]
 subroutines = concat
-            [ transferSubroutine
-            , transferFromSubroutine
-            , mintSubroutine
-            , burnSubroutine
-            , balanceOfSubroutine -- TODO: Deprecate.
-            , getBalanceSubroutine
-            , setBalanceSubroutine
-            , incrementBalanceSubroutine ]
+  [ transferSubroutine
+  , transferFromSubroutine
+  , mintSubroutine
+  , burnSubroutine
+  , balanceOfSubroutine -- TODO: Deprecate.
+  , getBalanceSubroutine
+  , setBalanceSubroutine
+  , safeMulSubroutine
+  , incrementBalanceSubroutine -- TODO: Deprecate.
+  ]
 
 pushOutSize              = [ push 0x20 ]
 pushOutOffset            = [ push 0x0 ]
@@ -320,4 +322,53 @@ incrementBalanceSubroutine =
 
     -- We would have liked to use FUNRETURN, but it assumes a return value is present on the stack.
   , JUMP
+  ]
+
+-- | Perform safe MUL.
+--
+-- This subroutine was implemented by Ulrik. It was translated by hand from
+-- https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/math/SignedSafeMath.sol
+--
+-- Pre stack: [ a, b, return address, ... ]
+-- Post stack: [ a * b, ... ]
+safeMulSubroutine :: [EvmOpcode]
+safeMulSubroutine =
+  [ FUNSTART "safeMul_subroutine" 2
+
+    -- if (a != 0) { goto safeMul_continue } else { return 0 }
+  , DUP1
+  , JUMPITO "safeMul_continue"
+  , POP
+  , POP
+  , push 0
+  , JUMPTO "safeMul_done"
+
+    -- if (((a*b/a) - b) != 0) { goto global_throw } else ...
+  , JUMPDESTFROM "safeMul_continue"
+  , DUP2
+  , DUP2
+  , DUP2
+  , DUP2
+  , MUL
+  , SDIV
+  , SUB
+  , JUMPITO "global_throw"
+
+    -- ... if (IntMin - b != 0) { goto safeMul_final } else ...
+  , DUP2
+  , PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , SUB
+  , JUMPITO "safeMul_final"
+
+    -- ... if (-1 == a) { goto global_throw } else ...
+  , DUP1
+  , PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF)
+  , EVM_EQ
+  , JUMPITO "global_throw"
+
+    -- return a * b
+  , JUMPDESTFROM "safeMul_final"
+  , MUL
+  , JUMPDESTFROM "safeMul_done"
+  , FUNRETURN
   ]

@@ -479,41 +479,6 @@ safeMulShort = do
     , JUMPDESTFROM label_skip
     , MUL ]
 
-
-
-safeMul :: Compiler [EvmOpcode]
-safeMul = do
-  label_return <- newLabel "return"
-  label_skip <- newLabel "skip"
-  label_skip2 <- newLabel "skip"
-  return
-    [ DUP1
-    , JUMPITO label_skip
-    , POP
-    , POP
-    , PUSH1 0
-    , JUMPTO label_return
-    , JUMPDESTFROM label_skip
-    , DUP2
-    , DUP2
-    , DUP2
-    , DUP2
-    , MUL
-    , SDIV
-    , SUB
-    , JUMPITO "global_throw"
-    , DUP2
-    , PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-    , SUB
-    , JUMPITO label_skip2
-    , DUP1
-    , PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF)
-    , EVM_EQ
-    , JUMPITO "global_throw"
-    , JUMPDESTFROM label_skip2
-    , MUL
-    , JUMPDESTFROM label_return ]
-
 -- Compile intermediate expression into EVM opcodes
 -- THIS IS THE ONLY PLACE IN THE COMPILER WHERE EXPRESSION ARE HANDLED
 -- The internal representation of numbers are two-complement signed integers
@@ -535,7 +500,7 @@ compileExp e = case e of
                     label <- newLabel "max_is_e1"
                     return [DUP2, DUP2, SLT, JUMPITO label, SWAP1, JUMPDESTFROM label, POP]
 
-  MultExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> safeMul
+  MultExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [FUNCALL "safeMul_subroutine"]
   DiviExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> do
     label_skip <- newLabel "skip"
     return  [ DUP2
@@ -600,9 +565,7 @@ compileLit lit mo _label = case lit of
     in functionCall ++ moveResToStack
 
 executeTransferCallsHH :: TransferCall -> Integer -> Compiler [EvmOpcode]
-executeTransferCallsHH tc transferCounter = do
-  mes <- reader getMemExps
-  safemul <- safeMul
+executeTransferCallsHH tc transferCounter =
   let
     checkIfCallShouldBeMade =
       let
@@ -665,7 +628,8 @@ executeTransferCallsHH tc transferCounter = do
 
       -- Prepare stack and call transfer subroutine
       -- ++ safemul
-      ++ [ MUL ] -- replace with safeMul!
+      -- ++ [ MUL ] -- replace with safeMul!
+      ++ [ FUNCALL "safeMul_subroutine" ]
       ++ [ PUSH32 $ address2w256 (_tokenAddress tc)
          , CALLER
          , SWAP2
@@ -684,7 +648,7 @@ executeTransferCallsHH tc transferCounter = do
     functionEndLabel =
         [ JUMPDESTFROM $ "method_end" ++ show transferCounter ]
 
-  return $
+  in return $
     checkIfCallShouldBeMade ++
     callTransferToTcRecipient ++
     setPTBalanceToZero ++
@@ -710,18 +674,18 @@ activateABI = do
     ++ [ STOP ]
 
 activateMapElementToTransferFromCall :: ActivateMapElement -> Compiler [EvmOpcode]
-activateMapElementToTransferFromCall (tokenAddress, amount) = do
-  safemul <- safeMul
+activateMapElementToTransferFromCall (tokenAddress, amount) =
   return $
       -- Prepare stack for `transferFrom`
       [ CALLER  -- CALLER is the originator of the currently executing call-chain, aka User.
       , PUSH32 $ address2w256 tokenAddress
       , push amount
       -- push the only argument given to "activate_method".
-      , PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
-      ++ safemul ++
-      [ FUNCALL "transferFrom_subroutine"
-      , ISZERO, JUMPITO "global_throw" ]
+      , PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY
+      , FUNCALL "safeMul_subroutine"
+      , FUNCALL "transferFrom_subroutine"
+      , ISZERO, JUMPITO "global_throw"
+      ]
 
 -- mint business logic
 mint :: Compiler [EvmOpcode]
