@@ -93,7 +93,7 @@ sizeOfOpcode (JUMPTOA _)  = 1 + 5 -- PUSH4 addr.; JUMP
 sizeOfOpcode (FUNSTART _ _n) = 1 + 1 -- JUMPDEST; SWAPn
 -- PC stores in µ[0] PC before PC opcode, we want to store the address
 -- pointing to the OPCODE after the JUMP opcode. Therefore, we add 10 to byte code address
-sizeOfOpcode (FUNCALL _)     = 4 + 7 -- PC; PUSH1 10, ADD, JUMPTO label; JUMPDEST = PC; PUSH1, ADD, PUSH4 addr; JUMP; JUMPDEST; OPCODE -- addr(OPCODE)=µ[0]
+sizeOfOpcode (FUNCALL _)     = 4 + 7 -- PC; PUSH1 10, ADD, JUMPTO label; JUMPDEST
 sizeOfOpcode FUNRETURN       = 2 -- SWAP1; JUMP;
 sizeOfOpcode _               = 1
 
