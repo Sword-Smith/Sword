@@ -469,29 +469,6 @@ newLabel desc = do
   put compileEnv { labelCount = i + 1 }
   return $ desc ++ "_" ++ show i ++ "_" ++ show j ++ "_" ++ show k
 
-safeMulShort :: Compiler [EvmOpcode]
-safeMulShort = do
-  label_skip <- newLabel "skip"
-  return
-    [ DUP2
-    , DUP2
-    , DUP2
-    , DUP2
-    , MUL
-    , SDIV
-    , SUB
-    , JUMPITO "global_throw"
-    , DUP2
-    , PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-    , SUB
-    , JUMPITO label_skip
-    , DUP1
-    , PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF)
-    , EVM_EQ
-    , JUMPITO "global_throw"
-    , JUMPDESTFROM label_skip
-    , MUL ]
-
 -- Compile intermediate expression into EVM opcodes
 -- THIS IS THE ONLY PLACE IN THE COMPILER WHERE EXPRESSION ARE HANDLED
 -- The internal representation of numbers are two-complement signed integers
@@ -734,15 +711,15 @@ burn = do
   -- TODO: I think this will only pay back one settlement asset.
   -- if multiple SAs are used, maybe only one will be paid back? -Thorkil
   (addrOfSA, amount) <- reader $  head . Map.assocs . getActivateMap
-  safemulshort <- safeMulShort
   return $
     concatMap burnExt (nub partyTokenIDs) ++
     [ CALLER
     , PUSH32 $ address2w256 addrOfSA
     , PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY -- amount uint256
-    , push amount ]
-    ++ safemulshort ++
-    [ FUNCALL "transfer_subroutine" ]
+    , push amount
+    , FUNCALL "safeMul_subroutine"
+    , FUNCALL "transfer_subroutine"
+    ]
 
 burnExt :: PartyTokenID -> [EvmOpcode]
 burnExt (PartyTokenID partyTokenID) =
