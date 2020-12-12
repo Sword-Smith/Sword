@@ -40,8 +40,8 @@ subroutines :: [EvmOpcode]
 subroutines = concat
   [ transferSubroutine
   , transferFromSubroutine
-  , mintSubroutine
-  , burnSubroutine
+  , mintSubroutine -- TODO: Deprecate.
+  , burnSubroutine -- TODO: Deprecate.
   , balanceOfSubroutine -- TODO: Deprecate.
   , getBalanceSubroutine
   , setBalanceSubroutine
