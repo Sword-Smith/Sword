@@ -113,13 +113,18 @@ evmCompile :: IntermediateContract -> [EvmOpcode]
 evmCompile intermediateContract =
   linker (constructor' ++ codecopy') ++ linker body
   where
-    constructor'     = constructor intermediateContract
-    codecopy'        = codecopy constructor' body
-    body             = jumpTable ++ subroutines ++ activate' {-activate' includes mint'-} ++ burn' ++ pay' ++ balanceOf'
-    activate'        = runCompiler intermediateContract initialEnv activateABI
-    burn'            = runCompiler intermediateContract initialEnv burnABI
-    pay'             = runCompiler intermediateContract initialEnv pay
-    balanceOf'       = runCompiler intermediateContract initialEnv balanceOfABI
+    constructor' = constructor intermediateContract
+    codecopy'    = codecopy constructor' body
+    body         = jumpTable ++ subroutines ++ methods
+
+    methods :: [EvmOpcode]
+    methods = concat . runCompiler intermediateContract initialEnv . sequence $
+      [ activateABI
+      , burnABI
+      , payABI
+      , balanceOfABI
+      ]
+
     -- The addresses of the constructor run are different from runs when DC is on BC
 
 linker :: [EvmOpcode] -> [EvmOpcode]
@@ -305,8 +310,8 @@ jumpTable =
   , REVERT
   ]
 
-pay :: Compiler [EvmOpcode]
-pay = do
+payABI :: Compiler [EvmOpcode]
+payABI = do
     memExpCode <- concatMap executeMemExp <$> reader getMemExps
     transferCallCode <- executeTransferCalls
     return $
