@@ -117,13 +117,21 @@ evmCompile intermediateContract =
     codecopy'    = codecopy constructor' body
     body         = jumpTable ++ subroutines ++ methods
 
+    -- [ activateABI, burnABI, ... ]          :: [Compiler [EvmOpcode]]
+    -- sequence                               :: Monad m => [m a] -> m [a]
+    -- sequence [ activateABI, burnABI, ... ] :: Compiler [[EvmOpcode]]
+    -- runCompiler'                           :: Compiler a -> a
+    -- runCompiler' . sequence                :: [Compiler [EvmOpcode]] -> [[EvmOpcode]]
+    -- concat . runCompiler ... . sequence    :: [Compiler [EvmOpcode]] -> [EvmOpcode]
     methods :: [EvmOpcode]
-    methods = concat . runCompiler intermediateContract initialEnv . sequence $
+    methods = concat . runCompiler' . sequence $
       [ activateABI
       , burnABI
       , payABI
       , balanceOfABI
       ]
+
+    runCompiler' = runCompiler intermediateContract initialEnv
 
     -- The addresses of the constructor run are different from runs when DC is on BC
 
