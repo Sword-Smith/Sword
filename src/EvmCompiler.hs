@@ -129,6 +129,7 @@ evmCompile intermediateContract =
       , burnABI
       , payABI
       , balanceOfABI
+      , safeTransferFromABI
       ]
 
     runCompiler' = runCompiler intermediateContract initialEnv
@@ -279,14 +280,19 @@ jumpTable =
   , AND -- stack now holds a single item: solcc methodID from the rom.
 
   , DUP1
-  , PUSH32 (functionSignature "pay()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-  , EVM_EQ
-  , JUMPITO "pay_method"
-
-  , DUP1
   , PUSH32 (functionSignature "balanceOf(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "balanceOf_method"
+
+  , DUP1
+  , PUSH32 (functionSignature "safeTransferFrom(address,address,uint256,uint256,bytes)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "safeTransferFrom_method"
+
+  , DUP1
+  , PUSH32 (functionSignature "pay()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "pay_method"
 
   -- the three remaining methods each take an argument,
   -- and it must be strictly positive
@@ -750,6 +756,93 @@ balanceOfABI =
       , push 0x20
       , push 0x00
       ]
+
+-- | ERC1155 method
+--
+-- safeTransferFrom(
+--   address _from,
+--   address _to,
+--   uint256 _id,
+--   uint256 _value,
+--   bytes   _data
+-- )
+--
+-- TODO: Revert if `_to` is 0.
+safeTransferFromABI :: Compiler [EvmOpcode]
+safeTransferFromABI =
+  return
+    [ JUMPDESTFROM "safeTransferFrom_method"
+
+    , push 0x04  --  _from
+    , CALLDATALOAD
+
+    , push 0x24  -- _to
+    , CALLDATALOAD
+
+    , push 0x44  -- _id
+    , CALLDATALOAD
+
+    , push 0x64  -- _value
+    , CALLDATALOAD
+
+      -- Stack: [ _value, _id, _to, _from, ... ]
+
+      -- Verify that CALLER == _from
+      -- TODO: Allow an operator to subtract from an account with SetApprovalForAll(...)
+    , DUP4  --  _from
+    , CALLER
+    , SUB -- EVM_EQ, ISZERO
+    , JUMPITO "global_throw" -- throw iff CALLER != _from
+
+      -- Check that balance of _id is sufficient for transferring _value.
+    , CALLER
+    , DUP3 -- _id
+    , FUNCALL "getBalance_subroutine"
+
+      -- Stack: [ balance, _value, _id, _to, _from, ... ]
+    , DUP2 -- _value
+      -- Stack: [ _value, balance, _value, _id, _to, _from, ... ]
+    , SWAP1
+      -- Stack: [ balance, _value, _value, _id, _to, _from, ... ]
+    , FUNCALL "safeSub_subroutine"
+    , DUP1
+      -- Stack: [ balance - _value, balance - _value, _value, _id, _to, _from, ... ]
+    , push 0x00
+    , SGT
+    , JUMPITO "global_throw"
+
+      -- There are sufficient funds for transfer.
+      -- Stack: [ balance - _value, _value, _id, _to, _from, ... ]
+    , DUP3
+    , SWAP1
+    , DUP6
+      -- Stack: [ _from, balance - _value, _id, _value, _id, _to, _from, ... ]
+    , FUNCALL "setBalance_subroutine"
+      -- Stack: [ _value, _id, _to, _from, ... ]
+
+    , DUP3
+    , DUP3
+      -- Stack: [ _id, _to, _value, _id, _to, _from, ... ]
+    , FUNCALL "getBalance_subroutine"
+      -- Stack: [ recipient_balance', _value, _id, _to, _from, ... ]
+    , DUP2
+    , FUNCALL "safeAdd_subroutine"
+      -- Stack: [ recipient_balance' + _value, _value, _id, _to, _from, ... ]
+
+    , DUP3
+    , SWAP1
+    , DUP5
+    , FUNCALL "setBalance_subroutine"
+      -- Stack: [ _value, _id, _to, _from, ... ]
+    , POP
+    , POP
+    , POP
+    , POP
+
+      -- TODO: Emit signal
+
+    , STOP
+    ]
 
 getMemExpById :: MemExpId -> [IMemExp] -> IMemExp
 getMemExpById memExpId [] = error $ "Could not find IMemExp with ID " ++ show memExpId

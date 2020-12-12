@@ -113,15 +113,28 @@ getAbiDefinition =
     activate    = AbiFunctionDefinition "activate" "function" False [] [AbiVarDefinition "amount" "uint256"] False
     mint        = AbiFunctionDefinition "mint"     "function" False [] [AbiVarDefinition "amount" "uint256"] False
     burn        = AbiFunctionDefinition "burn"     "function" False [] [AbiVarDefinition "amount" "uint256"] False
+
     balanceOf   = AbiFunctionDefinition "balanceOf" "function" False [AbiVarDefinition "amount" "uint256"] [ AbiVarDefinition "account" "address"
                                                                         , AbiVarDefinition "id" "uint256"
                                                                         ] True
+    safeTransferFrom = AbiFunctionDefinition "safeTransferFrom" "function" False
+                         []
+                         [ AbiVarDefinition "_from" "address"
+                         , AbiVarDefinition "_to" "address"
+                         , AbiVarDefinition "_id" "uint256"
+                         , AbiVarDefinition "_value" "uint256"
+                         , AbiVarDefinition "_data" "bytes"
+                         ]
+                         False
+
     activatedE  = AbiEventDefinition    "Activated"   "event" False []
     mintedE     = AbiEventDefinition    "Minted"      "event" False []
     burntE      = AbiEventDefinition    "Burnt"       "event" False []
     paidE       = AbiEventDefinition    "Paid"        "event" False []
   in
-    AbiDefinition constructor [execute, pay, activate, mint, burn, balanceOf] [activatedE, mintedE, burntE, paidE] -- add Transfer event.
+    AbiDefinition constructor
+      [ execute, pay, activate, mint, burn, balanceOf, safeTransferFrom ]
+      [ activatedE, mintedE, burntE, paidE ] -- TODO: Add transfer event!
 
 -- This function writes an ABI definition of the contract.
 writeAbiDef :: String -> String -> IO()
