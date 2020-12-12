@@ -41,12 +41,12 @@ subroutines = concat
   [ transferSubroutine
   , transferFromSubroutine
   , mintSubroutine -- TODO: Deprecate.
-  , burnSubroutine -- TODO: Deprecate.
-  , balanceOfSubroutine -- TODO: Deprecate.
+  , burnSubroutine
   , getBalanceSubroutine
   , setBalanceSubroutine
+  , safeAddSubroutine
   , safeMulSubroutine
-  , incrementBalanceSubroutine -- TODO: Deprecate.
+  , safeSubSubroutine
   ]
 
 pushOutSize              = [ push 0x20 ]
@@ -166,73 +166,43 @@ mintSubroutine = concat [
             , push 0x4
             , MSTORE ]
 
--- TODO: ERC1155: When burning Party Tokens for a caller, don't make an external function call. Instead, reduce quantity in an internal balance map.
+-- | Reduce a Party Token with some ID by some amount.
+--
+-- The total amount must be >= 0 after.
+--
+-- Stack before FUNSTART: [ return address, amount, id, ... ]
+-- Stack after FUNSTART: [ id, amount, return address, ... ]
+-- Stack after: [ ... ]
 burnSubroutine :: [EvmOpcode]
-burnSubroutine = concat [
-    funStartBurn,
-    storeFunctionSignatureBurn,
-    prepareArgs,
-    pushOutSize,
-    pushOutOffset,
-    pushInSizeBurn,
-    pushInOffset,
-    pushValue,
-    pushCalleeAddress,
-    pushGasAmount,
-    callInstruction,
-    checkExitCode,
-    removeExtraArg,
-    getReturnValueFromMemory, -- ERC20.sol
-    funEnd ]
-        where
-        pushCalleeAddress  = [ DUP6 ]
-        pushInSizeBurn = [ push 0x44 ]
-        funStartBurn = [ FUNSTART "burn_subroutine" 2 ]
-        storeFunctionSignatureBurn =
-            [ PUSH32 (functionSignature "burn(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-            , push 0
-            , MSTORE ]
-        prepareArgs = -- burn(address,amount)
-            -- These values comes from the Solidity calling convention
-            [ CALLER -- msg.sender
-            , push 0x4
-            , MSTORE
-            , push 0x24
-            , MSTORE ] -- store (amount) in mem
+burnSubroutine =
+  [ FUNSTART "burn_subroutine" 2
 
--- DEPRECATE: This function gets the balance of an external ERC20 contract.
-balanceOfSubroutine :: [EvmOpcode]
-balanceOfSubroutine =
-  funStartBalanceOf
-  ++ storeFunctionSignatureBalanceOf
-  ++ prepareArgs
-  ++ pushOutSize
-  ++ pushOutOffset
-  ++ pushInSize
-  ++ pushInOffset
-  ++ pushValue
-  ++ pushCalleeAddress
-  ++ pushGasAmount
-  ++ callInstruction
-  ++ checkExitCode
-  ++ removeExtraArg
-  ++ getReturnValueFromMemory
-  ++ funEnd
-      where
-        funStartBalanceOf = [ FUNSTART "balanceOf_subroutine" 1 ]
-        storeFunctionSignatureBalanceOf =
-            [ PUSH32 (functionSignature "balanceOf(address)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-            , push 0 -- TODO: We always use 0 here, since we don't use memory other places. Use monad to keep track of memory usage.
-            , MSTORE ]
-        pushInSize = [ push 0x24 ]
-        prepareArgs =
-            [ CALLER
-            , push 0x4
-            , MSTORE ]
+    -- get current amount
+  , CALLER  -- Stack: [ account, id, amount, return address, ... ]
+  , SWAP1   -- Stack: [ id, account, amount, return address, ... ]
+  , DUP2
+  , DUP2    -- Stack: [ id, account, id, account, amount, return address, ... ]
+  , FUNCALL "getBalance_subroutine" -- Stack: [ id, account, balance, amount, return address, ... ]
+  -- Thor says: -- Stack: [ balance, id, account, amount, return address, ... ]
+
+  , DUP4
+  , SWAP1
+  , FUNCALL "safeSub_subroutine"
+
+    -- Check that !(amount > balance)
+  , DUP1
+  , push 0
+  , SGT
+  , JUMPITO "global_throw"
+
+  , FUNCALL "setBalance_subroutine"
+  , POP, POP, JUMP
+  ]
 
 -- | Get the balance of an account.
 --
--- Stack before: [ account, id, return address, ... ]
+-- Stack before FUNSTART: [ return address, id, account, ... ]
+-- Stack after FUNSTART: [ account, id, return address, ... ]
 -- Stack after: [ balance, ... ]
 --
 -- Accepts account as an argument on the stack instead of via 'CALLER' so that
@@ -257,6 +227,11 @@ getBalanceSubroutine =
   , FUNRETURN
   ]
 
+-- | Sets the balance for a party token id
+--
+-- Stack before FUNSTART: [ return address, newBalance, id, ... ]
+-- Stack after FUNSTART: [ id, newBalance, return address, ... ]
+-- Stack after: [ ... ]
 setBalanceSubroutine :: [EvmOpcode]
 setBalanceSubroutine =
   [ FUNSTART "setBalance_subroutine" 2 -- Stack layout: S = [id, newBalance, return address, ... ]
@@ -276,52 +251,37 @@ setBalanceSubroutine =
   , JUMP
   ]
 
-incrementBalanceSubroutine :: [EvmOpcode]
-incrementBalanceSubroutine =
-  [ FUNSTART "incrementBalance_subroutine" 1 -- Stack layout: S[0] = party token id, S[1] = return address, ...
+-- pre: S = [ a, b, ... ]
+safeAddSubroutine :: [EvmOpcode]
+safeAddSubroutine =
+  [ FUNSTART "safeAdd_subroutine" 2
+    -- S = [ b, a, a, a, b, ... ]
+  , DUP1
+  , DUP1
+  , DUP4
 
-    -- S = [ id, account, id, account, ... ]
-  , CALLER
-  , SWAP1
-  , DUP2
-  , DUP2
+    -- S = [ b + a, a, a, b, ... ]
+  , ADD
 
-    -- S = [ balance, id, account, ... ]
-  , FUNCALL "getBalance_subroutine"
+    -- S = [ b + a < a, a, b, ... ]
+  , SLT
 
-    -- S = [ account, id, balance, ... ]
-  , SWAP2
+    -- S = [ 0, b + a < a, a, b, ... ]
+  , PUSH1 0
 
-    -- M[0..31] = account, S = [ id, balance, ... ]
-  , push 0x00
-  , MSTORE
+    -- S = [ b, 0, b + a < a, a, b, ... ]
+  , DUP4
 
-    -- M[32..63] = id, S = [ balance, ... ]
-  , push 0x20
-  , MSTORE
+    -- S = [ b < 0, b + a < a, a, b, ... ]
+  , SLT
 
-    -- S = [ SHA3(account ++ id), balance, ... ]
-  , push 0x40
-  , push 0x00
-  , SHA3
+    -- (b < 0) xor (b + a < a), S = [ a, b, ... ]
+  , XOR
+  , JUMPITO "global_throw"
 
-    -- S = [ amount, hash, balance, ... ]
-  , push 0x04
-  , CALLDATALOAD
-
-    -- S = [ balance, amount, hash, ... ]
-  , SWAP1
-  , SWAP2
-
-    -- S = [ balance + amount, hash, ... ]
-  ] ++ safeAdd ++
-  [
-    -- Storage[hash] = balance + amount, Stack = [ ... ]
-    SWAP1
-  , SSTORE
-
-    -- We would have liked to use FUNRETURN, but it assumes a return value is present on the stack.
-  , JUMP
+    -- S = [ a + b, ...]
+  , ADD
+  , FUNRETURN
   ]
 
 -- | Perform safe MUL.
@@ -370,5 +330,24 @@ safeMulSubroutine =
   , JUMPDESTFROM "safeMul_final"
   , MUL
   , JUMPDESTFROM "safeMul_done"
+  , FUNRETURN
+  ]
+
+-- Given stack = [a, b, ...] returns a - b
+safeSubSubroutine :: [EvmOpcode]
+safeSubSubroutine =
+  [ FUNSTART "safeSub_subroutine" 2
+  , SWAP1 -- TODO: Can (maybe) be replaced by inverting below
+  , DUP1
+  , DUP3
+  , DUP2
+  , SUB
+  , SGT
+  , push 0
+  , DUP4
+  , SLT
+  , XOR
+  , JUMPITO "global_throw"
+  , SUB
   , FUNRETURN
   ]

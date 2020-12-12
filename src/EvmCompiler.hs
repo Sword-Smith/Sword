@@ -506,19 +506,8 @@ compileExp e = case e of
             , JUMPITO "global_throw"
             , JUMPDESTFROM label_skip
             , SDIV ]
-  AddiExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return safeAdd
-  SubtExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++>
-    return [ DUP1
-           , DUP3
-           , DUP2
-           , SUB
-           , SGT
-           , PUSH1 0
-           , DUP4
-           , SLT
-           , XOR
-           , JUMPITO "global_throw"
-           , SUB ]
+  AddiExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [FUNCALL "safeAdd_subroutine"]
+  SubtExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [FUNCALL "safeSub_subroutine"]
   EqExp     e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [EVM_EQ]
   LtExp     e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [SLT]
   GtExp     e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [SGT]
@@ -693,7 +682,15 @@ mint = do
 mintExt :: PartyTokenID -> [EvmOpcode]
 mintExt (PartyTokenID partyTokenID) =
   [ push partyTokenID
-  , FUNCALL "incrementBalance_subroutine" ]
+  , CALLER
+  , DUP2
+  , FUNCALL "getBalance_subroutine"
+
+  , push 0x04
+  , CALLDATALOAD
+  , FUNCALL "safeAdd_subroutine"
+  , FUNCALL "setBalance_subroutine"
+  ]
 
 -- ABI call DC.burn()
 burnABI :: Compiler [EvmOpcode]
@@ -723,9 +720,10 @@ burn = do
 
 burnExt :: PartyTokenID -> [EvmOpcode]
 burnExt (PartyTokenID partyTokenID) =
-       [ PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY
-       , PUSH32 $ integer2w256 partyTokenID
-       , FUNCALL "burn_subroutine" ]
+  [ push partyTokenID
+  , PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY
+  , FUNCALL "burn_subroutine"
+  ]
 
 balanceOfABI :: Compiler [EvmOpcode]
 balanceOfABI =
