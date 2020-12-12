@@ -162,7 +162,7 @@ transformPseudoInstructions = concatMap transformH
     swap 1 = SWAP1
     swap 2 = SWAP2
     swap 3 = SWAP3
-    swap _ = undefined -- Only 2 or 3 args is accepted atm
+    swap _ = error "Only 2 or 3 args is accepted at the moment"
 
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
