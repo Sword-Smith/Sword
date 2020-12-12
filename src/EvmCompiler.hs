@@ -787,6 +787,11 @@ safeTransferFromABI =
 
       -- Stack: [ _value, _id, _to, _from, ... ]
 
+      -- Verify that `_to` != 0.
+    , DUP3
+    , ISZERO
+    , JUMPITO "global_throw"
+
       -- Verify that CALLER == _from
       -- TODO: Allow an operator to subtract from an account with SetApprovalForAll(...)
     , DUP4  --  _from
