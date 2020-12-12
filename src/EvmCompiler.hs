@@ -622,6 +622,7 @@ executeTransferCallsHH tc transferCounter =
       JUMPDESTFROM $ "tc_SKIP" ++ show transferCounter
       , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
       , push 0
+      , CALLER
       , FUNCALL "setBalance_subroutine" ]
 
     functionEndLabel =
@@ -689,6 +690,7 @@ mintExt (PartyTokenID partyTokenID) =
   , push 0x04
   , CALLDATALOAD
   , FUNCALL "safeAdd_subroutine"
+  , CALLER
   , FUNCALL "setBalance_subroutine"
   ]
 

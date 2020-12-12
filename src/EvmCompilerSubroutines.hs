@@ -194,7 +194,7 @@ burnSubroutine =
   , push 0
   , SGT
   , JUMPITO "global_throw"
-
+  , CALLER
   , FUNCALL "setBalance_subroutine"
   , POP, POP, JUMP
   ]
@@ -229,23 +229,22 @@ getBalanceSubroutine =
 
 -- | Sets the balance for a party token id
 --
--- Stack before FUNSTART: [ return address, newBalance, id, ... ]
--- Stack after FUNSTART: [ id, newBalance, return address, ... ]
+-- Stack before FUNSTART: [ return address, account, newBalance, id, ... ]
+-- Stack after FUNSTART: [ id, account, newBalance, return address, ... ]
 -- Stack after: [ ... ]
 setBalanceSubroutine :: [EvmOpcode]
 setBalanceSubroutine =
-  [ FUNSTART "setBalance_subroutine" 2 -- Stack layout: S = [id, newBalance, return address, ... ]
-
-  , CALLER
-  , push 0x00
-  , MSTORE
+  [ FUNSTART "setBalance_subroutine" 3 -- Stack layout: S = [id, account, newBalance, return address, ... ]
 
   , push 0x20
-  , MSTORE
+  , MSTORE -- store token ID in memory
+
+  , push 0x00
+  , MSTORE -- store account address in memory
 
   , push 0x40
   , push 0x00
-  , SHA3  -- Stack = [ Keccak256(account ++ id), newBalance, ... ]
+  , SHA3  -- Stack = [ Keccak256(account ++ id), newBalance, return address, ... ]
 
   , SSTORE -- Storage[hash] = newBalance
   , JUMP
