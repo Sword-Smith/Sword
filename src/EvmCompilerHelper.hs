@@ -210,6 +210,7 @@ ppEvm instruction = case instruction of
     DUP4         -> "83"
     DUP5         -> "84"
     DUP6         -> "85"
+    DUP7         -> "86"
     SWAP1        -> "90"
     SWAP2        -> "91"
     SWAP3        -> "92"
