@@ -786,6 +786,9 @@ safeTransferFromABI =
   return
     [ JUMPDESTFROM "safeTransferFrom_method"
 
+    , push 0x64  -- _value
+    , CALLDATALOAD
+
     , push 0x04  --  _from
     , CALLDATALOAD
 
@@ -795,76 +798,15 @@ safeTransferFromABI =
     , push 0x44  -- _id
     , CALLDATALOAD
 
-    , push 0x64  -- _value
-    , CALLDATALOAD
-
-      -- Stack: [ _value, _id, _to, _from, ... ]
+      -- Stack: [ _id, _to, _from, _value, ... ]
 
       -- Verify that `_to` != 0.
-    , DUP3
-    , ISZERO
-    , JUMPITO "global_throw"
-
-      -- Verify that CALLER == _from || CALLER in operators
-    , DUP4  --  _from
-    , CALLER
-    , EVM_EQ
-    , JUMPITO "safeTransferFrom_continue"
-
-    -- _from != CALLER, verify that CALLER is approved as operator
-    , DUP4 -- _from
-    , CALLER
-    , FUNCALL "getApprovedForAll_subroutine"
-    , ISZERO
-    , JUMPITO "global_throw" -- throw iff CALLER != _from && CALLER not in operators
-
-      -- Check that balance of _id is sufficient for transferring _value.
-    , JUMPDESTFROM "safeTransferFrom_continue"
-    , DUP4 -- _from
-    , DUP3 -- _id
-    , FUNCALL "getBalance_subroutine"
-
-      -- Stack: [ balance, _value, _id, _to, _from, ... ]
-    , DUP2 -- _value
-      -- Stack: [ _value, balance, _value, _id, _to, _from, ... ]
-    , SWAP1
-      -- Stack: [ balance, _value, _value, _id, _to, _from, ... ]
-    , FUNCALL "safeSub_subroutine"
-    , DUP1
-      -- Stack: [ balance - _value, balance - _value, _value, _id, _to, _from, ... ]
-    , push 0x00
-    , SGT
-    , JUMPITO "global_throw"
-
-      -- There are sufficient funds for transfer.
-      -- Stack: [ balance - _value, _value, _id, _to, _from, ... ]
-    , DUP3
-    , SWAP1
-    , DUP6
-      -- Stack: [ _from, balance - _value, _id, _value, _id, _to, _from, ... ]
-    , FUNCALL "setBalance_subroutine"
-      -- Stack: [ _value, _id, _to, _from, ... ]
-
-    , DUP3
-    , DUP3
-      -- Stack: [ _id, _to, _value, _id, _to, _from, ... ]
-    , FUNCALL "getBalance_subroutine"
-      -- Stack: [ recipient_balance', _value, _id, _to, _from, ... ]
     , DUP2
-    , FUNCALL "safeAdd_subroutine"
-      -- Stack: [ recipient_balance' + _value, _value, _id, _to, _from, ... ]
+    , ISZERO
+    , JUMPITO "global_throw"
 
-    , DUP3
-    , SWAP1
-    , DUP5
-    , FUNCALL "setBalance_subroutine"
-      -- Stack: [ _value, _id, _to, _from, ... ]
-    , POP
-    , POP
-    , POP
-    , POP
-      -- Stack: [ ... ]
-
+    -- Call subroutine for transferring tokens, pops 4, pushes 0
+    , FUNCALL "safeTransferFrom_subroutine"
       -- TODO: Emit signal
 
     , STOP

@@ -45,6 +45,7 @@ subroutines = concat
   , getBalanceSubroutine
   , setBalanceSubroutine
   , getApprovedForAllSubroutine
+  , safeTransferFromSubroutine
   , safeAddSubroutine
   , safeMulSubroutine
   , safeSubSubroutine
@@ -271,6 +272,76 @@ getApprovedForAllSubroutine =
 
   , SLOAD
   , FUNRETURN
+  ]
+
+-- | Transfer tokens of ID from one one account to another
+--
+-- Stack before FUNSTART: [ return address, _id, _to, _from, _value, ... ]
+-- Stack after FUNSTART: [ _value, _id, _to, _from, return address, ... ]
+safeTransferFromSubroutine :: [EvmOpcode]
+safeTransferFromSubroutine =
+  [
+    FUNSTART "safeTransferFrom_subroutine" 4
+      -- Verify that CALLER == _from || CALLER in operators
+    , DUP4  --  _from
+    , CALLER
+    , EVM_EQ
+    , JUMPITO "safeTransferFrom_continue"
+
+    -- _from != CALLER, verify that CALLER is approved as operator
+    , DUP4 -- _from
+    , CALLER
+    , FUNCALL "getApprovedForAll_subroutine"
+    , ISZERO
+    , JUMPITO "global_throw" -- throw iff CALLER != _from && CALLER not in operators
+
+      -- Check that balance of _id is sufficient for transferring _value.
+    , JUMPDESTFROM "safeTransferFrom_continue"
+    , DUP4 -- _from
+    , DUP3 -- _id
+    , FUNCALL "getBalance_subroutine"
+
+      -- Stack: [ balance, _value, _id, _to, _from, ... ]
+    , DUP2 -- _value
+      -- Stack: [ _value, balance, _value, _id, _to, _from, ... ]
+    , SWAP1
+      -- Stack: [ balance, _value, _value, _id, _to, _from, ... ]
+    , FUNCALL "safeSub_subroutine"
+    , DUP1
+      -- Stack: [ balance - _value, balance - _value, _value, _id, _to, _from, ... ]
+    , push 0x00
+    , SGT
+    , JUMPITO "global_throw"
+
+      -- There are sufficient funds for transfer.
+      -- Stack: [ balance - _value, _value, _id, _to, _from, ... ]
+    , DUP3
+    , SWAP1
+    , DUP6
+      -- Stack: [ _from, balance - _value, _id, _value, _id, _to, _from, ... ]
+    , FUNCALL "setBalance_subroutine"
+      -- Stack: [ _value, _id, _to, _from, ... ]
+
+    , DUP3
+    , DUP3
+      -- Stack: [ _id, _to, _value, _id, _to, _from, ... ]
+    , FUNCALL "getBalance_subroutine"
+      -- Stack: [ recipient_balance', _value, _id, _to, _from, ... ]
+    , DUP2
+    , FUNCALL "safeAdd_subroutine"
+      -- Stack: [ recipient_balance' + _value, _value, _id, _to, _from, ... ]
+
+    , DUP3
+    , SWAP1
+    , DUP5
+    , FUNCALL "setBalance_subroutine"
+      -- Stack: [ _value, _id, _to, _from, ... ]
+    , POP
+    , POP
+    , POP
+    , POP
+      -- Stack: [ ... ]
+    , JUMP
   ]
 
 -- pre: S = [ a, b, ... ]
