@@ -124,6 +124,7 @@ data EvmOpcode = STOP
                | SWAP1
                | SWAP2
                | SWAP3
+               | SWAP4
                | LOG0
                | LOG1
                | LOG2

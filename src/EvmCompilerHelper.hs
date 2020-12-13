@@ -213,6 +213,7 @@ ppEvm instruction = case instruction of
     SWAP1        -> "90"
     SWAP2        -> "91"
     SWAP3        -> "92"
+    SWAP4        -> "93"
     LOG0         -> "a0"
     LOG1         -> "a1"
     LOG2         -> "a2"
