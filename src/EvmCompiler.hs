@@ -804,15 +804,22 @@ safeTransferFromABI =
     , ISZERO
     , JUMPITO "global_throw"
 
-      -- Verify that CALLER == _from
-      -- TODO: Allow an operator to subtract from an account with SetApprovalForAll(...)
+      -- Verify that CALLER == _from || CALLER in operators
     , DUP4  --  _from
     , CALLER
-    , SUB -- EVM_EQ, ISZERO
-    , JUMPITO "global_throw" -- throw iff CALLER != _from
+    , EVM_EQ
+    , JUMPITO "safeTransferFrom_continue"
+
+    -- _from != CALLER, verify that CALLER is approved as operator
+    , DUP4 -- _from
+    , CALLER
+    , FUNCALL "getApprovedForAll_subroutine"
+    , ISZERO
+    , JUMPITO "global_throw" -- throw iff CALLER != _from && CALLER not in operators
 
       -- Check that balance of _id is sufficient for transferring _value.
-    , CALLER
+    , JUMPDESTFROM "safeTransferFrom_continue"
+    , DUP4 -- _from
     , DUP3 -- _id
     , FUNCALL "getBalance_subroutine"
 
@@ -855,6 +862,7 @@ safeTransferFromABI =
     , POP
     , POP
     , POP
+      -- Stack: [ ... ]
 
       -- TODO: Emit signal
 
