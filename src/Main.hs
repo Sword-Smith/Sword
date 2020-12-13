@@ -127,13 +127,26 @@ getAbiDefinition =
                          ]
                          False
 
+    setApprovalForAll = AbiFunctionDefinition "setApprovalForAll" "function" False
+      []
+      [ AbiVarDefinition "_operator" "address", AbiVarDefinition "_approved" "bool" ]
+      False
+
+    isApprovedForAll = AbiFunctionDefinition "isApprovedForAll" "function" False
+      [ AbiVarDefinition "approved" "bool" ]
+      [ AbiVarDefinition "_operator" "address", AbiVarDefinition "_owner" "address" ]
+      True
+
     activatedE  = AbiEventDefinition    "Activated"   "event" False []
     mintedE     = AbiEventDefinition    "Minted"      "event" False []
     burntE      = AbiEventDefinition    "Burnt"       "event" False []
     paidE       = AbiEventDefinition    "Paid"        "event" False []
   in
     AbiDefinition constructor
-      [ execute, pay, activate, mint, burn, balanceOf, safeTransferFrom ]
+      [ {- DC -} execute, pay, activate
+      , {- ? -} mint, burn -- TODO: Find better names to avoid confusion about Token interfaces.
+      , {- ERC1155 -} balanceOf, safeTransferFrom, setApprovalForAll, isApprovedForAll
+      ]
       [ activatedE, mintedE, burntE, paidE ] -- TODO: Add transfer event!
 
 -- This function writes an ABI definition of the contract.

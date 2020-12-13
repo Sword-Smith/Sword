@@ -44,6 +44,7 @@ subroutines = concat
   , burnSubroutine
   , getBalanceSubroutine
   , setBalanceSubroutine
+  , getApprovedForAllSubroutine
   , safeAddSubroutine
   , safeMulSubroutine
   , safeSubSubroutine
@@ -248,6 +249,28 @@ setBalanceSubroutine =
 
   , SSTORE -- Storage[hash] = newBalance
   , JUMP
+  ]
+
+-- | Gets whether an `_operator` has been approved to spend from `_owner`.
+--
+-- Stack before FUNSTART: [ return address, _operator, _owner, ... ]
+-- Stack after FUNSTART: [ _owner, _operator, return address, ... ]
+getApprovedForAllSubroutine :: [EvmOpcode]
+getApprovedForAllSubroutine =
+  [ FUNSTART "getApprovedForAll_subroutine" 2
+
+  , push 0x00
+  , MSTORE
+
+  , push 0x20
+  , MSTORE
+
+  , push 0x40
+  , push 0x00
+  , SHA3
+
+  , SLOAD
+  , FUNRETURN
   ]
 
 -- pre: S = [ a, b, ... ]

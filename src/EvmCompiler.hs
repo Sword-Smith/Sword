@@ -130,6 +130,8 @@ evmCompile intermediateContract =
       , payABI
       , balanceOfABI
       , safeTransferFromABI
+      , setApprovalForAllABI
+      , isApprovedForAllABI
       ]
 
     runCompiler' = runCompiler intermediateContract initialEnv
@@ -288,6 +290,16 @@ jumpTable =
   , PUSH32 (functionSignature "safeTransferFrom(address,address,uint256,uint256,bytes)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "safeTransferFrom_method"
+
+  , DUP1
+  , PUSH32 (functionSignature "setApprovalForAll(address,bool)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "setApprovalForAll_method"
+
+  , DUP1
+  , PUSH32 (functionSignature "isApprovedForAll(address,address)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "isApprovedForAll_method"
 
   , DUP1
   , PUSH32 (functionSignature "pay()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
@@ -848,6 +860,70 @@ safeTransferFromABI =
 
     , STOP
     ]
+
+-- @notice Enable or disable approval for a third party ("operator") to manage all of the caller's tokens.
+-- @dev MUST emit the ApprovalForAll event on success.
+-- @param _operator  Address to add to the set of authorized operators
+-- @param _approved  True if the operator is approved, false to revoke approval
+--
+-- setApprovalForAll(address,bool)
+setApprovalForAllABI :: Compiler [EvmOpcode]
+setApprovalForAllABI = return
+  [ JUMPDESTFROM "setApprovalForAll_method"
+
+  , push 0x24  -- _approved
+  , CALLDATALOAD
+
+    -- Store CALLER (_owner) in M[0..31]
+  , CALLER
+  , push 0x00
+  , MSTORE
+
+    -- Store 0s in M[32..43] and the lower 160 bits (20 bytes) of _operator in M[44..63].
+  , push 0x04  --  _operator
+  , CALLDATALOAD
+  , PUSHN (replicate 20 0xff)
+  , AND
+  , push 0x20
+  , MSTORE
+
+    -- Stack = [ SHA3(account ++ id), ... ]
+  , push 0x40
+  , push 0x00
+  , SHA3
+
+    -- Storage[SHA3(account ++ id)] = _approved
+  , SSTORE
+
+    -- TODO: Emit signal.
+  , STOP
+  ]
+
+isApprovedForAllABI :: Compiler [EvmOpcode]
+isApprovedForAllABI = return
+  [ JUMPDESTFROM "isApprovedForAll_method"
+
+  , push 0x04
+  , CALLDATALOAD
+
+  , push 0x24
+  , CALLDATALOAD
+
+  , FUNCALL "getApprovedForAll_subroutine"
+
+  , push 0x00
+  , MSTORE
+
+  , push 0x20
+  , push 0x00
+  , RETURN
+  ]
+
+  -- , DUP1
+  -- , PUSH32 (functionSignature "setApprovalForAll(address,bool)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  -- , EVM_EQ
+  -- , JUMPITO "setApprovalForAll_method"
+
 
 getMemExpById :: MemExpId -> [IMemExp] -> IMemExp
 getMemExpById memExpId [] = error $ "Could not find IMemExp with ID " ++ show memExpId
