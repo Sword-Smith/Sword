@@ -127,6 +127,16 @@ getAbiDefinition =
                          ]
                          False
 
+    safeBatchTransferFrom = AbiFunctionDefinition "safeBatchTransferFrom" "function" False
+      []
+      [ AbiVarDefinition "_from" "address"
+      , AbiVarDefinition "_to" "address"
+      , AbiVarDefinition "_ids" "uint256[]"
+      , AbiVarDefinition "_values" "uint256[]"
+      , AbiVarDefinition "_data" "bytes"
+      ]
+      False
+
     setApprovalForAll = AbiFunctionDefinition "setApprovalForAll" "function" False
       []
       [ AbiVarDefinition "_operator" "address", AbiVarDefinition "_approved" "bool" ]
@@ -145,7 +155,7 @@ getAbiDefinition =
     AbiDefinition constructor
       [ {- DC -} execute, pay, activate
       , {- ? -} mint, burn -- TODO: Find better names to avoid confusion about Token interfaces.
-      , {- ERC1155 -} balanceOf, safeTransferFrom, setApprovalForAll, isApprovedForAll
+      , {- ERC1155 -} balanceOf, safeTransferFrom, safeBatchTransferFrom, setApprovalForAll, isApprovedForAll
       ]
       [ activatedE, mintedE, burntE, paidE ] -- TODO: Add transfer event!
 

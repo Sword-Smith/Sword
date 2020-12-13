@@ -130,6 +130,7 @@ evmCompile intermediateContract =
       , payABI
       , balanceOfABI
       , safeTransferFromABI
+      , safeBatchTransferFromABI
       , setApprovalForAllABI
       , isApprovedForAllABI
       ]
@@ -291,6 +292,11 @@ jumpTable =
   , PUSH32 (functionSignature "safeTransferFrom(address,address,uint256,uint256,bytes)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "safeTransferFrom_method"
+
+  , DUP1
+  , PUSH32 (functionSignature "safeBatchTransferFrom(address,address,uint256[],uint256[],bytes)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "safeBatchTransferFrom_method"
 
   , DUP1
   , PUSH32 (functionSignature "setApprovalForAll(address,bool)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
@@ -811,6 +817,120 @@ safeTransferFromABI =
 
     , STOP
     ]
+
+-- @notice Transfers `_values` amount(s) of `_ids` from the `_from` address to the `_to` address specified (with safety call).
+-- @dev Caller must be approved to manage the tokens being transferred out of the `_from` account (see "Approval" section of the standard).
+-- MUST revert if `_to` is the zero address.
+-- MUST revert if length of `_ids` is not the same as length of `_values`.
+-- MUST revert if any of the balance(s) of the holder(s) for token(s) in `_ids` is lower than the respective amount(s) in `_values` sent to the recipient.
+-- MUST revert on any other error.
+-- MUST emit `TransferSingle` or `TransferBatch` event(s) such that all the balance changes are reflected (see "Safe Transfer Rules" section of the standard).
+-- Balance changes and events MUST follow the ordering of the arrays (_ids[0]/_values[0] before _ids[1]/_values[1], etc).
+-- After the above conditions for the transfer(s) in the batch are met, this function MUST check if `_to` is a smart contract (e.g. code size > 0). If so, it MUST call the relevant `ERC1155TokenReceiver` hook(s) on `_to` and act appropriately (see "Safe Transfer Rules" section of the standard).
+-- @param _from    Source address
+-- @param _to      Target address
+-- @param _ids     IDs of each token type (order and length must match _values array)
+-- @param _values  Transfer amounts per token type (order and length must match _ids array)
+-- @param _data    Additional data with no specified format, MUST be sent unaltered in call to the `ERC1155TokenReceiver` hook(s) on `_to`
+--
+-- function safeBatchTransferFrom(address _from, address _to, uint256[] calldata _ids, uint256[] calldata _values, bytes calldata _data) external;
+safeBatchTransferFromABI :: Compiler [EvmOpcode]
+safeBatchTransferFromABI = return
+  [ JUMPDESTFROM "safeBatchTransferFrom_method"
+
+  , push 0x04 -- _from
+  , CALLDATALOAD
+
+  , push 0x24 -- _to
+  , CALLDATALOAD
+
+    -- Check `_to` != 0.
+  , DUP1
+  , ISZERO
+  , JUMPITO "global_throw"
+
+    -- Check `len(_ids)` == `len(_values)`
+  , push 0xa4 -- len(_ids)  -- TODO: Explain why the extra 0x60 are necessary here.
+  , CALLDATALOAD
+
+    -- Stack: [ len(_ids), _to, _from, ... ]
+
+    -- Calculate position of `uint256[] _values` in CALLDATA.
+    -- MUL and ADD are safe here since we can be sure input is >= 0 and very low.
+  , DUP1
+  , push 0x20
+  , MUL
+    -- Stack: [ len(_ids) * 0x20, len(_ids), _to, _from, ... ]
+  , push 0xc4  -- sizeof(signature) + sizeof(_from) + sizeof(_to) + size(length-indication-of-ids) =  0x04 + 0x20 + 0x20 + 0x20      + 0x60  -- TODO: Explain 0x60.
+  , ADD
+    -- addr(_values) := len(_ids) * 0x20 + 0x64
+    -- Stack: [ addr(_values), len(_ids), _to, _from, ... ]
+  , DUP1         -- addr(_values)
+  , CALLDATALOAD -- len(_values)
+    -- Stack: [ len(_values), addr(_values), len(_ids), _to, _from, ... ]
+
+  , DUP3
+    -- Stack: [ len(_ids), len(_values), addr(_values), len(_ids), _to, _from, ... ]
+  , SUB -- EVM_EQ, ISZERO
+  , JUMPITO "global_throw"
+
+    -- Stack: [ addr(_values), len(_ids), _to, _from, ... ]
+
+    -- loop over all ids
+  , SWAP1
+  , push 0x00
+  -- Stack: [ i, len(_ids), addr(_values), _to, _from, ... ]
+  , JUMPDESTFROM "safeBatchTransferFrom_loop_start"
+
+    -- loop condition begin
+    , DUP2
+    , DUP2
+    , EVM_EQ
+    , JUMPITO "safeBatchTransferFrom_loop_end" -- verify that i < len(ids)
+    -- loop body begin
+    -- Stack: [ i, len(_ids), addr(_values), _to, _from, ... ]
+
+    -- push value for this iteration
+    , DUP1
+    , push 0x01
+    , ADD
+    , push 0x20
+    , MUL
+    -- Stack: [ offset = 0x20 * (i + 1), i, len(_ids), addr(_values), _to, _from, ... ]
+
+    , DUP1 -- offset
+    , DUP5 -- addr(_values)
+    -- Stack: [ addr(_values), offset = 0x20 * (i + 1), offset, i, len(_ids), addr(_values), _to, _from, ... ]
+
+    , ADD
+    -- Stack: [ addr(_values) + offset, offset, i, len(_ids), addr(_values), _to, _from, ... ]
+
+    , CALLDATALOAD
+    -- Stack: [ _values[i], offset, i, len(_ids), addr(_values), _to, _from, ... ]
+
+    , DUP7 -- _from
+    , DUP7 -- _to
+    -- Stack: [ _to, _from, _values[i], offset, i, len(_ids), addr(_values), _to, _from, ... ]
+
+    , DUP4 -- offset
+    , push 0xa4  -- TODO: Explain the extra 0x60.
+    , ADD
+    , CALLDATALOAD
+    -- Stack: [ _ids[i], _to, _from, _values[i], offset, i, len(_ids), addr(_values), _to, _from, ... ]
+    , FUNCALL "safeTransferFrom_subroutine"
+    , POP
+    -- Stack: [ i, len(_ids), addr(_values), _to, _from, ... ]
+    , push 0x01
+    , ADD
+    -- Stack: [ i + 1, len(_ids), addr(_values), _to, _from, ... ]
+
+    , JUMPTO "safeBatchTransferFrom_loop_start"
+
+  , JUMPDESTFROM "safeBatchTransferFrom_loop_end"
+
+    -- TODO: Loop over _ids / _values
+  , STOP
+  ]
 
 -- @notice Enable or disable approval for a third party ("operator") to manage all of the caller's tokens.
 -- @dev MUST emit the ApprovalForAll event on success.
