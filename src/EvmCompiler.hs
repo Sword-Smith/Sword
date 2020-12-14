@@ -284,16 +284,8 @@ jumpTable =
   , PUSH32 (0xffffffff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , AND -- stack now holds a single item: solcc methodID from the rom.
 
-  , DUP1
-  , PUSH32 (functionSignature "balanceOf(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-  , EVM_EQ
-  , JUMPITO "balanceOf_method"
-
-  , DUP1
-  , PUSH32 (functionSignature "balanceOfBatch(address[],uint256[])", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-  , EVM_EQ
-  , JUMPITO "balanceOfBatch_method"
-
+  -- All methods below are sorted from most to least used with methods changing state placed first.
+  -- This is done to minimize gas costs.
   , DUP1
   , PUSH32 (functionSignature "safeTransferFrom(address,address,uint256,uint256,bytes)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
@@ -310,18 +302,30 @@ jumpTable =
   , JUMPITO "setApprovalForAll_method"
 
   , DUP1
-  , PUSH32 (functionSignature "isApprovedForAll(address,address)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-  , EVM_EQ
-  , JUMPITO "isApprovedForAll_method"
-
-  , DUP1
   , PUSH32 (functionSignature "pay()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "pay_method"
 
-  -- the three remaining methods each take an argument,
-  -- and it must be strictly positive
-  -- this snippet puts the arg. on the stack, and checks if its zero
+  -- The next three functions will usually be called as read-only functions (no tx on blockchain)
+  -- so it makes sense to place them later in the jump table as their invocations do not cost gas.
+  , DUP1
+  , PUSH32 (functionSignature "balanceOf(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "balanceOf_method"
+
+  , DUP1
+  , PUSH32 (functionSignature "balanceOfBatch(address[],uint256[])", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "balanceOfBatch_method"
+
+  , DUP1
+  , PUSH32 (functionSignature "isApprovedForAll(address,address)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "isApprovedForAll_method"
+
+  -- the three remaining methods each take exactly one argument
+  -- which must be strictly positive.
+  -- so we make the check for all methods here to reduce contract size.
   , PUSH1 0x4
   , CALLDATALOAD
   , push 0
@@ -329,19 +333,21 @@ jumpTable =
   , ISZERO
   , JUMPITO "global_throw"
 
+  -- The following methods are, like above, sorted from what is (assumed to be)
+  -- most-used to least used.
+  , DUP1
+  , PUSH32 (functionSignature "mint(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "mint_method"
+
   , DUP1
   , PUSH32 (functionSignature "activate(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "activate_method"
 
-  , DUP1
   , PUSH32 (functionSignature "burn(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "burn_method"
-
-  , PUSH32 (functionSignature "mint(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-  , EVM_EQ
-  , JUMPITO "mint_method"
 
   , JUMPDESTFROM "global_throw"
   , push 0
