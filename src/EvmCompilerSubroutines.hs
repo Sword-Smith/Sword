@@ -40,7 +40,6 @@ subroutines :: [EvmOpcode]
 subroutines = concat
   [ transferSubroutine
   , transferFromSubroutine
-  , mintSubroutine -- TODO: Deprecate.
   , burnSubroutine
   , getBalanceSubroutine
   , setBalanceSubroutine
@@ -124,48 +123,6 @@ transferSubroutine =
             , MSTORE -- store amount in mem
             ]
         pushInSizeT = [ push 0x44 ]
-
--- TODO: ERC1155: When minting a party token, instead of making external contract calls, create an entry in an internal Party Token map.
-mintSubroutine :: [EvmOpcode]
-mintSubroutine = concat [
-    funStartMint,
-    storeFunctionSignatureMint,
-    -- storeArgumentsMint This is done at the call site.
-    copyMethodArgsToMem,
-    pushOutSize,
-    pushOutOffset,
-    pushInSizeMint,
-    pushInOffset,
-    pushValue,
-    pushCalleeAddress,
-    pushGasAmount,
-    callInstruction,
-    checkExitCode,
-    removeExtraArg, -- FIXME: What's this?
-    getReturnValueFromMemory,
-    funEnd ]
-        where
-        pushCalleeAddress  = [ DUP6 ]
-        pushInSizeMint = [ push 0x44 ]
-        funStartMint = [ FUNSTART "mint_subroutine" 1 ]
-        storeFunctionSignatureMint =
-          [ PUSH32 (functionSignature "mint(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-          , push 0
-          , MSTORE
-          ]
-        copyMethodArgsToMem = -- mint(amount,msg.sender)
-            -- These values comes from the Solidity calling convention
-            let memOffset = 0x20 + solcSigSize
-                romOffset = solcSigSize
-                size      = 0x20 -- bytes
-            in
-            [ push size        -- amount
-            , push romOffset
-            , push memOffset
-            , CALLDATACOPY
-            , CALLER           -- msg.sender
-            , push 0x4
-            , MSTORE ]
 
 -- | Reduce a Party Token with some ID by some amount.
 --
