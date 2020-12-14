@@ -129,6 +129,7 @@ evmCompile intermediateContract =
       , burnABI
       , payABI
       , balanceOfABI
+      , balanceOfBatchABI
       , safeTransferFromABI
       , safeBatchTransferFromABI
       , setApprovalForAllABI
@@ -287,6 +288,11 @@ jumpTable =
   , PUSH32 (functionSignature "balanceOf(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "balanceOf_method"
+
+  , DUP1
+  , PUSH32 (functionSignature "balanceOfBatch(address[],uint256[])", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "balanceOfBatch_method"
 
   , DUP1
   , PUSH32 (functionSignature "safeTransferFrom(address,address,uint256,uint256,bytes)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
@@ -775,6 +781,114 @@ balanceOfABI =
       , push 0x20
       , push 0x00
       ]
+
+{-
+    /**
+        @notice Get the balance of multiple account/token pairs
+        @param _owners The addresses of the token holders
+        @param _ids    ID of the tokens
+        @return        The _owner's balance of the token types requested (i.e. balance for each (owner, id) pair)
+     */
+    function balanceOfBatch(address[] calldata _owners, uint256[] calldata _ids) external view returns (uint256[] memory);
+-}
+
+balanceOfBatchABI :: Compiler [EvmOpcode]
+balanceOfBatchABI = return
+  [ JUMPDESTFROM "balanceOfBatch_method"
+
+    -- Check that `len(_owners) == len(_ids)`.
+  , push 0x04
+  , CALLDATALOAD  -- [ addr(_owners) ]
+  , push 0x04
+  , ADD
+
+  , push 0x24
+  , CALLDATALOAD  -- [ addr(_ids), addr(_owners) ]
+  , push 0x04
+  , ADD
+
+  , DUP2
+  , CALLDATALOAD  -- [ len(_owners), addr(_ids), addr(_owners) ]
+  , DUP2
+  , CALLDATALOAD  -- [ len(_ids), len(_owners), addr(_ids), addr(_owners) ]
+  , SUB           -- [ len(_ids) - len(_owners), addr(_ids), addr(_owners) ]
+  , JUMPITO "global_throw"
+  -- , POP  -- TODO: Use JUMPITO again.
+
+    -- TODO: Name this constant.
+  , push (0x100 + 0x20) -- [ Maddr(_result), addr(_ids), addr(_owners) ]
+
+    -- for (i = 0; i != len(_ids); i++)
+  , DUP2
+  , CALLDATALOAD  -- [ len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+  , push 0x00     -- [ i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+
+  , JUMPDESTFROM "balanceOfBatch_loop_start"
+        -- [ i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+        -- if (i == len(_ids)) goto end;
+      , DUP2
+      , DUP2
+      , EVM_EQ
+      , JUMPITO "balanceOfBatch_loop_end"
+
+        -- TODO: _result[i] = balanceOf(_owners[i], _ids[i])
+
+        -- Calculate offset into `_owners` and `_ids`
+        -- The offset is `0x20 * i + 0x20`:
+        --   0x20 * i  =  index
+        --   0x20      =  sizeof(len(_ids))
+      , DUP1
+      , push 0x20
+      , MUL
+      , push 0x20
+      , ADD          -- [ offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+
+        -- _owners[i]
+      , DUP6         -- [ addr(_owners), offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , DUP2         -- [ offset, addr(_owners), offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , ADD          -- [ addr(_owners[i]), offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , CALLDATALOAD -- [ _owners[i], offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+
+        -- _ids[i]
+      , DUP6         -- [ addr(_ids), _owners[i], offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , DUP3         -- [ offset, addr(_ids), _owners[i], offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , ADD          -- [ addr(_ids[i]), _owners[i], offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , CALLDATALOAD -- [ _ids[i], _owners[i], offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+
+        -- balance
+      , FUNCALL "getBalance_subroutine"
+                     -- [ balance, offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , DUP5         -- [ Maddr(_result), balance, offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , DUP3         -- [ offset, Maddr(_result), balance, offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , ADD          -- [ Maddr(_result[i]), balance, offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , MSTORE       -- [ offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+
+      , POP
+      , push 0x01
+      , ADD          -- [ i + 1, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , JUMPTO "balanceOfBatch_loop_start"
+
+  , JUMPDESTFROM "balanceOfBatch_loop_end"
+
+    -- len(_result) := len(_ids) + 2
+  -- Store length of array (i = length now)
+  , push $ 0x100 + 0x20
+  , MSTORE
+
+  , SWAP3            -- [ addr(_owners), Maddr(_result), addr(_ids), len(_ids) ]
+  , POP, POP, POP    -- [ len(_ids) ]
+  , push 0x02
+  , ADD              -- [ len(_ids) + 2 ]
+  , push 0x20
+  , MUL              -- [ (len(_ids) + 2) * 0x20 ]
+  , push 0x100       -- [ Maddr(_result) - 0x20, (len(_ids) + 2) * 0x20 ]
+
+  , push 0x20        -- [ 0x20, Maddr(_result) - 0x20, len(_result) ]
+  , DUP2             -- [ Maddr(_result) - 0x20, 0x20, Maddr(_result) - 0x20, len(_result) ]
+  , MSTORE           -- [ Maddr(_result) - 0x20, len(_result) ]
+
+  , RETURN
+  ]
 
 -- | ERC1155 method
 --
