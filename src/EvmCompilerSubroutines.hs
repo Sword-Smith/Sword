@@ -50,17 +50,28 @@ subroutines = concat
   , safeSubSubroutine
   ]
 
+pushOutSize :: [EvmOpcode]
 pushOutSize              = [ push 0x20 ]
+pushOutOffset :: [EvmOpcode]
 pushOutOffset            = [ push 0x0 ]
+pushInOffset :: [EvmOpcode]
 pushInOffset             = [ push 0x0 ]
+pushValue :: [EvmOpcode]
 pushValue                = [ push 0x0 ]
+pushCalleeAddress :: [EvmOpcode]
 pushCalleeAddress        = [ DUP6 ]
+pushGasAmount :: [EvmOpcode]
 pushGasAmount            = [ push 0x32 , GAS , SUB ]
+callInstruction :: [EvmOpcode]
 callInstruction          = [ CALL ]
+checkExitCode :: [EvmOpcode]
 checkExitCode            = [ ISZERO , JUMPITO "global_throw" ]
+removeExtraArg :: [EvmOpcode]
 removeExtraArg           = [ POP ]
+getReturnValueFromMemory :: [EvmOpcode]
 getReturnValueFromMemory = [ push 0x0 , MLOAD ]
 
+transferFromSubroutine :: [EvmOpcode]
 transferFromSubroutine =
   funStartTF
   ++ storeFunctionSignatureTransferFrom
@@ -94,6 +105,7 @@ transferFromSubroutine =
             ]
         pushInSizeTF             = [ push 0x64 ]
 
+transferSubroutine :: [EvmOpcode]
 transferSubroutine =
   funStartT
   ++ storeFunctionSignatureTransfer
