@@ -61,7 +61,6 @@ callInstruction          = [ CALL ]
 checkExitCode            = [ ISZERO , JUMPITO "global_throw" ]
 removeExtraArg           = [ POP ]
 getReturnValueFromMemory = [ push 0x0 , MLOAD ]
-funEnd                   = [FUNRETURN]
 
 transferFromSubroutine =
   funStartTF
@@ -78,7 +77,7 @@ transferFromSubroutine =
   ++ checkExitCode
   ++ removeExtraArg
   ++ getReturnValueFromMemory
-  ++ funEnd
+  ++ [FUNRETURN]
       where
         funStartTF              = [ FUNSTART "transferFrom_subroutine" 3 ]
         storeFunctionSignatureTransferFrom  =
@@ -111,7 +110,7 @@ transferSubroutine =
   ++ checkExitCode
   ++ removeExtraArg
   ++ getReturnValueFromMemory
-  ++ funEnd
+  ++ [FUNRETURN]
       where
         funStartT = [ FUNSTART "transfer_subroutine" 3 ]
         storeFunctionSignatureTransfer =
