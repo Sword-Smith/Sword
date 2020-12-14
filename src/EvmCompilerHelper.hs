@@ -94,7 +94,7 @@ string2w256 str =
   let
     showHex' c = showHex c "" -- partial evaluation of showHex
     keyArg = concatMap (showHex' . ord) str -- get it to hex repr as string
-    formatted = "0x" ++ keyArg ++ (replicate (64 - 2*(length str)) '0')
+    formatted = "0x" ++ keyArg ++ replicate (64 - 2*length str) '0'
   in
     hexString2w256 formatted
 
@@ -122,7 +122,7 @@ getFunctionCallEvm calleeAddress funSig callArgs inMemOffset outMemOffset outSiz
                                     , MSTORE ]
     pushOutSize       = [PUSH1 outSize]
     pushOutOffset     = [PUSH1 outMemOffset]
-    pushInSize        = [PUSH1 (0x4 + 0x20 * (fromIntegral (length callArgs)))]
+    pushInSize        = [PUSH1 (0x4 + 0x20 * fromIntegral (length callArgs))]
     pushInOffset      = [PUSH1 inMemOffset]
     pushValue         = [PUSH1 0x0]
     pushCalleeAddress = [PUSH32 $ address2w256 calleeAddress]
@@ -135,7 +135,7 @@ getFunctionCallEvm calleeAddress funSig callArgs inMemOffset outMemOffset outSiz
       where
         storeArgumentsH [] _ = []
         storeArgumentsH (arg:args) counter =
-          storeArgumentsHH arg ++ (storeArgumentsH args (counter + 1))
+          storeArgumentsHH arg ++ storeArgumentsH args (counter + 1)
           where
             storeArgumentsHH :: CallArgument -> [EvmOpcode]
             storeArgumentsHH (Word256 w256) = [ PUSH32 w256, PUSH1 (inMemOffset + 0x4 + counter * 0x20), MSTORE ]
@@ -227,14 +227,6 @@ ppEvm instruction = case instruction of
     THROW        -> "fe"
     REVERT       -> "fd"
     instr        -> traceFaultyInstruction instr
-{-
-    FUNSTART _ _ -> undefined
-    FUNSTARTA _  -> undefined
-    FUNCALL _    -> undefined
-    FUNRETURN    -> undefined
-    JUMPTO _     -> undefined
-    JUMPITO _    -> undefined
--}
 
 push :: Integer -> EvmOpcode
 push = PUSHN . words'
@@ -254,7 +246,7 @@ integerToWord8 i = integerToWord8 (i `div` 256) ++ [fromIntegral $ i `mod` 256]
 push4BigEnd :: Integer -> [EvmOpcode]
 push4BigEnd i =
   [ push i
-  , push (0xe0)
+  , push 0xe0
   , push 2
   , EXP
   , MUL
@@ -266,8 +258,6 @@ traceFaultyInstruction :: EvmOpcode -> String
 traceFaultyInstruction instruction | trace ("ppEvm: " ++ show instruction) False = undefined
 
 
-getMethodID = functionSignature
-
 functionSignature :: String -> Word32
 functionSignature funDecl = read $ "0x" ++ Data.List.take 8 (keccak256 funDecl)
 
@@ -275,23 +265,10 @@ eventSignature :: String -> Word256
 eventSignature eventDecl = hexString2w256 $ "0x" ++ keccak256 eventDecl
 
 -- Emits a string
+emitEvent :: String -> [EvmOpcode]
 emitEvent eventName =
           [ PUSH32 $ eventSignature eventName
           , push 0
           , push 0
           , LOG1
           ]
-
--- bits
-addressSizeBits = 160
-wordSizeBits    = 256
-solcSigSize     =   4
-byteSize        =   8
-
--- Layout assuming 256bit args:
---
---              0x4  0x24 0x44
--- [solcSigSize|arg0|arg1|arg2|..|argN]
-argNByteOffset n = solcSigSize + (n * wordSizeBits `div` byteSize)
-
-type FunDecl = String
