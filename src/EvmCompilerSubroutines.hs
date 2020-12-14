@@ -244,27 +244,17 @@ getApprovedForAllSubroutine =
 
 -- | Transfer tokens of ID from one one account to another
 --
+-- Note: This method does not verify that CALLER == from || CALLER in operators,
+-- i.e., it does not verify that CALLER has been approved to withdraw from the
+-- _from account. This check must be done by the caller function.
 -- Stack before FUNSTART: [ return address, _id, _to, _from, _value, ... ]
 -- Stack after FUNSTART: [ _value, _id, _to, _from, return address, ... ]
 safeTransferFromSubroutine :: [EvmOpcode]
 safeTransferFromSubroutine =
   [
     FUNSTART "safeTransferFrom_subroutine" 4
-      -- Verify that CALLER == _from || CALLER in operators
-    , DUP4  --  _from
-    , CALLER
-    , EVM_EQ
-    , JUMPITO "safeTransferFrom_continue"
-
-    -- _from != CALLER, verify that CALLER is approved as operator
-    , DUP4 -- _from
-    , CALLER
-    , FUNCALL "getApprovedForAll_subroutine"
-    , ISZERO
-    , JUMPITO "global_throw" -- throw iff CALLER != _from && CALLER not in operators
 
       -- Check that balance of _id is sufficient for transferring _value.
-    , JUMPDESTFROM "safeTransferFrom_continue"
     , DUP4 -- _from
     , DUP3 -- _id
     , FUNCALL "getBalance_subroutine"

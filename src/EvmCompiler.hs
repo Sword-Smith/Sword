@@ -918,6 +918,20 @@ safeTransferFromABI =
     , push 0x04  --  _from
     , CALLDATALOAD
 
+    -- Verify that CALLER == _from || CALLER in operators
+    , DUP1  --  _from
+    , CALLER
+    , EVM_EQ
+    , JUMPITO "safeTransferFrom_continue"
+
+    -- _from != CALLER, verify that CALLER is approved as operator
+    , DUP1 -- _from
+    , CALLER
+    , FUNCALL "getApprovedForAll_subroutine"
+    , ISZERO
+    , JUMPITO "global_throw" -- throw iff CALLER != _from && CALLER not in operators
+    , JUMPDESTFROM "safeTransferFrom_continue"
+
     , push 0x24  -- _to
     , CALLDATALOAD
 
@@ -960,6 +974,20 @@ safeBatchTransferFromABI = return
 
   , push 0x04 -- _from
   , CALLDATALOAD
+
+  -- Verify that CALLER == _from || CALLER in operators
+  , DUP1  --  _from
+  , CALLER
+  , EVM_EQ
+  , JUMPITO "safeBatchTransferFrom_continue"
+
+  -- _from != CALLER, verify that CALLER is approved as operator
+  , DUP1 -- _from
+  , CALLER
+  , FUNCALL "getApprovedForAll_subroutine"
+  , ISZERO
+  , JUMPITO "global_throw" -- throw iff CALLER != _from && CALLER not in operators
+  , JUMPDESTFROM "safeBatchTransferFrom_continue"
 
   , push 0x24 -- _to
   , CALLDATALOAD
