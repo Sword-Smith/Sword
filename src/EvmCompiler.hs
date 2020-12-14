@@ -849,26 +849,22 @@ safeBatchTransferFromABI = return
   , ISZERO
   , JUMPITO "global_throw"
 
-    -- Check `len(_ids)` == `len(_values)`
-  , push 0xa4 -- len(_ids)  -- TODO: Explain why the extra 0x60 are necessary here.
-  , CALLDATALOAD
+   -- Check `len(_ids)` == `len(_values)`
+   , push 0x44
+   , CALLDATALOAD
+   , push 0x04
+   , ADD -- addr(_ids)
+   , CALLDATALOAD -- len(_ids)
 
-    -- Stack: [ len(_ids), _to, _from, ... ]
+   -- Stack: [ len(_ids), _to, _from, ... ]
+   , push 0x64
+   , CALLDATALOAD
+   , push 0x04
+   , ADD
+   , DUP1 -- addr(_values)
+   , CALLDATALOAD -- len(_values)
 
-    -- Calculate position of `uint256[] _values` in CALLDATA.
-    -- MUL and ADD are safe here since we can be sure input is >= 0 and very low.
-  , DUP1
-  , push 0x20
-  , MUL
-    -- Stack: [ len(_ids) * 0x20, len(_ids), _to, _from, ... ]
-  , push 0xc4  -- sizeof(signature) + sizeof(_from) + sizeof(_to) + size(length-indication-of-ids) =  0x04 + 0x20 + 0x20 + 0x20      + 0x60  -- TODO: Explain 0x60.
-  , ADD
-    -- addr(_values) := len(_ids) * 0x20 + 0x64
-    -- Stack: [ addr(_values), len(_ids), _to, _from, ... ]
-  , DUP1         -- addr(_values)
-  , CALLDATALOAD -- len(_values)
     -- Stack: [ len(_values), addr(_values), len(_ids), _to, _from, ... ]
-
   , DUP3
     -- Stack: [ len(_ids), len(_values), addr(_values), len(_ids), _to, _from, ... ]
   , SUB -- EVM_EQ, ISZERO
@@ -913,8 +909,11 @@ safeBatchTransferFromABI = return
     -- Stack: [ _to, _from, _values[i], offset, i, len(_ids), addr(_values), _to, _from, ... ]
 
     , DUP4 -- offset
-    , push 0xa4  -- TODO: Explain the extra 0x60.
-    , ADD
+    , push 0x44
+    , CALLDATALOAD
+    , push 0x04
+    , ADD -- addr(_ids)
+    , ADD -- addr(_ids[i])
     , CALLDATALOAD
     -- Stack: [ _ids[i], _to, _from, _values[i], offset, i, len(_ids), addr(_values), _to, _from, ... ]
     , FUNCALL "safeTransferFrom_subroutine"
