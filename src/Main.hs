@@ -20,7 +20,8 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
-{-# LANGUAGE OverloadedStrings, DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings, DeriveGeneric, RecordWildCards #-}
+
 module Main where
 
 import EvmCompiler as EVMC
@@ -77,8 +78,21 @@ data AbiEventDefinition = AbiEventDefinition
   { _eventName      :: String
   , _eventType      :: String
   , _eventAnonymous :: Bool
-  , _eventInputs    :: [AbiVarDefinition]
+  , _eventInputs    :: [AbiEventParam]
   } deriving (Generic, Show)
+
+data AbiEventParam = AbiEventParam
+  { _eventParamName    :: String
+  , _eventParamType    :: String
+  , _eventParamIndexed :: Bool
+  } deriving (Generic, Show)
+
+instance ToJSON AbiEventParam where
+  toJSON AbiEventParam{..} = object
+    [ "name"    .= _eventParamName
+    , "type"    .= _eventParamType
+    , "indexed" .= _eventParamIndexed
+    ]
 
 instance ToJSON AbiEventDefinition where
   toJSON (AbiEventDefinition n t a i) =
@@ -157,13 +171,33 @@ getAbiDefinition =
     mintedE     = AbiEventDefinition    "Minted"      "event" False []
     burntE      = AbiEventDefinition    "Burnt"       "event" False []
     paidE       = AbiEventDefinition    "Paid"        "event" False []
+
+    -- ERC1155 events
+    --
+    -- event TransferSingle(
+    --   address indexed _operator,
+    --   address indexed _from,
+    --   address indexed _to,
+    --   uint256 _id,
+    --   uint256 _value
+    -- );
+
+    transferSingleEvent = AbiEventDefinition "TransferSingle" "event" False
+      [ AbiEventParam "_operator" "address" True
+      , AbiEventParam "_from"     "address" True
+      , AbiEventParam "_to"       "address" True
+      , AbiEventParam "_id"       "uint256" False
+      , AbiEventParam "_value"    "uint256" False
+      ]
   in
     AbiDefinition constructor
       [ {- DC -} execute, pay, activate
       , {- ? -} mint, burn -- TODO: Find better names to avoid confusion about Token interfaces.
       , {- ERC1155 -} balanceOf, balanceOfBatch, safeTransferFrom, safeBatchTransferFrom, setApprovalForAll, isApprovedForAll
       ]
-      [ activatedE, mintedE, burntE, paidE ] -- TODO: Add transfer event!
+      [ activatedE, mintedE, burntE, paidE
+      , {- ERC1155 -} transferSingleEvent
+      ]
 
 -- This function writes an ABI definition of the contract.
 writeAbiDef :: String -> String -> IO()
