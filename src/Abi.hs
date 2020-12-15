@@ -172,14 +172,6 @@ getAbiDefinition =
     --   uint256 _value
     -- );
 
-    transferSingleEvent = AbiEventDefinition "TransferSingle" "event" False
-      [ AbiEventParam "_operator" "address" True
-      , AbiEventParam "_from"     "address" True
-      , AbiEventParam "_to"       "address" True
-      , AbiEventParam "_id"       "uint256" False
-      , AbiEventParam "_value"    "uint256" False
-      ]
-
   in
     AbiDefinition constructor
       [ {- DC -} execute, pay, activate
@@ -189,3 +181,12 @@ getAbiDefinition =
       [ activatedE, mintedE, burntE, paidE
       , {- ERC1155 -} transferSingleEvent
       ]
+
+transferSingleEvent :: AbiEventDefinition
+transferSingleEvent = AbiEventDefinition "TransferSingle" "event" False
+  [ AbiEventParam "_operator" "address" True
+  , AbiEventParam "_from"     "address" True
+  , AbiEventParam "_to"       "address" True
+  , AbiEventParam "_id"       "uint256" False
+  , AbiEventParam "_value"    "uint256" False
+  ]
