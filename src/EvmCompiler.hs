@@ -529,7 +529,7 @@ compileExp e = case e of
 
   MultExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [FUNCALL "safeMul_subroutine"]
   DiviExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> do
-    label_skip <- newLabel "skip"
+    label_skip <- newLabel "divi_skip"
     return  [ DUP2
             , ISZERO
             , JUMPITO "global_throw"
