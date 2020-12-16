@@ -342,6 +342,9 @@ safeAddSubroutine =
 -- | Perform safe MUL.
 --
 --
+-- Stack before FUNSTART: [ return address, b, a, ... ]
+-- Stack after FUNSTART: [ a, b, return address, ... ]
+--
 -- Pre stack: [ a, b, return address, ... ]
 -- Post stack: [ a * b, ... ]
 safeMulSubroutine :: [EvmOpcode]
