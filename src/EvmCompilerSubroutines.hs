@@ -302,6 +302,10 @@ safeTransferFromSubroutine =
     , JUMP
   ]
 
+
+-- All four safe arithmetic methods were implemented by Ulrik. They were translated by hand from
+-- https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/math/SignedSafeMath.sol
+
 -- pre: S = [ a, b, ... ]
 safeAddSubroutine :: [EvmOpcode]
 safeAddSubroutine =
@@ -337,8 +341,6 @@ safeAddSubroutine =
 
 -- | Perform safe MUL.
 --
--- This subroutine was implemented by Ulrik. It was translated by hand from
--- https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/math/SignedSafeMath.sol
 --
 -- Pre stack: [ a, b, return address, ... ]
 -- Post stack: [ a * b, ... ]
