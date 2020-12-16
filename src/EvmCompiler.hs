@@ -907,7 +907,6 @@ balanceOfBatchABI = return
 --   bytes   _data
 -- )
 --
--- TODO: Revert if `_to` is 0.
 safeTransferFromABI :: Compiler [EvmOpcode]
 safeTransferFromABI =
   return
@@ -1099,8 +1098,6 @@ safeBatchTransferFromABI = return
     , JUMPTO "safeBatchTransferFrom_loop_start"
 
   , JUMPDESTFROM "safeBatchTransferFrom_loop_end"
-
-    -- TODO: Loop over _ids / _values
   , STOP
   ]
 
