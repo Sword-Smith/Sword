@@ -104,7 +104,7 @@ instance ToJSON AbiDefinition where
       Nothing -> toJSONList functions
       -- DEVFIX: THIS NEEDS TO HAVE THE CONSTRUCTOR ADDED!!!
       --Just c  -> toJSON $ ( [(toJSON c), (toJSONList functions)])
-      Just c -> toJSON $ map toJSON functions ++ map toJSON events
+      Just _c -> toJSON $ map toJSON functions ++ map toJSON events
 
 -- What kind of type should this take as argument?
 -- DEVQ: Perhaps this should be calculated in EvmCompile?

@@ -21,12 +21,13 @@
 -- SOFTWARE.
 
 {-# LANGUAGE RecordWildCards #-}
+{-# OPTIONS_GHC -Wno-type-defaults #-} -- TODO: Replace Word256 and remove this.
 
 module EvmCompilerHelper where
 
 import DaggerLanguageDefinition
 import EvmLanguageDefinition
-import Abi (transferSingleEvent, AbiEventDefinition(..), AbiEventParam(..))
+import Abi (AbiEventDefinition(..), AbiEventParam(..))
 
 import Crypto.Hash
 import Data.ByteString (ByteString)
@@ -36,7 +37,6 @@ import Data.Word
 import Data.List
 import Numeric (showHex)
 import Text.Printf (printf)
-import Debug.Trace
 
 -- Given a list of things, t a, and a monadic function we map across that
 -- returns a list of values inside a monad (e.g. Compiler [EvmOpcode]),
@@ -231,7 +231,7 @@ ppEvm instruction = case instruction of
     SELFDESTRUCT -> "ff"
     THROW        -> "fe"
     REVERT       -> "fd"
-    instr        -> traceFaultyInstruction instr
+    instr        -> error ("ppEvm: Unknown instruction: " ++ show instr)
 
 push :: Integer -> EvmOpcode
 push = PUSHN . words'
@@ -256,12 +256,6 @@ push4BigEnd i =
   , EXP
   , MUL
   ]
-
-
--- PMDish https://wiki.haskell.org/Debugging#Printf_and_friends
-traceFaultyInstruction :: EvmOpcode -> String
-traceFaultyInstruction instruction | trace ("ppEvm: " ++ show instruction) False = undefined
-
 
 functionSignature :: String -> Word32
 functionSignature funDecl = read $ "0x" ++ Data.List.take 8 (keccak256 funDecl)

@@ -20,6 +20,8 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
+{-# LANGUAGE RecordWildCards #-}
+
 module EvmCompiler where
 
 import EvmCompilerHelper
@@ -35,7 +37,6 @@ import Control.Monad.Reader
 
 import Data.List
 import qualified Data.Map.Strict as Map
-import Data.Word
 
 -- State monad definitions
 data CompileEnv =
@@ -187,9 +188,9 @@ transformPseudoInstructions = concatMap transformH
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
 constructor :: IntermediateContract -> [EvmOpcode]
-constructor (IntermediateContract parties tcs _ _) =
+constructor IntermediateContract{..} =
   checkNoValue "Constructor_Header"
-  ++ saveParties parties
+  ++ saveParties getParties
 
 -- Checks that no value (ether) is sent when executing contract method
 -- Used in both contract header and in constructor
@@ -209,7 +210,7 @@ saveTimestampToStorage = [ TIMESTAMP
                          , SSTORE ]
 
 saveParties :: [Party] -> [EvmOpcode]
-saveParties parties = savePartiesH $ zip [toInteger 0..] parties
+saveParties parties = savePartiesH $ zip [0..] parties
 
 savePartiesH :: [(PartyIndex, Party)] -> [EvmOpcode]
 savePartiesH ((partyIndex, p):parties) = savePartyToStorage partyIndex p ++ savePartiesH parties
@@ -378,7 +379,7 @@ payABI = do
 -- memExp has not yet been determined. The value 11 would be an invalid
 -- value, 01 would be false, and 10 true.
 executeMemExp :: IMemExp -> [EvmOpcode]
-executeMemExp (IMemExp beginTime endTime count exp) =
+executeMemExp (IMemExp beginTime endTime count expr) =
   let
     checkIfExpShouldBeEvaluated =
       let
@@ -426,7 +427,7 @@ executeMemExp (IMemExp beginTime endTime count exp) =
       in checkIfMemExpIsTrueOrFalse ++ checkIfTimeHasStarted ++ checkIfTimeHasPassed ++ setToFalse
 
     jumpDestEvaluateExp = [ JUMPDESTFROM $ "memExp_evaluate" ++ show count ]
-    evaulateExpression  = runExprCompiler (CompileEnv 0 count 0x0 "mem_exp") exp
+    evaulateExpression  = runExprCompiler (CompileEnv 0 count 0x0 "mem_exp") expr
 
      -- eval to false but time not run out: don't set memdibit
     checkEvalResult     = [ ISZERO
