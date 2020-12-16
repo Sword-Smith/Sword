@@ -28,6 +28,7 @@ import EvmCompilerSubroutines (subroutines)
 import IntermediateLanguageDefinition
 import DaggerLanguageDefinition hiding (Transfer)
 import IntermediateCompiler (emptyContract)
+import Abi (transferSingleEvent)
 
 import Control.Monad.State
 import Control.Monad.Reader
@@ -946,8 +947,32 @@ safeTransferFromABI =
     , JUMPITO "global_throw"
 
     -- Call subroutine for transferring tokens, pops 4, pushes 0
+    , DUP4
+    , DUP4
+    , DUP4
+    , DUP4
     , FUNCALL "safeTransferFrom_subroutine"
-      -- TODO: Emit signal
+
+      -- Emit TransferSingle(address,address,address,uint256,uint256).
+
+      -- Place non-indexed event parameters (_id, _value) in memory:
+      -- Stack: [ _id, _to, _from, _value, ... ]
+    , push 0x00
+    , MSTORE    -- Stack: [ _to, _from, _value, ... ]
+    , SWAP2     -- Stack: [ _value, _from, _to, ... ]
+    , push 0x20
+    , MSTORE    -- Stack: [ _from, _to, ... ]
+
+      -- Place indexed event parameters on stack: event signature, _operator, _from, _to
+
+    , CALLER    -- Stack: [ _operator, _from, _to, ... ]
+    , PUSH32 (eventSignatureHash transferSingleEvent)
+                -- Stack: [ SHA3("TransferSingle(...)", _operator, _from, _to, ... ]
+
+      -- Place memory range of non-indexed parameters on top
+    , push 0x40
+    , push 0x00
+    , logEvent transferSingleEvent
 
     , STOP
     ]

@@ -20,10 +20,13 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
+{-# LANGUAGE RecordWildCards #-}
+
 module EvmCompilerHelper where
 
 import DaggerLanguageDefinition
 import EvmLanguageDefinition
+import Abi (transferSingleEvent, AbiEventDefinition(..), AbiEventParam(..))
 
 import Crypto.Hash
 import Data.ByteString (ByteString)
@@ -218,6 +221,8 @@ ppEvm instruction = case instruction of
     LOG0         -> "a0"
     LOG1         -> "a1"
     LOG2         -> "a2"
+    LOG3         -> "a3"
+    LOG4         -> "a4"
     CREATE       -> "f0"
     CALL         -> "f1"
     CALLCODE     -> "f2"
@@ -272,3 +277,36 @@ emitEvent eventName =
           , push 0
           , LOG1
           ]
+
+-- | Create an event signature hash from an 'AbiEventDefinition'.
+--
+-- https://docs.soliditylang.org/en/develop/abi-spec.html#events
+eventSignatureHash :: AbiEventDefinition -> Word256
+eventSignatureHash = eventSignature . eventSignatureString
+
+-- | Create an event signature string from an 'AbiEventDefinition'.
+--
+-- https://docs.soliditylang.org/en/develop/abi-spec.html#events
+eventSignatureString :: AbiEventDefinition -> String
+eventSignatureString AbiEventDefinition{..} =
+  let types = map _eventParamType _eventInputs
+  in _eventName <> "(" <> intercalate "," types <> ")"
+
+-- | Calculate which of 'LOG0' .. 'LOG4' to use for emitting event.
+--
+-- This depends on how many indexed parameters the event has, as described here:
+--
+-- https://medium.com/mycrypto/understanding-event-logs-on-the-ethereum-blockchain-f4ae7ba50378
+--
+-- Anonymous events use one topic less, leaving out the event signature as a topic.
+logEvent :: AbiEventDefinition -> EvmOpcode
+logEvent event =
+  let indexedParams = filter _eventParamIndexed (_eventInputs event)
+      signatureTopic = if _eventAnonymous event then 0 else 1
+  in case length indexedParams + signatureTopic of
+    0 -> LOG0
+    1 -> LOG1
+    2 -> LOG2
+    3 -> LOG3
+    4 -> LOG4
+    n -> error $ "Cannot emit event with " ++ show n ++ " indexes"
