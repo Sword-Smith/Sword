@@ -401,21 +401,6 @@ getTokenSymbol = do
   spaces
   return ts
 
-getParty :: Parser Party
-getParty = getBound <|> getFree
-
-getBound :: Parser Party
-getBound = do
-  addr <- getAddress
-  return $ Bound addr
-
-getFree :: Parser Party
-getFree = do
-  string "free"
-  parens $ do
-    identity <- getInt
-    return $ Free identity
-
 getAddress :: Parser Address
 getAddress = do
     prefix <- symbol "0x"

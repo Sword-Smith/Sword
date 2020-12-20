@@ -128,7 +128,3 @@ ppTime t = case t of
   Days    d -> "days("    ++ show d ++ ")"
   Weeks   w -> "weeks("   ++ show w ++ ")"
 
-ppParty :: Party -> String
-ppParty p = case p of
-  Bound a -> a
-  Free identity -> "free(" ++ show identity ++ ")"

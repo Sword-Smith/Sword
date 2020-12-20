@@ -66,8 +66,6 @@ runExprCompiler env expr = runCompiler emptyContract env (compileExp expr)
 -- than 256 tcalls, it must take an integer also.
 data StorageType = CreationTimestamp
                  | MemoryExpressionRefs
-                 | PartyMap
-                 | PartyFreeMap
 
 -- For each storage index we pay 20000 GAS. Reusing one is only 5000 GAS.
 -- It would therefore make sense to pack as much as possible into the same index.
@@ -75,8 +73,6 @@ data StorageType = CreationTimestamp
 storageAddress :: Integral i => StorageType -> i
 storageAddress CreationTimestamp      = 0x0
 storageAddress MemoryExpressionRefs   = 0x1
-storageAddress PartyMap               = 0x2
-storageAddress PartyFreeMap           = 0x3
 
 sizeOfOpcodes :: [EvmOpcode] -> Integer
 sizeOfOpcodes = sum . map sizeOfOpcode
@@ -190,7 +186,6 @@ transformPseudoInstructions = concatMap transformH
 constructor :: IntermediateContract -> [EvmOpcode]
 constructor IntermediateContract{..} =
   checkNoValue "Constructor_Header"
-  ++ saveParties getParties
 
 -- Checks that no value (ether) is sent when executing contract method
 -- Used in both contract header and in constructor
@@ -208,48 +203,6 @@ saveTimestampToStorage :: [EvmOpcode]
 saveTimestampToStorage = [ TIMESTAMP
                          , push $ storageAddress CreationTimestamp
                          , SSTORE ]
-
-saveParties :: [Party] -> [EvmOpcode]
-saveParties parties = savePartiesH $ zip [0..] parties
-
-savePartiesH :: [(PartyIndex, Party)] -> [EvmOpcode]
-savePartiesH ((partyIndex, p):parties) = savePartyToStorage partyIndex p ++ savePartiesH parties
-savePartiesH _ = []
-
-savePartyToStorage :: PartyIndex -> Party -> [EvmOpcode]
-savePartyToStorage partyIndex (Bound address) =
-  saveToStorage (storageAddress PartyMap) partyIndex (address2w256 address)
-savePartyToStorage partyIndex (Free partyIdentifier) =
-  saveToStorage (storageAddress PartyFreeMap) partyIdentifier (integer2w256 partyIndex)
-
-getPartyFromStorage :: Address -> [EvmOpcode]
-getPartyFromStorage addr =
-  -- [ push partyIndex ] ++ (getFromStorageStack $ storageAddress PartyMap)
-  [ PUSH32 $ address2w256 addr ]
-
-saveToStorage :: Integer -> Integer -> Word256 -> [EvmOpcode]
-saveToStorage prefix key value =
-                    [ PUSH32 value
-                    , push key ]
-                    ++ getStorageHashKeyStack prefix ++
-                    [ SSTORE ]
-
-getFromStorageStack :: Integer -> [EvmOpcode]
-getFromStorageStack prefix = getStorageHashKeyStack prefix ++ [ SLOAD ]
-
-getStorageHashKeyStack :: Integer -> [EvmOpcode]
-getStorageHashKeyStack prefix = [ push 8
-                                , SHL
-                                , push prefix
-                                , OR
-                                , push freeSpaceOffset
-                                , MSTORE
-                                , push 0x32
-                                , push freeSpaceOffset
-                                , SHA3 ]
-  where
-    -- TODO: Proper memory handling in state monad, instead of guessing free space
-    freeSpaceOffset = 0x2000
 
 -- Returns the code needed to transfer code from *init* to I_b in the EVM
 -- 22 is the length of itself, right now we are just saving in mem0

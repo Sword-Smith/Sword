@@ -58,9 +58,9 @@ instance Arbitrary ValidContract where
     Zero -> []
 
 contractGen :: Int -> Gen Contract
-contractGen 0 = Transfer <$> addressGen <*> partyGen <*> partyGen
+contractGen 0 = Transfer <$> addressGen <*> getIntExpr
 contractGen n = oneof
-  [ Transfer <$> addressGen <*> partyGen <*> partyGen
+  [ Transfer <$> addressGen <*> getIntExpr
   , Scale <$> (getPositive <$> arbitrary) <*> (getIntExpr <$> arbitrary) <*> contractGen (n - 1)
   , Both <$> contractGen (n `div` 2) <*> contractGen (n `div` 2)
   , Translate <$> (getAnyTime <$> arbitrary) <*> contractGen (n - 1)
