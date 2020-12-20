@@ -2,6 +2,14 @@ name: Sword
 version: 0.2.0
 category: Language
 
+ghc-options:
+  - -Wall
+  - -Wnoncanonical-monad-instances
+  - -Wcompat
+  - -Wincomplete-record-updates
+  - -Wincomplete-uni-patterns
+  - -Wredundant-constraints
+
 library:
   source-dirs: src
   dependencies:

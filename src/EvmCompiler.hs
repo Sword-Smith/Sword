@@ -20,6 +20,8 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
+{-# LANGUAGE RecordWildCards #-}
+
 module EvmCompiler where
 
 import EvmCompilerHelper
@@ -28,13 +30,13 @@ import EvmCompilerSubroutines (subroutines)
 import IntermediateLanguageDefinition
 import DaggerLanguageDefinition hiding (Transfer)
 import IntermediateCompiler (emptyContract)
+import Abi (transferSingleEvent)
 
 import Control.Monad.State
 import Control.Monad.Reader
 
 import Data.List
 import qualified Data.Map.Strict as Map
-import Data.Word
 
 -- State monad definitions
 data CompileEnv =
@@ -113,12 +115,31 @@ evmCompile :: IntermediateContract -> [EvmOpcode]
 evmCompile intermediateContract =
   linker (constructor' ++ codecopy') ++ linker body
   where
-    constructor'     = constructor intermediateContract
-    codecopy'        = codecopy constructor' body
-    body             = jumpTable ++ subroutines ++ activate' {-activate' includes mint'-} ++ burn' ++ pay'
-    activate'        = runCompiler intermediateContract initialEnv activateABI
-    burn'            = runCompiler intermediateContract initialEnv burnABI
-    pay'             = runCompiler intermediateContract initialEnv pay
+    constructor' = constructor intermediateContract
+    codecopy'    = codecopy constructor' body
+    body         = jumpTable ++ subroutines ++ methods
+
+    -- [ activateABI, burnABI, ... ]          :: [Compiler [EvmOpcode]]
+    -- sequence                               :: Monad m => [m a] -> m [a]
+    -- sequence [ activateABI, burnABI, ... ] :: Compiler [[EvmOpcode]]
+    -- runCompiler'                           :: Compiler a -> a
+    -- runCompiler' . sequence                :: [Compiler [EvmOpcode]] -> [[EvmOpcode]]
+    -- concat . runCompiler ... . sequence    :: [Compiler [EvmOpcode]] -> [EvmOpcode]
+    methods :: [EvmOpcode]
+    methods = concat . runCompiler' . sequence $
+      [ activateABI
+      , burnABI
+      , payABI
+      , balanceOfABI
+      , balanceOfBatchABI
+      , safeTransferFromABI
+      , safeBatchTransferFromABI
+      , setApprovalForAllABI
+      , isApprovedForAllABI
+      ]
+
+    runCompiler' = runCompiler intermediateContract initialEnv
+
     -- The addresses of the constructor run are different from runs when DC is on BC
 
 linker :: [EvmOpcode] -> [EvmOpcode]
@@ -151,7 +172,6 @@ transformPseudoInstructions = concatMap transformH
     transformH opcode = case opcode of
       JUMPTOA   i -> [ PUSH4 (fromInteger i), JUMP ]
       JUMPITOA  i -> [ PUSH4 (fromInteger i), JUMPI ]
-      -- TODO: relevant with SAFE_ADD?
       FUNCALLA  i -> [ PC, PUSH1 10, ADD, PUSH4 (fromInteger i), JUMP, JUMPDEST ]
       FUNSTARTA n -> [ JUMPDEST, swap n ]
       FUNRETURN   -> [ SWAP1, JUMP ]
@@ -162,14 +182,15 @@ transformPseudoInstructions = concatMap transformH
     swap 1 = SWAP1
     swap 2 = SWAP2
     swap 3 = SWAP3
-    swap _ = error "Only 2 or 3 args is accepted at the moment"
+    swap 4 = SWAP4
+    swap n = error $ "At most 4 arguments are accepted at the moment. Got: " ++ show n
 
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
 constructor :: IntermediateContract -> [EvmOpcode]
-constructor (IntermediateContract parties tcs _ _) =
+constructor IntermediateContract{..} =
   checkNoValue "Constructor_Header"
-  ++ saveParties parties
+  ++ saveParties getParties
 
 -- Checks that no value (ether) is sent when executing contract method
 -- Used in both contract header and in constructor
@@ -189,7 +210,7 @@ saveTimestampToStorage = [ TIMESTAMP
                          , SSTORE ]
 
 saveParties :: [Party] -> [EvmOpcode]
-saveParties parties = savePartiesH $ zip [toInteger 0..] parties
+saveParties parties = savePartiesH $ zip [0..] parties
 
 savePartiesH :: [(PartyIndex, Party)] -> [EvmOpcode]
 savePartiesH ((partyIndex, p):parties) = savePartyToStorage partyIndex p ++ savePartiesH parties
@@ -265,14 +286,48 @@ jumpTable =
   , PUSH32 (0xffffffff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , AND -- stack now holds a single item: solcc methodID from the rom.
 
+  -- All methods below are sorted from most to least used with methods changing state placed first.
+  -- This is done to minimize gas costs.
+  , DUP1
+  , PUSH32 (functionSignature "safeTransferFrom(address,address,uint256,uint256,bytes)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "safeTransferFrom_method"
+
+  , DUP1
+  , PUSH32 (functionSignature "safeBatchTransferFrom(address,address,uint256[],uint256[],bytes)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "safeBatchTransferFrom_method"
+
+  , DUP1
+  , PUSH32 (functionSignature "setApprovalForAll(address,bool)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "setApprovalForAll_method"
+
   , DUP1
   , PUSH32 (functionSignature "pay()", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "pay_method"
 
-  -- the three remaining methods each take an argument,
-  -- and it must be strictly positive
-  -- this snippet puts the arg. on the stack, and checks if its zero
+  -- The next three functions will usually be called as read-only functions (no tx on blockchain)
+  -- so it makes sense to place them later in the jump table as their invocations do not cost gas.
+  , DUP1
+  , PUSH32 (functionSignature "balanceOf(address,uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "balanceOf_method"
+
+  , DUP1
+  , PUSH32 (functionSignature "balanceOfBatch(address[],uint256[])", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "balanceOfBatch_method"
+
+  , DUP1
+  , PUSH32 (functionSignature "isApprovedForAll(address,address)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "isApprovedForAll_method"
+
+  -- the three remaining methods each take exactly one argument
+  -- which must be strictly positive.
+  -- so we make the check for all methods here to reduce contract size.
   , PUSH1 0x4
   , CALLDATALOAD
   , push 0
@@ -280,19 +335,21 @@ jumpTable =
   , ISZERO
   , JUMPITO "global_throw"
 
+  -- The following methods are, like above, sorted from what is (assumed to be)
+  -- most-used to least used.
+  , DUP1
+  , PUSH32 (functionSignature "mint(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  , EVM_EQ
+  , JUMPITO "mint_method"
+
   , DUP1
   , PUSH32 (functionSignature "activate(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "activate_method"
 
-  , DUP1
   , PUSH32 (functionSignature "burn(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
   , EVM_EQ
   , JUMPITO "burn_method"
-
-  , PUSH32 (functionSignature "mint(uint256)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-  , EVM_EQ
-  , JUMPITO "mint_method"
 
   , JUMPDESTFROM "global_throw"
   , push 0
@@ -300,8 +357,8 @@ jumpTable =
   , REVERT
   ]
 
-pay :: Compiler [EvmOpcode]
-pay = do
+payABI :: Compiler [EvmOpcode]
+payABI = do
     memExpCode <- concatMap executeMemExp <$> reader getMemExps
     transferCallCode <- executeTransferCalls
     return $
@@ -322,7 +379,7 @@ pay = do
 -- memExp has not yet been determined. The value 11 would be an invalid
 -- value, 01 would be false, and 10 true.
 executeMemExp :: IMemExp -> [EvmOpcode]
-executeMemExp (IMemExp beginTime endTime count exp) =
+executeMemExp (IMemExp beginTime endTime count expr) =
   let
     checkIfExpShouldBeEvaluated =
       let
@@ -370,7 +427,7 @@ executeMemExp (IMemExp beginTime endTime count exp) =
       in checkIfMemExpIsTrueOrFalse ++ checkIfTimeHasStarted ++ checkIfTimeHasPassed ++ setToFalse
 
     jumpDestEvaluateExp = [ JUMPDESTFROM $ "memExp_evaluate" ++ show count ]
-    evaulateExpression  = runExprCompiler (CompileEnv 0 count 0x0 "mem_exp") exp
+    evaulateExpression  = runExprCompiler (CompileEnv 0 count 0x0 "mem_exp") expr
 
      -- eval to false but time not run out: don't set memdibit
     checkEvalResult     = [ ISZERO
@@ -451,64 +508,6 @@ newLabel desc = do
   put compileEnv { labelCount = i + 1 }
   return $ desc ++ "_" ++ show i ++ "_" ++ show j ++ "_" ++ show k
 
-safeMulShort :: Compiler [EvmOpcode]
-safeMulShort = do
-  label_skip <- newLabel "skip"
-  return
-    [ DUP2
-    , DUP2
-    , DUP2
-    , DUP2
-    , MUL
-    , SDIV
-    , SUB
-    , JUMPITO "global_throw"
-    , DUP2
-    , PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-    , SUB
-    , JUMPITO label_skip
-    , DUP1
-    , PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF)
-    , EVM_EQ
-    , JUMPITO "global_throw"
-    , JUMPDESTFROM label_skip
-    , MUL ]
-
-
-
-safeMul :: Compiler [EvmOpcode]
-safeMul = do
-  label_return <- newLabel "return"
-  label_skip <- newLabel "skip"
-  label_skip2 <- newLabel "skip"
-  return
-    [ DUP1
-    , JUMPITO label_skip
-    , POP
-    , POP
-    , PUSH1 0
-    , JUMPTO label_return
-    , JUMPDESTFROM label_skip
-    , DUP2
-    , DUP2
-    , DUP2
-    , DUP2
-    , MUL
-    , SDIV
-    , SUB
-    , JUMPITO "global_throw"
-    , DUP2
-    , PUSH32 (0x80000000, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-    , SUB
-    , JUMPITO label_skip2
-    , DUP1
-    , PUSH32 (0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF)
-    , EVM_EQ
-    , JUMPITO "global_throw"
-    , JUMPDESTFROM label_skip2
-    , MUL
-    , JUMPDESTFROM label_return ]
-
 -- Compile intermediate expression into EVM opcodes
 -- THIS IS THE ONLY PLACE IN THE COMPILER WHERE EXPRESSION ARE HANDLED
 -- The internal representation of numbers are two-complement signed integers
@@ -530,9 +529,9 @@ compileExp e = case e of
                     label <- newLabel "max_is_e1"
                     return [DUP2, DUP2, SLT, JUMPITO label, SWAP1, JUMPDESTFROM label, POP]
 
-  MultExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> safeMul
+  MultExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [FUNCALL "safeMul_subroutine"]
   DiviExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> do
-    label_skip <- newLabel "skip"
+    label_skip <- newLabel "divi_skip"
     return  [ DUP2
             , ISZERO
             , JUMPITO "global_throw"
@@ -546,30 +545,8 @@ compileExp e = case e of
             , JUMPITO "global_throw"
             , JUMPDESTFROM label_skip
             , SDIV ]
-  AddiExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++>
-    return  [ DUP1
-            , DUP1
-            , DUP4
-            , ADD
-            , SLT
-            , PUSH1 0
-            , DUP4
-            , SLT
-            , XOR
-            , JUMPITO "global_throw"
-            , ADD ]
-  SubtExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++>
-    return [ DUP1
-           , DUP3
-           , DUP2
-           , SUB
-           , SGT
-           , PUSH1 0
-           , DUP4
-           , SLT
-           , XOR
-           , JUMPITO "global_throw"
-           , SUB ]
+  AddiExp   e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [FUNCALL "safeAdd_subroutine"]
+  SubtExp   e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [FUNCALL "safeSub_subroutine"]
   EqExp     e1 e2 -> compileExp e1 <++> compileExp e2 <++> return [EVM_EQ]
   LtExp     e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [SLT]
   GtExp     e1 e2 -> compileExp e2 <++> compileExp e1 <++> return [SGT]
@@ -606,9 +583,7 @@ compileLit lit mo _label = case lit of
     in functionCall ++ moveResToStack
 
 executeTransferCallsHH :: TransferCall -> Integer -> Compiler [EvmOpcode]
-executeTransferCallsHH tc transferCounter = do
-  mes <- reader getMemExps
-  safemul <- safeMul
+executeTransferCallsHH tc transferCounter =
   let
     checkIfCallShouldBeMade =
       let
@@ -665,24 +640,14 @@ executeTransferCallsHH tc transferCounter = do
          , JUMPDESTFROM $ "use_exp_res" ++ show transferCounter
          , POP ] -- Top of stack now has value `a`
 
-    {-  0. Get `b:=PT.balanceOf(CALLER)`, where `PT.address:= _to tc`.
-         1. First call DUP1,
-         2. then call PT.burn(CALLER,b),
-         3. then call MUL to get c:=a*b, where a is the amount per position from above.
-         4. then call SA.transfer(CALLER,c) -}
-
-      ++ [ PUSH32 $ address2w256 (_to tc)
-         , FUNCALL "balanceOf_subroutine" ]  -- pops 1, pushes 1:  b is on the stack
-
-      -- Prepare stack and call burn subroutine
-      ++ [ DUP1
-         , PUSH32 $ address2w256 (_to tc)
-         , FUNCALL "burn_subroutine" ] -- pops 2, pushes 1
-
-      ++ [ POP ] -- discard return value from burn
+      ++ [ CALLER
+         , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
+         , FUNCALL "getBalance_subroutine" ]  -- pops 1, pushes 1:  b is on the stack
 
       -- Prepare stack and call transfer subroutine
-      ++ safemul -- c is on stack -- security needs to be checked
+      -- ++ safemul
+      -- ++ [ MUL ] -- replace with safeMul!
+      ++ [ FUNCALL "safeMul_subroutine" ]
       ++ [ PUSH32 $ address2w256 (_tokenAddress tc)
          , CALLER
          , SWAP2
@@ -692,19 +657,20 @@ executeTransferCallsHH tc transferCounter = do
       ++ [ ISZERO
          , JUMPITO "global_throw" ] -- error happens in this block
 
-    -- Flip correct bit from one to zero and call selfdestruct if all tcalls compl.
-    skipCallToTcSenderJumpDest = [ JUMPDESTFROM $ "skip_call_to_sender" ++ show transferCounter
-                                 ]--                         , POP ] -- pop return amount from stack
+    setPTBalanceToZero = [
+      JUMPDESTFROM $ "tc_SKIP" ++ show transferCounter
+      , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
+      , push 0
+      , CALLER
+      , FUNCALL "setBalance_subroutine" ]
 
     functionEndLabel =
-        [ JUMPDESTFROM $ "tc_SKIP" ++ show transferCounter
-        , JUMPDESTFROM $ "method_end" ++ show transferCounter ]
+        [ JUMPDESTFROM $ "method_end" ++ show transferCounter ]
 
-  return $
+  in return $
     checkIfCallShouldBeMade ++
     callTransferToTcRecipient ++
-    -- callTransferToTcOriginator ++
-    skipCallToTcSenderJumpDest ++
+    setPTBalanceToZero ++
     functionEndLabel
 
 -- This might have to take place within the state monad to get unique labels for each TransferFrom call
@@ -727,37 +693,45 @@ activateABI = do
     ++ [ STOP ]
 
 activateMapElementToTransferFromCall :: ActivateMapElement -> Compiler [EvmOpcode]
-activateMapElementToTransferFromCall (tokenAddress, amount) = do
-  safemul <- safeMul
+activateMapElementToTransferFromCall (tokenAddress, amount) =
   return $
       -- Prepare stack for `transferFrom`
       [ CALLER  -- CALLER is the originator of the currently executing call-chain, aka User.
       , PUSH32 $ address2w256 tokenAddress
       , push amount
       -- push the only argument given to "activate_method".
-      , PUSH1 0x4, CALLDATALOAD ] -- Gas saving opportunity: CALLDATACOPY
-      ++ safemul ++
-      [ FUNCALL "transferFrom_subroutine"
-      , ISZERO, JUMPITO "global_throw" ]
+      , PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY
+      , FUNCALL "safeMul_subroutine"
+      , FUNCALL "transferFrom_subroutine"
+      , ISZERO, JUMPITO "global_throw"
+      ]
 
 -- mint business logic
 mint :: Compiler [EvmOpcode]
 mint = do
     am <- reader getActivateMap
-    addrsOfPTs <- reader $ map _to . getTransferCalls
+    partyTokenIDs <- reader $ map _to . getTransferCalls
     thing <- concatMapM activateMapElementToTransferFromCall (Map.assocs am)
     return $
         -- SA.transferFrom
         thing
         -- PT.mint
-        ++ concatMap mintExt (nub addrsOfPTs)
-        ++ emitEvent "Minted"
+        ++ concatMap mintExt (nub partyTokenIDs)
+        ++ emitEvent "Minted" -- TODO: Change to ERC1155 minted event
 
--- PT.mint(). send an external `mint` message to each PT
-mintExt :: Address -> [EvmOpcode]
-mintExt addrOfPT =
-        [ PUSH32 $ address2w256 addrOfPT
-        , FUNCALL "mint_subroutine" ]
+mintExt :: PartyTokenID -> [EvmOpcode]
+mintExt (PartyTokenID partyTokenID) =
+  [ push partyTokenID
+  , CALLER
+  , DUP2
+  , FUNCALL "getBalance_subroutine"
+
+  , push 0x04
+  , CALLDATALOAD
+  , FUNCALL "safeAdd_subroutine"
+  , CALLER
+  , FUNCALL "setBalance_subroutine"
+  ]
 
 -- ABI call DC.burn()
 burnABI :: Compiler [EvmOpcode]
@@ -771,26 +745,426 @@ burnABI = do
 
 burn :: Compiler [EvmOpcode]
 burn = do
-  addrsOfPTs <- reader $ map _to . getTransferCalls
+  partyTokenIDs <- reader $ map _to . getTransferCalls
   -- TODO: I think this will only pay back one settlement asset.
   -- if multiple SAs are used, maybe only one will be paid back? -Thorkil
   (addrOfSA, amount) <- reader $  head . Map.assocs . getActivateMap
-  safemulshort <- safeMulShort
   return $
-    concatMap burnExt (nub addrsOfPTs) ++
+    concatMap burnExt (nub partyTokenIDs) ++
     [ CALLER
     , PUSH32 $ address2w256 addrOfSA
     , PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY -- amount uint256
-    , push amount ]
-    ++ safemulshort ++
-    [ FUNCALL "transfer_subroutine" ]
+    , push amount
+    , FUNCALL "safeMul_subroutine"
+    , FUNCALL "transfer_subroutine"
+    ]
 
--- PT.burn() send an external `burn` message to PT
-burnExt :: Address -> [EvmOpcode]
-burnExt addrOfPT =
-       [ PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY
-       , PUSH32 $ address2w256 addrOfPT
-       , FUNCALL "burn_subroutine" ]
+burnExt :: PartyTokenID -> [EvmOpcode]
+burnExt (PartyTokenID partyTokenID) =
+  [ push partyTokenID
+  , PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY
+  , FUNCALL "burn_subroutine"
+  ]
+
+balanceOfABI :: Compiler [EvmOpcode]
+balanceOfABI =
+  return . concat $
+    [ [JUMPDESTFROM "balanceOf_method"],
+      putArgsOnStack
+    , [ FUNCALL "getBalance_subroutine" ]
+    , storeBalanceInMemory
+    , [ RETURN ]
+    ]
+  where
+    putArgsOnStack =
+      [ push 0x04
+      , CALLDATALOAD -- address account
+      , push 0x24
+      , CALLDATALOAD -- uint256 id
+      ]
+
+    storeBalanceInMemory =
+      [ push 0x00
+      , MSTORE
+      , push 0x20
+      , push 0x00
+      ]
+
+{-
+    /**
+        @notice Get the balance of multiple account/token pairs
+        @param _owners The addresses of the token holders
+        @param _ids    ID of the tokens
+        @return        The _owner's balance of the token types requested (i.e. balance for each (owner, id) pair)
+     */
+    function balanceOfBatch(address[] calldata _owners, uint256[] calldata _ids) external view returns (uint256[] memory);
+-}
+
+balanceOfBatchABI :: Compiler [EvmOpcode]
+balanceOfBatchABI = return
+  [ JUMPDESTFROM "balanceOfBatch_method"
+
+    -- Check that `len(_owners) == len(_ids)`.
+  , push 0x04
+  , CALLDATALOAD  -- [ addr(_owners) ]
+  , push 0x04
+  , ADD
+
+  , push 0x24
+  , CALLDATALOAD  -- [ addr(_ids), addr(_owners) ]
+  , push 0x04
+  , ADD
+
+  , DUP2
+  , CALLDATALOAD  -- [ len(_owners), addr(_ids), addr(_owners) ]
+  , DUP2
+  , CALLDATALOAD  -- [ len(_ids), len(_owners), addr(_ids), addr(_owners) ]
+  , SUB           -- [ len(_ids) - len(_owners), addr(_ids), addr(_owners) ]
+  , JUMPITO "global_throw"
+  -- , POP  -- TODO: Use JUMPITO again.
+
+    -- TODO: Name this constant.
+  , push (0x100 + 0x20) -- [ Maddr(_result), addr(_ids), addr(_owners) ]
+
+    -- for (i = 0; i != len(_ids); i++)
+  , DUP2
+  , CALLDATALOAD  -- [ len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+  , push 0x00     -- [ i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+
+  , JUMPDESTFROM "balanceOfBatch_loop_start"
+        -- [ i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+        -- if (i == len(_ids)) goto end;
+      , DUP2
+      , DUP2
+      , EVM_EQ
+      , JUMPITO "balanceOfBatch_loop_end"
+
+        -- TODO: _result[i] = balanceOf(_owners[i], _ids[i])
+
+        -- Calculate offset into `_owners` and `_ids`
+        -- The offset is `0x20 * i + 0x20`:
+        --   0x20 * i  =  index
+        --   0x20      =  sizeof(len(_ids))
+      , DUP1
+      , push 0x20
+      , MUL
+      , push 0x20
+      , ADD          -- [ offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+
+        -- _owners[i]
+      , DUP6         -- [ addr(_owners), offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , DUP2         -- [ offset, addr(_owners), offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , ADD          -- [ addr(_owners[i]), offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , CALLDATALOAD -- [ _owners[i], offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+
+        -- _ids[i]
+      , DUP6         -- [ addr(_ids), _owners[i], offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , DUP3         -- [ offset, addr(_ids), _owners[i], offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , ADD          -- [ addr(_ids[i]), _owners[i], offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , CALLDATALOAD -- [ _ids[i], _owners[i], offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+
+        -- balance
+      , FUNCALL "getBalance_subroutine"
+                     -- [ balance, offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , DUP5         -- [ Maddr(_result), balance, offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , DUP3         -- [ offset, Maddr(_result), balance, offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , ADD          -- [ Maddr(_result[i]), balance, offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , MSTORE       -- [ offset, i, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+
+      , POP
+      , push 0x01
+      , ADD          -- [ i + 1, len(_ids), Maddr(_result), addr(_ids), addr(_owners) ]
+      , JUMPTO "balanceOfBatch_loop_start"
+
+  , JUMPDESTFROM "balanceOfBatch_loop_end"
+
+    -- len(_result) := len(_ids) + 2
+  -- Store length of array (i = length now)
+  , push $ 0x100 + 0x20
+  , MSTORE
+
+  , SWAP3            -- [ addr(_owners), Maddr(_result), addr(_ids), len(_ids) ]
+  , POP, POP, POP    -- [ len(_ids) ]
+  , push 0x02
+  , ADD              -- [ len(_ids) + 2 ]
+  , push 0x20
+  , MUL              -- [ (len(_ids) + 2) * 0x20 ]
+  , push 0x100       -- [ Maddr(_result) - 0x20, (len(_ids) + 2) * 0x20 ]
+
+  , push 0x20        -- [ 0x20, Maddr(_result) - 0x20, len(_result) ]
+  , DUP2             -- [ Maddr(_result) - 0x20, 0x20, Maddr(_result) - 0x20, len(_result) ]
+  , MSTORE           -- [ Maddr(_result) - 0x20, len(_result) ]
+
+  , RETURN
+  ]
+
+-- | ERC1155 method
+--
+-- safeTransferFrom(
+--   address _from,
+--   address _to,
+--   uint256 _id,
+--   uint256 _value,
+--   bytes   _data
+-- )
+--
+safeTransferFromABI :: Compiler [EvmOpcode]
+safeTransferFromABI =
+  return
+    [ JUMPDESTFROM "safeTransferFrom_method"
+
+    , push 0x64  -- _value
+    , CALLDATALOAD
+
+    , push 0x04  --  _from
+    , CALLDATALOAD
+
+    -- Verify that CALLER == _from || CALLER in operators
+    , DUP1  --  _from
+    , CALLER
+    , EVM_EQ
+    , JUMPITO "safeTransferFrom_continue"
+
+    -- _from != CALLER, verify that CALLER is approved as operator
+    , DUP1 -- _from
+    , CALLER
+    , FUNCALL "getApprovedForAll_subroutine"
+    , ISZERO
+    , JUMPITO "global_throw" -- throw iff CALLER != _from && CALLER not in operators
+    , JUMPDESTFROM "safeTransferFrom_continue"
+
+    , push 0x24  -- _to
+    , CALLDATALOAD
+
+    , push 0x44  -- _id
+    , CALLDATALOAD
+
+      -- Stack: [ _id, _to, _from, _value, ... ]
+
+      -- Verify that `_to` != 0.
+    , DUP2
+    , ISZERO
+    , JUMPITO "global_throw"
+
+    -- Call subroutine for transferring tokens, pops 4, pushes 0
+    , DUP4
+    , DUP4
+    , DUP4
+    , DUP4
+    , FUNCALL "safeTransferFrom_subroutine"
+
+      -- Emit TransferSingle(address,address,address,uint256,uint256).
+
+      -- Place non-indexed event parameters (_id, _value) in memory:
+      -- Stack: [ _id, _to, _from, _value, ... ]
+    , push 0x00
+    , MSTORE    -- Stack: [ _to, _from, _value, ... ]
+    , SWAP2     -- Stack: [ _value, _from, _to, ... ]
+    , push 0x20
+    , MSTORE    -- Stack: [ _from, _to, ... ]
+
+      -- Place indexed event parameters on stack: event signature, _operator, _from, _to
+
+    , CALLER    -- Stack: [ _operator, _from, _to, ... ]
+    , PUSH32 (eventSignatureHash transferSingleEvent)
+                -- Stack: [ SHA3("TransferSingle(...)", _operator, _from, _to, ... ]
+
+      -- Place memory range of non-indexed parameters on top
+    , push 0x40
+    , push 0x00
+    , logEvent transferSingleEvent
+
+    , STOP
+    ]
+
+-- @notice Transfers `_values` amount(s) of `_ids` from the `_from` address to the `_to` address specified (with safety call).
+-- @dev Caller must be approved to manage the tokens being transferred out of the `_from` account (see "Approval" section of the standard).
+-- MUST revert if `_to` is the zero address.
+-- MUST revert if length of `_ids` is not the same as length of `_values`.
+-- MUST revert if any of the balance(s) of the holder(s) for token(s) in `_ids` is lower than the respective amount(s) in `_values` sent to the recipient.
+-- MUST revert on any other error.
+-- MUST emit `TransferSingle` or `TransferBatch` event(s) such that all the balance changes are reflected (see "Safe Transfer Rules" section of the standard).
+-- Balance changes and events MUST follow the ordering of the arrays (_ids[0]/_values[0] before _ids[1]/_values[1], etc).
+-- After the above conditions for the transfer(s) in the batch are met, this function MUST check if `_to` is a smart contract (e.g. code size > 0). If so, it MUST call the relevant `ERC1155TokenReceiver` hook(s) on `_to` and act appropriately (see "Safe Transfer Rules" section of the standard).
+-- @param _from    Source address
+-- @param _to      Target address
+-- @param _ids     IDs of each token type (order and length must match _values array)
+-- @param _values  Transfer amounts per token type (order and length must match _ids array)
+-- @param _data    Additional data with no specified format, MUST be sent unaltered in call to the `ERC1155TokenReceiver` hook(s) on `_to`
+--
+-- function safeBatchTransferFrom(address _from, address _to, uint256[] calldata _ids, uint256[] calldata _values, bytes calldata _data) external;
+safeBatchTransferFromABI :: Compiler [EvmOpcode]
+safeBatchTransferFromABI = return
+  [ JUMPDESTFROM "safeBatchTransferFrom_method"
+
+  , push 0x04 -- _from
+  , CALLDATALOAD
+
+  -- Verify that CALLER == _from || CALLER in operators
+  , DUP1  --  _from
+  , CALLER
+  , EVM_EQ
+  , JUMPITO "safeBatchTransferFrom_continue"
+
+  -- _from != CALLER, verify that CALLER is approved as operator
+  , DUP1 -- _from
+  , CALLER
+  , FUNCALL "getApprovedForAll_subroutine"
+  , ISZERO
+  , JUMPITO "global_throw" -- throw iff CALLER != _from && CALLER not in operators
+  , JUMPDESTFROM "safeBatchTransferFrom_continue"
+
+  , push 0x24 -- _to
+  , CALLDATALOAD
+
+    -- Check `_to` != 0.
+  , DUP1
+  , ISZERO
+  , JUMPITO "global_throw"
+
+   -- Check `len(_ids)` == `len(_values)`
+   , push 0x44
+   , CALLDATALOAD
+   , push 0x04
+   , ADD -- addr(_ids)
+   , CALLDATALOAD -- len(_ids)
+
+   -- Stack: [ len(_ids), _to, _from, ... ]
+   , push 0x64
+   , CALLDATALOAD
+   , push 0x04
+   , ADD
+   , DUP1 -- addr(_values)
+   , CALLDATALOAD -- len(_values)
+
+    -- Stack: [ len(_values), addr(_values), len(_ids), _to, _from, ... ]
+  , DUP3
+    -- Stack: [ len(_ids), len(_values), addr(_values), len(_ids), _to, _from, ... ]
+  , SUB -- EVM_EQ, ISZERO
+  , JUMPITO "global_throw"
+
+    -- Stack: [ addr(_values), len(_ids), _to, _from, ... ]
+
+    -- loop over all ids
+  , SWAP1
+  , push 0x00
+  -- Stack: [ i, len(_ids), addr(_values), _to, _from, ... ]
+  , JUMPDESTFROM "safeBatchTransferFrom_loop_start"
+
+    -- loop condition begin
+    , DUP2
+    , DUP2
+    , EVM_EQ
+    , JUMPITO "safeBatchTransferFrom_loop_end" -- verify that i < len(ids)
+    -- loop body begin
+    -- Stack: [ i, len(_ids), addr(_values), _to, _from, ... ]
+
+    -- push value for this iteration
+    , DUP1
+    , push 0x01
+    , ADD
+    , push 0x20
+    , MUL
+    -- Stack: [ offset = 0x20 * (i + 1), i, len(_ids), addr(_values), _to, _from, ... ]
+
+    , DUP1 -- offset
+    , DUP5 -- addr(_values)
+    -- Stack: [ addr(_values), offset = 0x20 * (i + 1), offset, i, len(_ids), addr(_values), _to, _from, ... ]
+
+    , ADD
+    -- Stack: [ addr(_values) + offset, offset, i, len(_ids), addr(_values), _to, _from, ... ]
+
+    , CALLDATALOAD
+    -- Stack: [ _values[i], offset, i, len(_ids), addr(_values), _to, _from, ... ]
+
+    , DUP7 -- _from
+    , DUP7 -- _to
+    -- Stack: [ _to, _from, _values[i], offset, i, len(_ids), addr(_values), _to, _from, ... ]
+
+    , DUP4 -- offset
+    , push 0x44
+    , CALLDATALOAD
+    , push 0x04
+    , ADD -- addr(_ids)
+    , ADD -- addr(_ids[i])
+    , CALLDATALOAD
+    -- Stack: [ _ids[i], _to, _from, _values[i], offset, i, len(_ids), addr(_values), _to, _from, ... ]
+    , FUNCALL "safeTransferFrom_subroutine"
+    , POP
+    -- Stack: [ i, len(_ids), addr(_values), _to, _from, ... ]
+    , push 0x01
+    , ADD
+    -- Stack: [ i + 1, len(_ids), addr(_values), _to, _from, ... ]
+
+    , JUMPTO "safeBatchTransferFrom_loop_start"
+
+  , JUMPDESTFROM "safeBatchTransferFrom_loop_end"
+  , STOP
+  ]
+
+-- @notice Enable or disable approval for a third party ("operator") to manage all of the caller's tokens.
+-- @dev MUST emit the ApprovalForAll event on success.
+-- @param _operator  Address to add to the set of authorized operators
+-- @param _approved  True if the operator is approved, false to revoke approval
+--
+-- setApprovalForAll(address,bool)
+setApprovalForAllABI :: Compiler [EvmOpcode]
+setApprovalForAllABI = return
+  [ JUMPDESTFROM "setApprovalForAll_method"
+
+  , push 0x24  -- _approved
+  , CALLDATALOAD
+
+    -- Store CALLER (_owner) in M[0..31]
+  , CALLER
+  , push 0x00
+  , MSTORE
+
+    -- Store 0s in M[32..43] and the lower 160 bits (20 bytes) of _operator in M[44..63].
+  , push 0x04  --  _operator
+  , CALLDATALOAD
+  , PUSHN (replicate 20 0xff)
+  , AND
+  , push 0x20
+  , MSTORE
+
+    -- Stack = [ SHA3(account ++ id), ... ]
+  , push 0x40
+  , push 0x00
+  , SHA3
+
+    -- Storage[SHA3(account ++ id)] = _approved
+  , SSTORE
+
+    -- TODO: Emit signal.
+  , STOP
+  ]
+
+isApprovedForAllABI :: Compiler [EvmOpcode]
+isApprovedForAllABI = return
+  [ JUMPDESTFROM "isApprovedForAll_method"
+
+  , push 0x04
+  , CALLDATALOAD
+
+  , push 0x24
+  , CALLDATALOAD
+
+  , FUNCALL "getApprovedForAll_subroutine"
+
+  , push 0x00
+  , MSTORE
+
+  , push 0x20
+  , push 0x00
+  , RETURN
+  ]
+
+  -- , DUP1
+  -- , PUSH32 (functionSignature "setApprovalForAll(address,bool)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+  -- , EVM_EQ
+  -- , JUMPITO "setApprovalForAll_method"
+
 
 getMemExpById :: MemExpId -> [IMemExp] -> IMemExp
 getMemExpById memExpId [] = error $ "Could not find IMemExp with ID " ++ show memExpId
