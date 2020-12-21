@@ -62,7 +62,7 @@ initialGlobal = GlobalEnv { _memExpId = Nothing
                           }
 
 emptyContract :: IntermediateContract
-emptyContract = IntermediateContract [] [] [] Map.empty
+emptyContract = IntermediateContract [] [] Map.empty
 
 newMemExpId :: ICompiler MemExpId
 newMemExpId = do
@@ -97,7 +97,6 @@ intermediateCompileOptimize = foldExprs . intermediateCompile
 intermediateCompileM :: Contract -> ICompiler IntermediateContract
 intermediateCompileM (Transfer token to) = do
   ScopeEnv maxFactor scaleFactor delayTerm memExpPath <- ask
-  --toPartyId   <- insertIfMissing to
   let transferCall = TransferCall { _maxAmount     = maxFactor
                                   , _amount        = scaleFactor (Lit (IntVal 1))
                                   , _delay         = delayTerm
@@ -107,7 +106,7 @@ intermediateCompileM (Transfer token to) = do
                                   }
 
   let activateMap = Map.fromList [(token, maxFactor)]
-  return (IntermediateContract [] [transferCall] [] activateMap)
+  return (IntermediateContract [transferCall] [] activateMap)
 
 intermediateCompileM (Scale maxFactor factorExp contract) =
   local adjustScale $ intermediateCompileM contract
@@ -119,9 +118,9 @@ intermediateCompileM (Scale maxFactor factorExp contract) =
                }
 
 intermediateCompileM (Both contractA contractB) = do
-  IntermediateContract _ tcs1 mes1 am1 <- intermediateCompileM contractA
-  IntermediateContract _ tcs2 mes2 am2 <- intermediateCompileM contractB
-  return $ IntermediateContract [] (tcs1 ++ tcs2)
+  IntermediateContract tcs1 mes1 am1 <- intermediateCompileM contractA
+  IntermediateContract tcs2 mes2 am2 <- intermediateCompileM contractB
+  return $ IntermediateContract (tcs1 ++ tcs2)
                                 (mes1 ++ mes2)
                                 (Map.unionWith (+) am1 am2)
 
@@ -142,10 +141,10 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
   let delayEnd = toSeconds time + delay
 
   icA <- local (extendMemExpPath (memExpId, True)) $ intermediateCompileM contractA
-  let IntermediateContract _ tcs1 mes1 am1 = icA
+  let IntermediateContract tcs1 mes1 am1 = icA
 
   icB <- local (extendMemExpPath (memExpId, False)) $ intermediateCompileM contractB
-  let IntermediateContract _ tcs2 mes2 am2 = icB
+  let IntermediateContract tcs2 mes2 am2 = icB
 
   let me0 = IMemExp { _IMemExpBegin = delay
                     , _IMemExpEnd   = delayEnd
@@ -156,7 +155,7 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
   -- MarginRefundMap
   memExpPath <- reader _currentMemExpPath
 
-  return $ IntermediateContract [] (tcs1 ++ tcs2)
+  return $ IntermediateContract (tcs1 ++ tcs2)
                                 (me0 : mes1 ++ mes2)
                                 (Map.unionWith max am1 am2)
 

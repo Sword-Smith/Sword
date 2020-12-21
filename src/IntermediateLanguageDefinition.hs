@@ -34,8 +34,7 @@ type Branch = Bool
 type MemExpPath = [(MemExpId, Branch)]
 
 data IntermediateContract =
-     IntermediateContract { getParties         :: [Party]
-                          , getTransferCalls   :: [TransferCall]
+     IntermediateContract { getTransferCalls   :: [TransferCall]
                           , getMemExps         :: [IMemExp]
                           , getActivateMap     :: ActivateMap
 --                          , getMarginRefundMap :: MarginRefundMap

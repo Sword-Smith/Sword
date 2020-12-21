@@ -80,10 +80,6 @@ data Literal = IntVal Integer
 
 data ObservableType = OBool | OInteger deriving (Show, Eq)
 
--- DEVFIX: Better choice for type is decided later.
-data Party = Bound Address
-           | Free Integer deriving (Show, Eq)
-
 type TokenSymbol = String
 type Address = String
 

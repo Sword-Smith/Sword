@@ -62,8 +62,7 @@ runCompiler intermediateContract compileEnv m =
 runExprCompiler :: CompileEnv -> Expr -> [EvmOpcode]
 runExprCompiler env expr = runCompiler emptyContract env (compileExp expr)
 
--- ATM, "Executed" does not have an integer. If it should be able to handle more
--- than 256 tcalls, it must take an integer also.
+-- position value that a contract position evaluates to
 data StorageType = CreationTimestamp
                  | MemoryExpressionRefs
 
