@@ -24,31 +24,18 @@ module TypeChecker where
 
 import DaggerLanguageDefinition
 import Data.List (sort)
+import Control.Monad (unless)
 
 data ExpType = BoolType
              | IntType deriving (Show, Eq)
 
 typeChecker :: Contract -> Either String Contract
 typeChecker c = do
-  tcc <- typeCheckerContract c
-  if typeCheckerContractParties c then do
-    return tcc
-  else
-    Left $ "Parties must be named sequentially from 1 to N."
+  unless (hasSequentialPartyIDs c) (Left "Parties must be named sequentially from 1 to N.")
+  typeCheckerContract c
 
--- typeCheckerParties :: IntermediateContract -> Either String [PartyTokenID]
--- typeCheckerParties c = typeCheckerPartiesH 1 $ sort $ getParties c
-
--- typeCheckerPartiesH :: Integer -> [PartyTokenID] -> Either String [PartyTokenID]
--- typeCheckerPartiesH _ [] = Right []
--- typeCheckerPartiesH n (x:xs) =
---   if n == getPartyTokenID x then
---     typeCheckerPartiesH (n + 1) xs
---   else
---     Left $ "Parties must be defined sequentially from 1 to N. Number " ++ show n ++ " is missing."
-
-typeCheckerContractParties :: Contract -> Bool
-typeCheckerContractParties c = verifySequence 1 $ sort ( getAllParties c)
+hasSequentialPartyIDs :: Contract -> Bool
+hasSequentialPartyIDs c = verifySequence 1 $ sort (getAllParties c)
   where
     getAllParties :: Contract -> [PartyTokenID]
     getAllParties (Transfer _ to) = [to]
