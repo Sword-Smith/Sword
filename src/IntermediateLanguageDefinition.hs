@@ -20,6 +20,8 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
+{-# LANGUAGE RecordWildCards #-}
+
 module IntermediateLanguageDefinition where
 
 import DaggerLanguageDefinition
@@ -48,6 +50,13 @@ data TransferCall =
                   , _to           :: PartyTokenID
                   , _memExpPath   :: MemExpPath
                   } deriving (Show, Eq)
+
+getPartyTokenIDs :: IntermediateContract -> [PartyTokenID]
+getPartyTokenIDs IntermediateContract{..} = map _to getTransferCalls
+
+-- | Needs token ID 0.
+getMaxPartyTokenID :: IntermediateContract -> PartyTokenID
+getMaxPartyTokenID = maximum . getPartyTokenIDs
 
 -- DEVNOTE:
 -- We start by attempting to implement the evaluation of IMemExp values.
