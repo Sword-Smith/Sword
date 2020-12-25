@@ -32,6 +32,7 @@ type PartyIndex = Integer
 type PartyIdentifier = Integer
 
 type MemExpId = Integer
+type TransferCallId = Integer
 type Branch = Bool
 type MemExpPath = [(MemExpId, Branch)]
 
@@ -49,6 +50,7 @@ data TransferCall =
                   , _tokenAddress :: Address -- SA
                   , _to           :: PartyTokenID
                   , _memExpPath   :: MemExpPath
+                  , _id           :: TransferCallId
                   } deriving (Show, Eq)
 
 getPartyTokenIDs :: IntermediateContract -> [PartyTokenID]

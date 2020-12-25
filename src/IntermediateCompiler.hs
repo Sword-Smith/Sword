@@ -41,9 +41,10 @@ data ScopeEnv =
               , _currentMemExpPath :: MemExpPath
               }
 
-data GlobalEnv =
-  GlobalEnv { _memExpId :: Maybe MemExpId
-            }
+data GlobalEnv = GlobalEnv
+  { _memExpId       :: Maybe MemExpId
+  , _transferCallId :: TransferCallId
+  }
 
 type ICompiler a = ReaderT ScopeEnv (State GlobalEnv) a
 
@@ -57,22 +58,30 @@ initialScope = ScopeEnv { _maxFactor   = 1
                         }
 
 initialGlobal :: GlobalEnv
-initialGlobal = GlobalEnv { _memExpId = Nothing
-                          }
+initialGlobal = GlobalEnv
+  { _memExpId       = Nothing
+  , _transferCallId = 0
+  }
 
 emptyContract :: IntermediateContract
 emptyContract = IntermediateContract [] [] Map.empty
 
 newMemExpId :: ICompiler MemExpId
 newMemExpId = do
-  g @ (GlobalEnv _memExpId) <- get
-  let _memExpId' = increment _memExpId
+  g <- get
+  let _memExpId' = increment (_memExpId g)
   put $ g { _memExpId = Just _memExpId' }
   return _memExpId'
   where
     increment :: Maybe MemExpId -> MemExpId
-    increment (Just id) = id + 1
+    increment (Just memExpId) = memExpId + 1
     increment _         = 0
+
+newTransferCallId :: ICompiler TransferCallId
+newTransferCallId = do
+  tcId <- gets _transferCallId
+  modify $ \env -> env { _transferCallId = tcId + 1 }
+  return tcId
 
 toSeconds :: Time -> Integer
 toSeconds t = case t of
@@ -96,12 +105,14 @@ intermediateCompileOptimize = foldExprs . intermediateCompile
 intermediateCompileM :: Contract -> ICompiler IntermediateContract
 intermediateCompileM (Transfer token to) = do
   ScopeEnv maxFactor scaleFactor delayTerm memExpPath <- ask
+  transferCallId <- newTransferCallId
   let transferCall = TransferCall { _maxAmount     = maxFactor
                                   , _amount        = scaleFactor (Lit (IntVal 1))
                                   , _delay         = delayTerm
                                   , _tokenAddress  = token
                                   , _to            = to
                                   , _memExpPath    = memExpPath
+                                  , _id            = transferCallId
                                   }
 
   let activateMap = Map.fromList [(token, maxFactor)]
