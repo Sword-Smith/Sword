@@ -28,7 +28,6 @@ import DaggerLanguageDefinition
 import Control.Monad.Reader
 import Control.Monad.State
 
-import Data.List
 import qualified Data.Map.Strict as Map
 
 -- State monad definitions
@@ -152,9 +151,6 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
                     , _IMemExp      = memExp
                     }
 
-  -- MarginRefundMap
-  memExpPath <- reader _currentMemExpPath
-
   return $ IntermediateContract (tcs1 ++ tcs2)
                                 (me0 : mes1 ++ mes2)
                                 (Map.unionWith max am1 am2)
@@ -163,16 +159,6 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
     extendMemExpPath :: (MemExpId, Branch) -> ScopeEnv -> ScopeEnv
     extendMemExpPath node scopeEnv =
       scopeEnv { _currentMemExpPath = _currentMemExpPath scopeEnv ++ [node] }
-
-    -- A boolean condition of True (left child) having a req. margin of
-    -- 10 and the right child having a margin of 7 will mean that 3 may
-    -- be released if right child is chosen.
-    -- Hence the subtraction. If no margin is present in the
-    -- RC and margin is present in the LC, the entire margin can be
-    -- returned, hence the Map.differenceWith.
-    iw :: ActivateMap -> ActivateMap -> [(Address, Integer)]
-    iw am1 am2 = Map.toList
-      $ Map.differenceWith (\x y -> if x - y > 0 then Just (x - y) else Nothing) am1 am2
 
 intermediateCompileM Zero = return emptyContract
 
