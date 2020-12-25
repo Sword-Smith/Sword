@@ -65,6 +65,7 @@ runExprCompiler env expr = runCompiler emptyContract env (compileExp expr)
 -- position value that a contract position evaluates to
 data StorageType = CreationTimestamp
                  | MemoryExpressionRefs
+                 | EvaluatedTcValue TransferCallId
 
 -- For each storage index we pay 20000 GAS. Reusing one is only 5000 GAS.
 -- It would therefore make sense to pack as much as possible into the same index.
@@ -72,6 +73,7 @@ data StorageType = CreationTimestamp
 storageAddress :: Integral i => StorageType -> i
 storageAddress CreationTimestamp      = 0x0
 storageAddress MemoryExpressionRefs   = 0x1
+storageAddress (EvaluatedTcValue n)   = fromIntegral n + 0x2
 
 sizeOfOpcodes :: [EvmOpcode] -> Integer
 sizeOfOpcodes = sum . map sizeOfOpcode
@@ -183,8 +185,8 @@ transformPseudoInstructions = concatMap transformH
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
 constructor :: IntermediateContract -> [EvmOpcode]
-constructor IntermediateContract{..} =
-  checkNoValue "Constructor_Header"
+constructor ic =
+  checkNoValue "Constructor_Header" ++ initializeEvaluatedTcValues ic
 
 -- Checks that no value (ether) is sent when executing contract method
 -- Used in both contract header and in constructor
@@ -196,6 +198,21 @@ checkNoValue target = [ CALLVALUE
                       , push 0
                       , REVERT
                       , JUMPDESTFROM target ]
+
+-- | Set value in storage for each TransferCall to -1 to indicate
+-- that we have not yet evaluated the value of the TransferCall.
+initializeEvaluatedTcValues :: IntermediateContract -> [EvmOpcode]
+initializeEvaluatedTcValues ic =
+  [ push 0x01, push 0x00, SUB ] -- add -1 to stack
+  ++ concatMap setToMinusOne (getTransferCalls ic)
+  ++ [ POP ] -- remove -1 from stack again
+  where
+    setToMinusOne :: TransferCall -> [EvmOpcode]
+    setToMinusOne tc =
+      [ DUP1
+      , push (storageAddress (EvaluatedTcValue (_id tc)))
+      , SSTORE
+      ]
 
 -- Stores timestamp of creation of contract in storage
 saveTimestampToStorage :: [EvmOpcode]
@@ -582,7 +599,22 @@ executeTransferCallsHH tc transferCounter =
     callTransferToTcRecipient =
         -- Contains the code to calculate the SA ammount paid for each party
         -- token in this transfercall.
-      runExprCompiler (CompileEnv 0 transferCounter 0x44 "amount_exp") (_amount tc)
+        --   if (transferCall.HasKnownValue) { return knownValue; } else { var val = calculate(); transferCall.setKnownValue(val); return val; }
+        --
+        -- Read TC value from storage.
+        --   -1   means that it has not yet been evaluated.
+        --   >= 0 means that it has been evaluated.
+        --
+        -- If a TC value has been evaluated, return this value. Otherwise, calculate, store and return it.
+        [ push (storageAddress (EvaluatedTcValue (_id tc)))
+        , SLOAD
+        , DUP1
+        , push 0x0
+        , SGT
+        , ISZERO
+        , JUMPITO $ "tc_value_already_evaluated" ++ show transferCounter
+        , POP ]
+      ++ runExprCompiler (CompileEnv 0 transferCounter 0x44 "amount_exp") (_amount tc)
       ++ [ push (_maxAmount tc)
          , DUP2
          , DUP2
@@ -592,7 +624,13 @@ executeTransferCallsHH tc transferCounter =
          , JUMPDESTFROM $ "use_exp_res" ++ show transferCounter
          , POP ] -- Top of stack now has value `a`
 
-      ++ [ CALLER
+      -- Store evaluated value in storage
+      ++ [ DUP1
+         , push (storageAddress (EvaluatedTcValue (_id tc)))
+         , SSTORE ]
+
+      ++ [ JUMPDESTFROM $ "tc_value_already_evaluated" ++ show transferCounter
+         , CALLER
          , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
          , FUNCALL "getBalance_subroutine" ]  -- pops 1, pushes 1:  b is on the stack
 
