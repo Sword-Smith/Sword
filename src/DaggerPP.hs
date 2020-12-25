@@ -74,7 +74,7 @@ ppBinOp parentE leftE rightE = concat [ ppBinOp' leftE, op, ppBinOp' rightE ]
     ppBinOp' :: Expr -> String
     ppBinOp' e | prec e < prec parentE = ppExpr e
     ppBinOp' e | prec e == prec parentE && isAssoc e && isAssoc parentE = ppExpr e
-    ppBinOp' e | otherwise = parens (ppExpr e)
+    ppBinOp' e = parens (ppExpr e)
 
     op :: String
     op = case parentE of
