@@ -40,6 +40,7 @@ data IntermediateContract =
      IntermediateContract { getTransferCalls   :: [TransferCall]
                           , getMemExps         :: [IMemExp]
                           , getActivateMap     :: ActivateMap
+                          , getRequiresPT0     :: Bool
 --                          , getMarginRefundMap :: MarginRefundMap
                           } deriving (Show, Eq)
 
