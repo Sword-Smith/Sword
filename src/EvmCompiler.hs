@@ -554,6 +554,16 @@ compileLit lit mo _label = case lit of
 executeTransferCallsHH :: TransferCall -> Integer -> Compiler [EvmOpcode]
 executeTransferCallsHH tc transferCounter =
   let
+    checkIfTCAlreadyEvaluated =
+      [ push (storageAddress (EvaluatedTcValue (_id tc)))
+      , SLOAD
+      , DUP1
+      , push 0x0
+      , SGT
+      , ISZERO
+      , JUMPITO $ "tc_value_already_evaluated" ++ show transferCounter
+      , POP ]
+
     checkIfCallShouldBeMade =
       let
         checkIfTimeHasPassed = [ push $ storageAddress CreationTimestamp,
@@ -606,15 +616,7 @@ executeTransferCallsHH tc transferCounter =
         --   >= 0 means that it has been evaluated.
         --
         -- If a TC value has been evaluated, return this value. Otherwise, calculate, store and return it.
-        [ push (storageAddress (EvaluatedTcValue (_id tc)))
-        , SLOAD
-        , DUP1
-        , push 0x0
-        , SGT
-        , ISZERO
-        , JUMPITO $ "tc_value_already_evaluated" ++ show transferCounter
-        , POP ]
-      ++ runExprCompiler (CompileEnv 0 transferCounter 0x44 "amount_exp") (_amount tc)
+      runExprCompiler (CompileEnv 0 transferCounter 0x44 "amount_exp") (_amount tc)
       ++ [ push (_maxAmount tc)
          , DUP2
          , DUP2
@@ -658,6 +660,7 @@ executeTransferCallsHH tc transferCounter =
         [ JUMPDESTFROM $ "method_end" ++ show transferCounter ]
 
   in return $
+    checkIfTCAlreadyEvaluated ++
     checkIfCallShouldBeMade ++
     callTransferToTcRecipient ++
     setPTBalanceToZero ++
