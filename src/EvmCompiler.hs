@@ -739,12 +739,14 @@ burnABI = do
 
 burn :: Compiler [EvmOpcode]
 burn = do
-  partyTokenIDs <- reader $ map _to . getTransferCalls
+  partyTokenIDs <- reader getPartyTokenIDs
+  requiresPT0 <- reader getRequiresPT0
+  let alsoBurnPT0 = if requiresPT0 then (PartyTokenID 0 :) else id
   -- TODO: I think this will only pay back one settlement asset.
   -- if multiple SAs are used, maybe only one will be paid back? -Thorkil
   (addrOfSA, amount) <- reader $  head . Map.assocs . getActivateMap
   return $
-    concatMap burnExt (nub partyTokenIDs) ++
+    concatMap burnExt (alsoBurnPT0 partyTokenIDs) ++
     [ CALLER
     , PUSH32 $ address2w256 addrOfSA
     , PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY -- amount uint256
