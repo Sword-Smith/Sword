@@ -27,6 +27,7 @@ module IntermediateLanguageDefinition where
 import DaggerLanguageDefinition
 
 import qualified Data.Map.Strict as Map
+import Data.Containers.ListUtils (nubOrd)
 
 type PartyIndex = Integer
 type PartyIdentifier = Integer
@@ -55,7 +56,8 @@ data TransferCall =
                   } deriving (Show, Eq)
 
 getPartyTokenIDs :: IntermediateContract -> [PartyTokenID]
-getPartyTokenIDs IntermediateContract{..} = map _to getTransferCalls
+getPartyTokenIDs IntermediateContract{..} =
+  nubOrd $ map _to getTransferCalls
 
 -- | Needs token ID 0.
 getMaxPartyTokenID :: IntermediateContract -> PartyTokenID
