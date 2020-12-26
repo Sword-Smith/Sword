@@ -330,11 +330,19 @@ payABI :: Compiler [EvmOpcode]
 payABI = do
     memExpCode <- concatMap executeMemExp <$> reader getMemExps
     transferCallCode <- executeTransferCalls
+    doPayToPT0 <- reader getRequiresPT0
+    let payToPT0 =
+          if doPayToPT0 then
+            -- TODO: Add code for PT0 payout routine.
+            []
+          else
+            []
     return $
         [ JUMPDESTFROM "pay_method" ]
         ++ throwIfNotActivated
         ++ memExpCode
         ++ transferCallCode
+        ++ payToPT0
         ++ emitEvent "Paid"
         ++ [ STOP ]
 
@@ -694,13 +702,15 @@ activateMapElementToTransferFromCall (tokenAddress, amount) =
 mint :: Compiler [EvmOpcode]
 mint = do
     am <- reader getActivateMap
-    partyTokenIDs <- reader $ map _to . getTransferCalls
+    partyTokenIDs <- reader getPartyTokenIDs
     thing <- concatMapM activateMapElementToTransferFromCall (Map.assocs am)
+    requiresPT0 <- reader getRequiresPT0
+    let alsoMintPT0 = if requiresPT0 then (PartyTokenID 0 :) else id
     return $
         -- SA.transferFrom
         thing
         -- PT.mint
-        ++ concatMap mintExt (nub partyTokenIDs)
+        ++ concatMap mintExt (alsoMintPT0 partyTokenIDs)
         ++ emitEvent "Minted" -- TODO: Change to ERC1155 minted event
 
 mintExt :: PartyTokenID -> [EvmOpcode]
