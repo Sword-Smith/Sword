@@ -444,22 +444,13 @@ path2highestIndexValue [(i, _branch)] = i
 path2highestIndexValue ((_i, _branch):ls) = path2highestIndexValue ls
 
 -- Returns the code for executing all tcalls that function gets
+-- TODO: Remove selfdestruct to avoid holes in the blockchain.
 executeTransferCalls :: Compiler [EvmOpcode]
 executeTransferCalls = do
   transferCalls <- reader getTransferCalls
-  opcodes <- loop 0 transferCalls
-
-  -- Prevent selfdestruct from running after each call
-  return $ opcodes ++ [STOP] ++ selfdestruct
-
+  return $ concat (zipWith executeTransferCallsHH transferCalls [1..])
+             ++ [STOP] ++ selfdestruct
   where
-    loop :: Integer -> [TransferCall] -> Compiler [EvmOpcode]
-    loop _ [] = return []
-    loop i (tc:tcs) = do
-      opcodes1 <- executeTransferCallsHH tc i
-      opcodes2 <- loop (i + 1) tcs
-      return (opcodes1 ++ opcodes2)
-
     selfdestruct = [ JUMPDESTFROM "selfdestruct"
                    , CALLER
                    , SELFDESTRUCT
@@ -551,7 +542,7 @@ compileLit lit mo _label = case lit of
 
     in functionCall ++ moveResToStack
 
-executeTransferCallsHH :: TransferCall -> Integer -> Compiler [EvmOpcode]
+executeTransferCallsHH :: TransferCall -> Integer -> [EvmOpcode]
 executeTransferCallsHH tc transferCounter =
   let
     checkIfTCAlreadyEvaluated =
@@ -659,7 +650,7 @@ executeTransferCallsHH tc transferCounter =
     functionEndLabel =
         [ JUMPDESTFROM $ "method_end" ++ show transferCounter ]
 
-  in return $
+  in
     checkIfTCAlreadyEvaluated ++
     checkIfCallShouldBeMade ++
     callTransferToTcRecipient ++
