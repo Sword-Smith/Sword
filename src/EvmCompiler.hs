@@ -575,8 +575,8 @@ executeTransferCallsHH tc =
 
 
             -- This code can be represented with the following C-like code:
-            -- if (memdibit == 00b) { GOTO YIELD } // Don't execute and don't set executed bit to zero.
-            -- if (memdibit == 10b && !branch || memdibit == 01b && branch ) { GOTO SKIP } // TC should not execute. Update executed bit
+            -- if (memdibit == 00b) { GOTO YIELD } // Don't execute as memExp hasn't evaluated yet
+            -- if (memdibit == 10b && !branch || memdibit == 01b && branch ) { GOTO SKIP } // TC should not execute. Set balance to zero.
             -- if (memdibit == 10b && branch || memdibit == 01b && !branch ) { GOTO PASS } // Check next memExp. If all PASS, then execute.
             -- TODO: the three above code blocks should be placed in an order which optimizes the gas cost over some ensemble of contracts
             -- Obviously, 3! possible orders exist.

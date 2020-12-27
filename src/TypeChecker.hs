@@ -23,7 +23,7 @@
 module TypeChecker where
 
 import DaggerLanguageDefinition
-import Data.List (nub, sort)
+import Data.List (sort)
 import Control.Monad (unless)
 
 data ExpType = BoolType
@@ -35,7 +35,7 @@ typeChecker c = do
   typeCheckerContract c
 
 hasSequentialPartyIDs :: Contract -> Bool
-hasSequentialPartyIDs c = verifySequence 1 $ sort $ nub (getAllParties c)
+hasSequentialPartyIDs c = verifySequence 1 $ sort $ getAllParties c
   where
     getAllParties :: Contract -> [PartyTokenID]
     getAllParties (Transfer _ to) = [to]
