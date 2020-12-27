@@ -26,6 +26,9 @@ import DaggerParser
 import DaggerLanguageDefinition
 
 import Test.Hspec
+import Test.QuickCheck
+
+import SwordGen
 
 tests :: Spec
 tests = do
