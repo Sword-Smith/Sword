@@ -52,7 +52,7 @@ executables:
 
 tests:
   unit:
-    source-dirs: unittests
+    source-dirs: test
     main: main_tests.hs
     dependencies:
       - Sword
