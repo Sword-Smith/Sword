@@ -38,17 +38,6 @@ executables:
       - directory >= 1.3.0.0
       - optparse-applicative
       - filepath
-  # daggerfmt: &dagger
-  #   source-dirs: unittests
-  #   main: DaggerFmt.hs
-  #   dependencies:
-  #     - daggerc
-  #     - base >= 4.9.1.0
-  #     - HUnit
-  #     - QuickCheck
-  #     - containers
-  #     - hspec
-  #     - mtl
 
 tests:
   unit:
