@@ -72,10 +72,15 @@ data IMemExp = IMemExp { _IMemExpBegin  :: Integer
                        , _IMemExp       :: Expr
                        } deriving (Show, Eq)
 
-type ActivateMap = Map.Map Address Integer
+
+-- TODO: Change ActivateMap to: type ActivateMap = Map.Map SettlementAssetId (SettlementAssetAmount, Address)
+type SettlementAssetAmount = Integer
+type SettlementAssetId = Integer
+type ActivateMap = Map.Map SettlementAssetId (SettlementAssetAmount, Address)
+-- type ActivateMap = Map.Map Address (SettlementAssetAmount, SettlementAssetId)
 
 -- This is the type for elements in Map.assocs
-type ActivateMapElement = (Address, Integer)
+type ActivateMapElement = (SettlementAssetId, (SettlementAssetAmount, Address))
 
 
 type MarginRefundMap = Map.Map [(Integer, Bool)] [(Address, PartyIndex, Integer)]

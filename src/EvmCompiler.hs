@@ -331,12 +331,7 @@ payABI = do
     memExpCode <- concatMap executeMemExp <$> reader getMemExps
     transferCallCode <- executeTransferCalls
     doPayToPT0 <- reader getRequiresPT0
-    let payToPT0 =
-          if doPayToPT0 then
-            -- TODO: Add code for PT0 payout routine.
-            []
-          else
-            []
+    payToPT0 <- if doPayToPT0 then payToPartyToken0 else return []
     return $
         [ JUMPDESTFROM "pay_method" ]
         ++ throwIfNotActivated
@@ -345,6 +340,48 @@ payABI = do
         ++ payToPT0
         ++ emitEvent "Paid"
         ++ [ STOP ]
+
+-- For hver Transfer Call ID:
+--   value := Storage[TCID];
+--   j := TCs[TCID]._tokenAddress;
+--   if (value == -1) goto end;
+--   PT0_udbetaling_j += value;
+--
+-- PT0_udbetaling_j = ActivateMap_j - 
+payToPartyToken0 :: Compiler [EvmOpcode]
+payToPartyToken0 = do
+  begin0 <- newLabel "pt0_loop_"
+  pt0_not_yet_evaluated <- newLabel "pt0_not_yet_evaluated"
+  PartyTokenID maxPTId <- reader getMaxPartyTokenID
+  return
+    [ push maxPTId
+      -- loop (tc_id from maxPTId to 0)
+      -- do ... while (tc_id != 0)
+    , JUMPDESTFROM begin0
+
+        -- Hack: Dynamically calculate storage address.
+      , DUP1
+      , push (storageAddress (EvaluatedTcValue 0))
+      , ADD
+      , SLOAD
+
+        -- If value[tc_id] < 0, don't perform PT0 payout.
+      , push 0x00
+      , SGT
+      , JUMPITO pt0_not_yet_evaluated
+        -- TODO: value is thrown out; maybe make copy later.
+
+        -- if (--tc_id > 0) goto begin0
+      , push 0x01
+      , DUP2
+      , SUB
+      , JUMPITO begin0
+
+      -- TODO: Manage payout of PT0
+    , POP -- tc_id removed
+
+    , JUMPDESTFROM pt0_not_yet_evaluated
+    ]
 
 -- This sets the relevant bits in the memory expression word in storage
 -- Here the IMemExp should be evaluated. But only iff it is NOT true atm.

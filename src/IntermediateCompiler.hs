@@ -44,6 +44,7 @@ data ScopeEnv =
 data GlobalEnv = GlobalEnv
   { _memExpId       :: Maybe MemExpId
   , _transferCallId :: TransferCallId
+  , _encounteredSettlementAssets :: [(Address, SettlementAssetId)]
   }
 
 type ICompiler a = ReaderT ScopeEnv (State GlobalEnv) a
@@ -61,11 +62,27 @@ initialGlobal :: GlobalEnv
 initialGlobal = GlobalEnv
   { _memExpId       = Nothing
   , _transferCallId = 0
+  , _encounteredSettlementAssets = []
   }
 
 -- TODO: Change default 'getRequiresPT0' to False once we calculate this correctly.
 emptyContract :: IntermediateContract
 emptyContract = IntermediateContract [] [] Map.empty True
+
+getSettlemenAssetId :: Address -> ICompiler SettlementAssetId
+getSettlemenAssetId saAddress = do
+  idMaybe <- lookup saAddress . _encounteredSettlementAssets <$> get
+  case idMaybe of
+    Just saId ->
+      return saId
+    Nothing -> do
+      newId <- toInteger . length . _encounteredSettlementAssets <$> get
+      modify (\x -> x{ _encounteredSettlementAssets = (saAddress, newId): (_encounteredSettlementAssets x) } )
+      return newId
+      
+      -- new ID = length of _encounteredSettlementAssets
+      -- add (saAddress, new ID) to _encounteredSettlementAssets
+      -- return new ID
 
 newMemExpId :: ICompiler MemExpId
 newMemExpId = do
@@ -104,21 +121,22 @@ intermediateCompileOptimize :: Contract -> IntermediateContract
 intermediateCompileOptimize = foldExprs . intermediateCompile
 
 intermediateCompileM :: Contract -> ICompiler IntermediateContract
-intermediateCompileM (Transfer token to) = do
+intermediateCompileM (Transfer saAddress to) = do
   ScopeEnv maxFactor scaleFactor delayTerm memExpPath <- ask
   transferCallId <- newTransferCallId
   let transferCall = TransferCall { _maxAmount     = maxFactor
                                   , _amount        = scaleFactor (Lit (IntVal 1))
                                   , _delay         = delayTerm
-                                  , _tokenAddress  = token
+                                  , _tokenAddress  = saAddress
                                   , _to            = to
                                   , _memExpPath    = memExpPath
                                   , _id            = transferCallId
                                   }
+  settlementAssetId <- getSettlemenAssetId saAddress
+  let activateMap = Map.fromList [(settlementAssetId, (maxFactor, saAddress))]
 
   -- TODO: Calculate 'requiresPT0' correctly instead of assuming True.
-  let activateMap = Map.fromList [(token, maxFactor)]
-      requiresPT0 = True
+  let requiresPT0 = True
   return (IntermediateContract [transferCall] [] activateMap requiresPT0)
 
 intermediateCompileM (Scale maxFactor factorExp contract) =
@@ -133,9 +151,15 @@ intermediateCompileM (Scale maxFactor factorExp contract) =
 intermediateCompileM (Both contractA contractB) = do
   IntermediateContract tcs1 mes1 am1 rpt0a <- intermediateCompileM contractA
   IntermediateContract tcs2 mes2 am2 rpt0b <- intermediateCompileM contractB
+  let unionActivateMap :: (SettlementAssetAmount, Address) -> (SettlementAssetAmount, Address) -> (SettlementAssetAmount, Address)
+      unionActivateMap (amount1, address1) (amount2, address2) = 
+        if address1 == address2 then
+          (amount1 + amount2, address1)
+        else
+          error "Bad Activatemap constructed"
   return $ IntermediateContract (tcs1 ++ tcs2)
                                 (mes1 ++ mes2)
-                                (Map.unionWith (+) am1 am2)
+                                (Map.unionWith unionActivateMap am1 am2)
                                 (rpt0a || rpt0b)
 
 intermediateCompileM (Translate time contract) =
@@ -166,9 +190,16 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
                     , _IMemExp      = memExp
                     }
 
+  let unionActivateMap :: (SettlementAssetAmount, Address) -> (SettlementAssetAmount, Address) -> (SettlementAssetAmount, Address)
+      unionActivateMap (amount1, address1) (amount2, address2) = 
+        if address1 == address2 then
+          (max amount1 amount2, address1)
+        else
+          error "Bad Activatemap constructed"
+
   return $ IntermediateContract (tcs1 ++ tcs2)
                                 (me0 : mes1 ++ mes2)
-                                (Map.unionWith max am1 am2)
+                                (Map.unionWith unionActivateMap am1 am2)
                                 (rpt0a || rpt0b)
 
   where
@@ -189,6 +220,7 @@ foldExprs contract =
     foldME :: IMemExp -> IMemExp
     foldME memExp = memExp { _IMemExp = foldExpr (_IMemExp memExp) }
 
+-- TODO: Add constant folding exprs for: `1 * expr1 = expr1` and `expr1 * 1 = expr1`
 foldExpr :: Expr -> Expr
 foldExpr expr = case expr of
   Lit _        -> expr
