@@ -37,6 +37,7 @@ import System.Exit
 import Options.Applicative
 import System.FilePath
 import System.IO
+import Control.Monad (when)
 
 data Args = Args
   { srcFile    :: FilePath
@@ -60,9 +61,20 @@ runArgsHandler Args{..} = do
       Right astTC -> do
         let baseName = takeBaseName srcFile
             binPath = (outputDir </> baseName) `addExtension` ".bin"
+            intermediateContract = intermediateCompile astTC
+            binaryBlob = assemble intermediateContract
+
         putStrLn ("Writing to file " ++ binPath)
         writeAbiDef outputDir baseName
-        writeFile binPath (assemble $ intermediateCompile astTC)
+        writeFile binPath binaryBlob
+
+        when debug $ do
+          let debugPath = (outputDir </> baseName) `addExtension` ".intermediate"
+          putStrLn ("Writing debug data to " <> debugPath <> "...")
+          writeFile debugPath (show intermediateContract)
+
+
+
 
 critical :: String -> IO ()
 critical err = do
