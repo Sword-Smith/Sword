@@ -722,12 +722,12 @@ activateABI = do
     ++ [ STOP ]
 
 activateMapElementToTransferFromCall :: ActivateMapElement -> Compiler [EvmOpcode]
-activateMapElementToTransferFromCall (tokenAddress, amount) =
+activateMapElementToTransferFromCall (_, (settlementAssetAmount, tokenAddress)) =
   return $
       -- Prepare stack for `transferFrom`
       [ CALLER  -- CALLER is the originator of the currently executing call-chain, aka User.
       , PUSH32 $ address2w256 tokenAddress
-      , push amount
+      , push settlementAssetAmount
       -- push the only argument given to "activate_method".
       , PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY
       , FUNCALL "safeMul_subroutine"
@@ -782,7 +782,7 @@ burn = do
   let burnPartyTokensCode = concatMap burnExt (alsoBurnPT0 partyTokenIDs)
 
   pairs <- reader $ Map.assocs . getActivateMap
-  let transferSettlementAssetsCode = flip concatMap pairs $ \(addrOfSA, amount) ->
+  let transferSettlementAssetsCode = flip concatMap pairs $ \(_, (amount, addrOfSA)) ->
         [ CALLER
         , PUSH32 $ address2w256 addrOfSA
         , PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY -- amount uint256
