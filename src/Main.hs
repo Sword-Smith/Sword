@@ -32,7 +32,6 @@ import TypeChecker as TC
 import Abi
 
 import Data.Aeson
---import qualified Data.Text.Lazy.IO as I (writeFile)
 import qualified Data.ByteString.Lazy as BS
 import System.Exit
 import Options.Applicative
