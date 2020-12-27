@@ -55,8 +55,7 @@ tests = do
 transferContract :: Contract
 transferContract = Transfer {
     tokenAddress_ = "0x123456789012345678901234567890123456789a",
-    from_         = Bound "0x123456789012345678901234567890123456789a",
-    to_           = Bound "0x123456789012345678901234567890123456789a"
+    to_           = PartyTokenID 1
 }
 
 scaleContract :: Integer -> Expr -> Contract -> Contract

@@ -35,32 +35,21 @@ import IntermediateLanguageDefinition
 import Test.Hspec
 
 tests :: Spec
-tests
-  = do canonicalNestedIfWithinTest
-       activateMapSimple
-       activateMapCanonicalIw
-       basicTransferTest
-       timeTranslationIMemExpTest
-       zeroContractCodeTest
+tests = do
+  canonicalNestedIfWithinTest
+  activateMapSimple
+  activateMapCanonicalIw
+  basicTransferTest
+  timeTranslationIMemExpTest
+  zeroContractCodeTest
 
 canonicalNestedIfWithinTest :: Spec
-canonicalNestedIfWithinTest
-  = do it "canonical nested if-within" $
-         do intermediateCompile (parse' canonical_iw_source) `shouldBe`
-              intermediateContract
+canonicalNestedIfWithinTest = do
+  it "canonical nested if-within" $
+    intermediateCompile (parse' canonical_iw_source) `shouldBe` intermediateContract
 
-  where intermediateContract
-          = IntermediateContract parties transfers memExps activateMap
-
-        parties
-          = ["0x1234567890123456789012345678901234567891",
-             "0x1234567890123456789012345678901234567892",
-             "0x1234567890123456789012345678901234567893",
-             "0x1234567890123456789012345678901234567894",
-             "0x1234567890123456789012345678901234567895",
-             "0x1234567890123456789012345678901234567896",
-             "0x1234567890123456789012345678901234567897",
-             "0x1234567890123456789012345678901234567898"]
+  where requiresPartyToken0 = True
+        intermediateContract = IntermediateContract transfers memExps activateMap requiresPartyToken0
 
         transfers
           = [TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0,
@@ -138,88 +127,42 @@ canonicalNestedIfWithinTest
 
         activateMap
           = Map.fromList
-              [(("0x1234567890123456789012345678901234567891", 0), 1),
-               (("0x1234567890123456789012345678901234567892", 1), 1),
-               (("0x1234567890123456789012345678901234567893", 2), 1),
-               (("0x1234567890123456789012345678901234567894", 3), 1),
-               (("0x1234567890123456789012345678901234567895", 4), 1),
-               (("0x1234567890123456789012345678901234567896", 5), 1),
-               (("0x1234567890123456789012345678901234567897", 6), 1),
-               (("0x1234567890123456789012345678901234567898", 7), 1)]
-
-        marginRefundMap
-          = Map.fromList
-              [([(0, False)],
-                [("0x1234567890123456789012345678901234567891", 0, 1),
-                 ("0x1234567890123456789012345678901234567892", 1, 1),
-                 ("0x1234567890123456789012345678901234567893", 2, 1),
-                 ("0x1234567890123456789012345678901234567894", 3, 1),
-                 ("0x1234567890123456789012345678901234567895", 4, 1)]),
-               ([(0, False), (5, False)],
-                [("0x1234567890123456789012345678901234567896", 5, 1)]),
-               ([(0, False), (5, False), (6, False)],
-                [("0x1234567890123456789012345678901234567897", 6, 1)]),
-               ([(0, False), (5, False), (6, True)],
-                [("0x1234567890123456789012345678901234567898", 7, 1)]),
-               ([(0, False), (5, True)],
-                [("0x1234567890123456789012345678901234567897", 6, 1),
-                 ("0x1234567890123456789012345678901234567898", 7, 1)]),
-               ([(0, True)],
-                [("0x1234567890123456789012345678901234567896", 5, 1),
-                 ("0x1234567890123456789012345678901234567897", 6, 1),
-                 ("0x1234567890123456789012345678901234567898", 7, 1)]),
-               ([(0, True), (1, False)],
-                [("0x1234567890123456789012345678901234567891", 0, 1),
-                 ("0x1234567890123456789012345678901234567892", 1, 1)]),
-               ([(0, True), (1, False), (3, False)],
-                [("0x1234567890123456789012345678901234567893", 2, 1),
-                 ("0x1234567890123456789012345678901234567894", 3, 1)]),
-               ([(0, True), (1, False), (3, True)],
-                [("0x1234567890123456789012345678901234567895", 4, 1)]),
-               ([(0, True), (1, False), (3, True), (4, False)],
-                [("0x1234567890123456789012345678901234567893", 2, 1)]),
-               ([(0, True), (1, False), (3, True), (4, True)],
-                [("0x1234567890123456789012345678901234567894", 3, 1)]),
-               ([(0, True), (1, True)],
-                [("0x1234567890123456789012345678901234567893", 2, 1),
-                 ("0x1234567890123456789012345678901234567894", 3, 1),
-                 ("0x1234567890123456789012345678901234567895", 4, 1)]),
-               ([(0, True), (1, True), (2, False)],
-                [("0x1234567890123456789012345678901234567891", 0, 1)]),
-               ([(0, True), (1, True), (2, True)],
-                [("0x1234567890123456789012345678901234567892", 1, 1)])]
+              [(0, (1, "0x1234567890123456789012345678901234567891")),
+               (1, (1, "0x1234567890123456789012345678901234567892")),
+               (2, (1, "0x1234567890123456789012345678901234567893")),
+               (3, (1, "0x1234567890123456789012345678901234567894")),
+               (4, (1, "0x1234567890123456789012345678901234567895")),
+               (5, (1, "0x1234567890123456789012345678901234567896")),
+               (6, (1, "0x1234567890123456789012345678901234567897")),
+               (7, (1, "0x1234567890123456789012345678901234567898"))]
 
 -- Test that the getActivateMap function returns a correct map given a function
 activateMapSimple :: Spec
 activateMapSimple
   = do it "getActivateMapSimple" $
-         do getActivateMap (intermediateCompile (parse' src)) `shouldBe`
-              activateMap
+         do getActivateMap (intermediateCompile (parse' src)) `shouldBe` activateMap
 
-  where src
-          = "both( if true within seconds(1) then scale(1, 1, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) else scale(7, 7, transfer(0xdddddddddddddddddddddddddddddddddddddddd,0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee,0xffffffffffffffffffffffffffffffffffffffff)),  if true within seconds(2) then scale(17, 17, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) else if true within seconds(3) then scale(53, 53, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) else scale(101, 101, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) )"
-        activateMap
-          = (Map.fromList
-               [(("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 0), 102),
-                (("0xdddddddddddddddddddddddddddddddddddddddd", 2), 7)])
+  where
+    src = "both( if true within seconds(1) then scale(1, 1, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) else scale(7, 7, transfer(0xdddddddddddddddddddddddddddddddddddddddd,0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee,0xffffffffffffffffffffffffffffffffffffffff)),  if true within seconds(2) then scale(17, 17, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) else if true within seconds(3) then scale(53, 53, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) else scale(101, 101, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) )"
+    activateMap = Map.fromList
+               [(0, (102, "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")),
+                (1, (7, "0xdddddddddddddddddddddddddddddddddddddddd"))]
 
 -- Test that the getActivateMap works for the canonical IW source code
 activateMapCanonicalIw :: Spec
-activateMapCanonicalIw
-  = do it "getActivateMapCanonicalIw" $
-         do getActivateMap (intermediateCompile (parse' canonical_iw_source))
-              `shouldBe` activateMap
-
-  where activateMap
-          = (Map.fromList
-               [(("0x1234567890123456789012345678901234567891", 0), 1),
-                (("0x1234567890123456789012345678901234567892", 1), 1),
-                (("0x1234567890123456789012345678901234567893", 2), 1),
-                (("0x1234567890123456789012345678901234567894", 3), 1),
-                (("0x1234567890123456789012345678901234567895", 4), 1),
-                (("0x1234567890123456789012345678901234567896", 5), 1),
-                (("0x1234567890123456789012345678901234567897", 6), 1),
-                (("0x1234567890123456789012345678901234567898", 7), 1)])
+activateMapCanonicalIw = do
+  it "getActivateMapCanonicalIw" $ do
+    getActivateMap (intermediateCompile (parse' canonical_iw_source)) `shouldBe` activateMap
+  where
+    activateMap = Map.fromList
+          [(0, (1, "0x1234567890123456789012345678901234567891")),
+            (1, (1, "0x1234567890123456789012345678901234567892")),
+            (2, (1, "0x1234567890123456789012345678901234567893")),
+            (3, (1, "0x1234567890123456789012345678901234567894")),
+            (4, (1, "0x1234567890123456789012345678901234567895")),
+            (5, (1, "0x1234567890123456789012345678901234567896")),
+            (6, (1, "0x1234567890123456789012345678901234567897")),
+            (7, (1, "0x1234567890123456789012345678901234567898"))]
 
 timeTranslationIMemExpTest :: Spec
 timeTranslationIMemExpTest
@@ -233,11 +176,10 @@ timeTranslationIMemExpTest
                 "then transfer(T, A, B) " ++
                   "else scale(2, 2, transfer(T, A, B)))"
 
+        requiresPartyToken0 = True
+
         intermediateContract :: IntermediateContract
-        intermediateContract
-          = IntermediateContract parties transfers memExps activateMap
-              marginRefundMap
-        parties = [oneAddr, twoAddr]
+        intermediateContract = IntermediateContract transfers memExps activateMap requiresPartyToken0
 
         transfers
           = [TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1),
@@ -250,9 +192,7 @@ timeTranslationIMemExpTest
 
         memExps = [IMemExp 120 240 0 (Lit (Observable OBool obsAddr "0"))]
 
-        activateMap = Map.fromList [((tokAddr, 0), 2)]
-
-        marginRefundMap = Map.fromList [([(0, True)], [(tokAddr, 0, 1)])]
+        activateMap = Map.fromList [(0, (2, tokAddr))]
 
 zeroContractCodeTest :: Spec
 zeroContractCodeTest
@@ -268,12 +208,10 @@ zeroContractCodeTest
               "if obs(bool, O, 0) within seconds(10) " ++
                 "then transfer(T, A, B) else zero"
 
-        intermediateContract :: IntermediateContract
-        intermediateContract
-          = IntermediateContract parties transfers memExps activateMap
-              marginRefundMap
+        requiresPartyToken0 = True
 
-        parties = [oneAddr, twoAddr]
+        intermediateContract :: IntermediateContract
+        intermediateContract = IntermediateContract transfers memExps activateMap requiresPartyToken0
 
         transfers
           = [TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0,
@@ -284,9 +222,7 @@ zeroContractCodeTest
           = [IMemExp{_IMemExpBegin = 0, _IMemExpEnd = 10, _IMemExpIdent = 0,
                      _IMemExp = Lit (Observable OBool obsAddr "0")}]
 
-        activateMap = Map.fromList [((tokAddr, 0), 1)]
-
-        marginRefundMap = Map.fromList [([(0, False)], [(tokAddr, 0, 1)])]
+        activateMap = Map.fromList [(0, (1, tokAddr))]
 
 basicTransferTest :: Spec
 basicTransferTest
@@ -294,17 +230,18 @@ basicTransferTest
          do intermediateCompile transfer `shouldBe` transferIC
 
   where transfer :: Contract
-        transfer
-          = Transfer{tokenAddress_ = tokAddr, to_ = PartyTokenID 1}
+        transfer = Transfer{tokenAddress_ = tokAddr, to_ = PartyTokenID 1}
+
+        requiresPartyToken0 = True
+        activateMap = Map.fromList [(0, (1, tokAddr))]
 
         transferIC :: IntermediateContract
-        transferIC
-          = IntermediateContract [twoAddr, oneAddr]
+        transferIC = IntermediateContract
 
               [TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1),
                             _delay = 0, _tokenAddress = tokAddr, _to = PartyTokenID 1,
                             _memExpPath = []}]
 
               []
-              (Map.fromList [((tokAddr, 0), 1)])
-              Map.empty
+              activateMap
+              requiresPartyToken0
