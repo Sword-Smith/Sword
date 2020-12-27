@@ -41,6 +41,7 @@ import System.IO
 data Args = Args
   { srcFile    :: FilePath
   , outputDir  :: FilePath
+  , debug      :: Bool
   }
 
 main :: IO ()
@@ -77,7 +78,7 @@ argsParserInfo =
     ]
 
 argsParser :: Parser Args
-argsParser = Args <$> srcFileParser <*> outputDirParser
+argsParser = Args <$> srcFileParser <*> outputDirParser <*> debugParser
   where
     srcFileParser = strArgument (metavar "<file>")
 
@@ -87,6 +88,13 @@ argsParser = Args <$> srcFileParser <*> outputDirParser
       , metavar "DIRECTORY"
       , help "Output directory for compiled contract"
       , value "."
+      , showDefault
+      ]
+
+    debugParser = switch . mconcat $
+      [ long "debug"
+      , short 'd'
+      , help "Flag to enable debugging output"
       , showDefault
       ]
 
