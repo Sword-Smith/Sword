@@ -21,6 +21,7 @@
 -- SOFTWARE.
 
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Main where
 
@@ -33,10 +34,62 @@ import Abi
 import Data.Aeson
 --import qualified Data.Text.Lazy.IO as I (writeFile)
 import qualified Data.ByteString.Lazy as BS
-import Data.List.Split
-import System.Environment
 import System.Exit
+import Options.Applicative
+import System.FilePath
+import System.IO
 
+data Args = Args
+  { srcFile    :: FilePath
+  , outputDir  :: FilePath
+  }
+
+main :: IO ()
+main = runArgsParser >>= runArgsHandler
+
+runArgsParser :: IO Args
+runArgsParser = customExecParser (prefs showHelpOnError) argsParserInfo
+
+runArgsHandler :: Args -> IO ()
+runArgsHandler Args{..} = do
+  srcText <- readFile srcFile
+  case BP.parseWrap srcText of
+    Left err -> critical ("Parse error! " ++ show err ++ "\n\nSource code:\n" ++ srcText)
+    Right ast -> case TC.typeChecker ast of
+      Left errTC -> critical ("Type check error! " ++ show errTC)
+      Right astTC -> do
+        let baseName = takeBaseName srcFile
+            binPath = (outputDir </> baseName) `addExtension` ".bin"
+        putStrLn ("Writing to file " ++ binPath)
+        writeAbiDef outputDir baseName
+        writeFile binPath (assemble $ intermediateCompile astTC)
+
+critical :: String -> IO ()
+critical err = do
+  hPutStrLn stderr err
+  exitFailure
+
+argsParserInfo :: ParserInfo Args
+argsParserInfo =
+  info (helper <*> argsParser) . mconcat $
+    [ fullDesc
+    , header "Sword compiler"
+    , progDesc "Compiles smart contracts"
+    ]
+
+argsParser :: Parser Args
+argsParser = Args <$> srcFileParser <*> outputDirParser
+  where
+    srcFileParser = strArgument (metavar "<file>")
+
+    outputDirParser = strOption . mconcat $
+      [ long "output"
+      , short 'o'
+      , metavar "DIRECTORY"
+      , help "Output directory for compiled contract"
+      , value "."
+      , showDefault
+      ]
 
 -- This function writes an ABI definition of the contract.
 writeAbiDef :: String -> String -> IO()
@@ -45,45 +98,3 @@ writeAbiDef outdir bn = do
   let fn  = outdir ++ "/" ++ bn ++ ".abi"
   putStrLn $ "Writing to " ++ fn
   BS.writeFile fn (encode abi)
-
--- (outdir, bn, fp)
-args2fileInfo :: [String] -> (String, String, String)
-args2fileInfo [fp] =
-  let
-    fPath = head $ splitOn ".bahr" $ head $ splitOn ".dag" fp
-    bn    = last $ splitOn "/" fPath
-  in
-    ("", bn, fp)
-args2fileInfo ["-o", outdir, fp] =
-  let
-    fPath = head $ splitOn ".bahr" $ head $ splitOn ".dag" fp
-    bn    = last $ splitOn "/" fPath
-  in
-    (outdir, bn, fp)
-args2fileInfo _ = ("", "", "")
-
--- We would like to call 'Main -o "$outdir" <file>'
-main :: IO ()
-main = do
-  files <- getArgs
-  let (outdir, bn, fp) = args2fileInfo files
-  case bn of
-    "" -> do
-      putStrLn "Usage: Main [-o outdir] <file name>"
-      exitFailure
-    _ -> do
-      let binPath = outdir ++ "/" ++ bn ++ ".bin"
-      source <- readFile fp
-      let parseRes = BP.parseWrap source
-      case parseRes of
-        Left err  -> putStrLn ("Parse error! " ++ show err ++ "\n\nSource code:\n" ++ source)
-        -- DEVFIX: The error handling could probably be better here
-        -- Do we need checks after the parser is successful?
-        Right ast -> do
-          let typeCheck = TC.typeChecker ast
-          case typeCheck of
-            Left errTC -> putStrLn( "Type check error! " ++ show errTC)
-            Right astTC -> do
-              putStrLn ("Writing to file " ++ binPath)
-              writeAbiDef outdir bn
-              writeFile binPath (assemble $ intermediateCompile astTC)

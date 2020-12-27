@@ -23,6 +23,8 @@ library:
     - aeson >= 1.0.2.1
     - split >= 0.2.3.1
     - directory >= 1.3.0.0
+    - optparse-applicative
+    - filepath
 
 executables:
   daggerc: &daggerc
@@ -34,6 +36,8 @@ executables:
       - bytestring >= 0.10.8.1
       - split >= 0.2.3.1
       - directory >= 1.3.0.0
+      - optparse-applicative
+      - filepath
   # daggerfmt: &dagger
   #   source-dirs: unittests
   #   main: DaggerFmt.hs
