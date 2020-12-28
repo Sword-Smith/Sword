@@ -20,105 +20,23 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
-{-# LANGUAGE OverloadedStrings, DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 module Main where
 
 import EvmCompiler as EVMC
 import IntermediateCompiler as IMC
 import DaggerParser as BP
 import TypeChecker as TC
+import Abi
 
 import Data.Aeson
 --import qualified Data.Text.Lazy.IO as I (writeFile)
 import qualified Data.ByteString.Lazy as BS
 import Data.List.Split
-import GHC.Generics
 import System.Environment
 import System.Exit
 
-data AbiVarDefinition = AbiVarDefinition {
-    name_ :: String
-  , type_ :: String
-  } deriving (Show)
-
-instance ToJSON AbiVarDefinition where
-  toJSON (AbiVarDefinition n t) =
-    object ["name" .= n, "type" .= t]
-
-data AbiConstructorDefinition = AbiConstructorDefinition {
-    payable__ :: Bool
-  , type__    :: String
-  , inputs__  :: [AbiVarDefinition]
-  } deriving (Show)
-
-instance ToJSON AbiConstructorDefinition where
-  toJSON (AbiConstructorDefinition p t is) =
-    object ["payable" .= p, "type" .= t, "inputs" .= toJSON is]
-
-data AbiFunctionDefinition = AbiFunctionDefinition
-  { _name     :: String
-  , _type     :: String
-  , _payable  :: Bool
-  , _outputs  :: [AbiVarDefinition]
-  , _inputs   :: [AbiVarDefinition]
-  , _constant :: Bool
-  } deriving (Generic, Show)
-
-instance ToJSON AbiFunctionDefinition where
-  toJSON (AbiFunctionDefinition n t p os is c) =
-    object ["name"     .= n,
-            "type"     .= t,
-            "payable"  .= p,
-            "inputs"   .= toJSON is,
-            "outputs"  .= toJSON os,
-            "constant" .= c]
-
-data AbiEventDefinition = AbiEventDefinition
-  { _eventName      :: String
-  , _eventType      :: String
-  , _eventAnonymous :: Bool
-  , _eventInputs    :: [AbiVarDefinition]
-  } deriving (Generic, Show)
-
-instance ToJSON AbiEventDefinition where
-  toJSON (AbiEventDefinition n t a i) =
-    object [ "name"      .= n
-           , "type"      .= t
-           , "inputs"    .= i
-           , "anonymous" .= a ]
-
-data AbiDefinition = AbiDefinition {
-    constuctor :: Maybe AbiConstructorDefinition
-  , functions  :: [AbiFunctionDefinition]
-  , events     :: [AbiEventDefinition]
-  } deriving (Show)
-
--- The JSON type of this should be [abiConstructor, abiFucntions]
-instance ToJSON AbiDefinition where
-  toJSON (AbiDefinition constructor functions events) =
-    case constructor of
-      Nothing -> toJSONList functions
-      -- DEVFIX: THIS NEEDS TO HAVE THE CONSTRUCTOR ADDED!!!
-      --Just c  -> toJSON $ ( [(toJSON c), (toJSONList functions)])
-      Just c -> toJSON $ map toJSON functions ++ map toJSON events
-
--- What kind of type should this take as argument?
--- DEVQ: Perhaps this should be calculated in EvmCompile?
-getAbiDefinition :: AbiDefinition
-getAbiDefinition =
-  let
-    constructor = Just $ AbiConstructorDefinition False "constructor" []
-    execute     = AbiFunctionDefinition "execute"  "function" False [] [] False
-    pay         = AbiFunctionDefinition "pay"      "function" False [] [] False
-    activate    = AbiFunctionDefinition "activate" "function" False [] [AbiVarDefinition "amount" "uint256"] False
-    mint        = AbiFunctionDefinition "mint"     "function" False [] [AbiVarDefinition "amount" "uint256"] False
-    burn        = AbiFunctionDefinition "burn"     "function" False [] [AbiVarDefinition "amount" "uint256"] False
-    activatedE  = AbiEventDefinition    "Activated"   "event" False []
-    mintedE     = AbiEventDefinition    "Minted"      "event" False []
-    burntE      = AbiEventDefinition    "Burnt"       "event" False []
-    paidE       = AbiEventDefinition    "Paid"        "event" False []
-  in
-    AbiDefinition constructor [execute, pay, activate, mint, burn] [activatedE, mintedE, burntE, paidE] -- add Transfer event.
 
 -- This function writes an ABI definition of the contract.
 writeAbiDef :: String -> String -> IO()

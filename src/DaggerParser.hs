@@ -67,7 +67,7 @@ transferParser = do
   parens $ do
     ta <- getAddress
     symbol ","
-    to <- getAddress
+    to <- PartyTokenID <$> getInt
     return $ Transfer ta to
 
 scaleParser :: Parser Contract
@@ -400,21 +400,6 @@ getTokenSymbol = do
   ts <- many1 upper
   spaces
   return ts
-
-getParty :: Parser Party
-getParty = getBound <|> getFree
-
-getBound :: Parser Party
-getBound = do
-  addr <- getAddress
-  return $ Bound addr
-
-getFree :: Parser Party
-getFree = do
-  string "free"
-  parens $ do
-    identity <- getInt
-    return $ Free identity
 
 getAddress :: Parser Address
 getAddress = do

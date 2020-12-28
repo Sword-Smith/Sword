@@ -43,8 +43,7 @@ data ScopeEnv =
               }
 
 data GlobalEnv =
-  GlobalEnv { _parties  :: [Party]
-            , _memExpId :: Maybe MemExpId
+  GlobalEnv { _memExpId :: Maybe MemExpId
             }
 
 type ICompiler a = ReaderT ScopeEnv (State GlobalEnv) a
@@ -59,8 +58,7 @@ initialScope = ScopeEnv { _maxFactor   = 1
                         }
 
 initialGlobal :: GlobalEnv
-initialGlobal = GlobalEnv { _parties = []
-                          , _memExpId = Nothing
+initialGlobal = GlobalEnv { _memExpId = Nothing
                           }
 
 emptyContract :: IntermediateContract
@@ -68,7 +66,7 @@ emptyContract = IntermediateContract [] [] [] Map.empty
 
 newMemExpId :: ICompiler MemExpId
 newMemExpId = do
-  g @ (GlobalEnv _ _memExpId) <- get
+  g @ (GlobalEnv _memExpId) <- get
   let _memExpId' = increment _memExpId
   put $ g { _memExpId = Just _memExpId' }
   return _memExpId'
@@ -76,17 +74,6 @@ newMemExpId = do
     increment :: Maybe MemExpId -> MemExpId
     increment (Just id) = id + 1
     increment _         = 0
-
-insertIfMissing :: Party -> ICompiler PartyIndex
-insertIfMissing party = do
-  g @ (GlobalEnv _parties _) <- get
-
-  let (_parties', partyIndex) = case findIndex (party ==) _parties of
-        Just partyIndex -> (_parties, fromIntegral $ partyIndex)
-        Nothing -> (_parties ++ [party], fromIntegral $ length _parties)
-
-  put $ g { _parties = _parties' }
-  return partyIndex
 
 toSeconds :: Time -> Integer
 toSeconds t = case t of
@@ -102,15 +89,10 @@ intermediateCompile :: Contract -> IntermediateContract
 intermediateCompile contract =
   evalState (runReaderT compile initialScope) initialGlobal
   where
-    compile = intermediateCompileM contract >>= intermediateCompileFinalizeParties
+    compile = intermediateCompileM contract
 
 intermediateCompileOptimize :: Contract -> IntermediateContract
 intermediateCompileOptimize = foldExprs . intermediateCompile
-
-intermediateCompileFinalizeParties :: IntermediateContract -> ICompiler IntermediateContract
-intermediateCompileFinalizeParties contract = do
-  GlobalEnv _parties _ <- get
-  return $ contract { getParties = _parties }
 
 intermediateCompileM :: Contract -> ICompiler IntermediateContract
 intermediateCompileM (Transfer token to) = do

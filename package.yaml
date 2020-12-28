@@ -1,6 +1,14 @@
-name: daggerc
-version: "0.1"
+name: Sword
+version: 0.2.0
 category: Language
+
+ghc-options:
+  - -Wall
+  - -Wnoncanonical-monad-instances
+  - -Wcompat
+  - -Wincomplete-record-updates
+  - -Wincomplete-uni-patterns
+  - -Wredundant-constraints
 
 library:
   source-dirs: src
@@ -20,7 +28,7 @@ executables:
   daggerc: &daggerc
     main: src/Main.hs
     dependencies:
-      - daggerc
+      - Sword
       - base >= 4.9.1.0
       - aeson >= 1.0.2.1
       - bytestring >= 0.10.8.1
@@ -43,7 +51,7 @@ tests:
     source-dirs: unittests
     main: main_tests.hs
     dependencies:
-      - daggerc
+      - Sword
       - base >= 4.9.1.0
       - HUnit
       - QuickCheck

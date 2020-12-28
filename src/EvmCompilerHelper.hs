@@ -20,10 +20,14 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
+{-# LANGUAGE RecordWildCards #-}
+{-# OPTIONS_GHC -Wno-type-defaults #-} -- TODO: Replace Word256 and remove this.
+
 module EvmCompilerHelper where
 
 import DaggerLanguageDefinition
 import EvmLanguageDefinition
+import Abi (AbiEventDefinition(..), AbiEventParam(..))
 
 import Crypto.Hash
 import Data.ByteString (ByteString)
@@ -33,7 +37,6 @@ import Data.Word
 import Data.List
 import Numeric (showHex)
 import Text.Printf (printf)
-import Debug.Trace
 
 -- Given a list of things, t a, and a monadic function we map across that
 -- returns a list of values inside a monad (e.g. Compiler [EvmOpcode]),
@@ -94,7 +97,7 @@ string2w256 str =
   let
     showHex' c = showHex c "" -- partial evaluation of showHex
     keyArg = concatMap (showHex' . ord) str -- get it to hex repr as string
-    formatted = "0x" ++ keyArg ++ (replicate (64 - 2*(length str)) '0')
+    formatted = "0x" ++ keyArg ++ replicate (64 - 2*length str) '0'
   in
     hexString2w256 formatted
 
@@ -122,7 +125,7 @@ getFunctionCallEvm calleeAddress funSig callArgs inMemOffset outMemOffset outSiz
                                     , MSTORE ]
     pushOutSize       = [PUSH1 outSize]
     pushOutOffset     = [PUSH1 outMemOffset]
-    pushInSize        = [PUSH1 (0x4 + 0x20 * (fromIntegral (length callArgs)))]
+    pushInSize        = [PUSH1 (0x4 + 0x20 * fromIntegral (length callArgs))]
     pushInOffset      = [PUSH1 inMemOffset]
     pushValue         = [PUSH1 0x0]
     pushCalleeAddress = [PUSH32 $ address2w256 calleeAddress]
@@ -135,7 +138,7 @@ getFunctionCallEvm calleeAddress funSig callArgs inMemOffset outMemOffset outSiz
       where
         storeArgumentsH [] _ = []
         storeArgumentsH (arg:args) counter =
-          storeArgumentsHH arg ++ (storeArgumentsH args (counter + 1))
+          storeArgumentsHH arg ++ storeArgumentsH args (counter + 1)
           where
             storeArgumentsHH :: CallArgument -> [EvmOpcode]
             storeArgumentsHH (Word256 w256) = [ PUSH32 w256, PUSH1 (inMemOffset + 0x4 + counter * 0x20), MSTORE ]
@@ -210,12 +213,16 @@ ppEvm instruction = case instruction of
     DUP4         -> "83"
     DUP5         -> "84"
     DUP6         -> "85"
+    DUP7         -> "86"
     SWAP1        -> "90"
     SWAP2        -> "91"
     SWAP3        -> "92"
+    SWAP4        -> "93"
     LOG0         -> "a0"
     LOG1         -> "a1"
     LOG2         -> "a2"
+    LOG3         -> "a3"
+    LOG4         -> "a4"
     CREATE       -> "f0"
     CALL         -> "f1"
     CALLCODE     -> "f2"
@@ -224,15 +231,7 @@ ppEvm instruction = case instruction of
     SELFDESTRUCT -> "ff"
     THROW        -> "fe"
     REVERT       -> "fd"
-    instr        -> traceFaultyInstruction instr
-{-
-    FUNSTART _ _ -> undefined
-    FUNSTARTA _  -> undefined
-    FUNCALL _    -> undefined
-    FUNRETURN    -> undefined
-    JUMPTO _     -> undefined
-    JUMPITO _    -> undefined
--}
+    instr        -> error ("ppEvm: Unknown instruction: " ++ show instr)
 
 push :: Integer -> EvmOpcode
 push = PUSHN . words'
@@ -252,19 +251,11 @@ integerToWord8 i = integerToWord8 (i `div` 256) ++ [fromIntegral $ i `mod` 256]
 push4BigEnd :: Integer -> [EvmOpcode]
 push4BigEnd i =
   [ push i
-  , push (0xe0)
+  , push 0xe0
   , push 2
   , EXP
   , MUL
   ]
-
-
--- PMDish https://wiki.haskell.org/Debugging#Printf_and_friends
-traceFaultyInstruction :: EvmOpcode -> String
-traceFaultyInstruction instruction | trace ("ppEvm: " ++ show instruction) False = undefined
-
-
-getMethodID = functionSignature
 
 functionSignature :: String -> Word32
 functionSignature funDecl = read $ "0x" ++ Data.List.take 8 (keccak256 funDecl)
@@ -273,6 +264,7 @@ eventSignature :: String -> Word256
 eventSignature eventDecl = hexString2w256 $ "0x" ++ keccak256 eventDecl
 
 -- Emits a string
+emitEvent :: String -> [EvmOpcode]
 emitEvent eventName =
           [ PUSH32 $ eventSignature eventName
           , push 0
@@ -280,16 +272,35 @@ emitEvent eventName =
           , LOG1
           ]
 
--- bits
-addressSizeBits = 160
-wordSizeBits    = 256
-solcSigSize     =   4
-byteSize        =   8
-
--- Layout assuming 256bit args:
+-- | Create an event signature hash from an 'AbiEventDefinition'.
 --
---              0x4  0x24 0x44
--- [solcSigSize|arg0|arg1|arg2|..|argN]
-argNByteOffset n = solcSigSize + (n * wordSizeBits `div` byteSize)
+-- https://docs.soliditylang.org/en/develop/abi-spec.html#events
+eventSignatureHash :: AbiEventDefinition -> Word256
+eventSignatureHash = eventSignature . eventSignatureString
 
-type FunDecl = String
+-- | Create an event signature string from an 'AbiEventDefinition'.
+--
+-- https://docs.soliditylang.org/en/develop/abi-spec.html#events
+eventSignatureString :: AbiEventDefinition -> String
+eventSignatureString AbiEventDefinition{..} =
+  let types = map _eventParamType _eventInputs
+  in _eventName <> "(" <> intercalate "," types <> ")"
+
+-- | Calculate which of 'LOG0' .. 'LOG4' to use for emitting event.
+--
+-- This depends on how many indexed parameters the event has, as described here:
+--
+-- https://medium.com/mycrypto/understanding-event-logs-on-the-ethereum-blockchain-f4ae7ba50378
+--
+-- Anonymous events use one topic less, leaving out the event signature as a topic.
+logEvent :: AbiEventDefinition -> EvmOpcode
+logEvent event =
+  let indexedParams = filter _eventParamIndexed (_eventInputs event)
+      signatureTopic = if _eventAnonymous event then 0 else 1
+  in case length indexedParams + signatureTopic of
+    0 -> LOG0
+    1 -> LOG1
+    2 -> LOG2
+    3 -> LOG3
+    4 -> LOG4
+    n -> error $ "Cannot emit event with " ++ show n ++ " indexes"
