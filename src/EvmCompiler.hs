@@ -563,18 +563,10 @@ path2highestIndexValue [(i, _branch)] = i
 path2highestIndexValue ((_i, _branch):ls) = path2highestIndexValue ls
 
 -- Returns the code for executing all tcalls that function gets
--- TODO: Remove selfdestruct to avoid holes in the blockchain.
 executeTransferCalls :: Compiler [EvmOpcode]
 executeTransferCalls = do
   transferCalls <- reader getTransferCalls
   return $ concatMap executeTransferCallsHH transferCalls
-             ++ [STOP] ++ selfdestruct
-  where
-    selfdestruct = [ JUMPDESTFROM "selfdestruct"
-                   , CALLER
-                   , SELFDESTRUCT
-                   , STOP
-                   ]
 
 -- Return a new, unique label. Argument can be anything but should be
 -- descriptive since this will ease debugging.
