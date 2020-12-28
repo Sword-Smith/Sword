@@ -57,7 +57,7 @@ data TransferCall =
 
 getPartyTokenIDs :: IntermediateContract -> [PartyTokenID]
 getPartyTokenIDs IntermediateContract{..} =
-  nubOrd $ map _to getTransferCalls
+  map _to getTransferCalls
 
 -- | Needs token ID 0.
 getMaxPartyTokenID :: IntermediateContract -> PartyTokenID
