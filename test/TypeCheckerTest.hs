@@ -26,13 +26,9 @@ import DaggerLanguageDefinition
 
 import Data.Either
 
-import IntermediateCompiler
-import IntermediateLanguageDefinition
-
 import TypeChecker
 
 import Test.Hspec
-import Test.QuickCheck
 
 tests :: Spec
 tests = do
