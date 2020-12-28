@@ -27,7 +27,6 @@ module IntermediateLanguageDefinition where
 import DaggerLanguageDefinition
 
 import qualified Data.Map.Strict as Map
-import Data.Containers.ListUtils (nubOrd)
 
 type PartyIndex = Integer
 type PartyIdentifier = Integer
