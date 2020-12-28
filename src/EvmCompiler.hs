@@ -355,65 +355,73 @@ payToPartyToken0 = do
   pt0_no_pay <- newLabel "pt0_no_pay"
   -- TODO: The PT0 balance read here can be reused below, so we don't have to load it again
   let skipIfPt0BalanceIsZero = [CALLER, push 0x00, FUNCALL "getBalance_subroutine", ISZERO, JUMPITO pt0_no_pay]
-  PartyTokenID maxPTId <- reader getMaxPartyTokenID
+  maxTcId <- reader getMaxTcId
+  let subtractEvaluatedPTValuesFromSaAmounts = [
+     -- Stack = [ ... ]
+          push maxTcId
+       -- loop (tc_id from maxTcId to 0)
+       -- do ... while (tc_id != 0)
+       , JUMPDESTFROM begin0
+         -- Stack = [ tc_id ]
+
+         -- Hack: Dynamically calculate storage address.
+       , DUP1
+       , push (storageAddress (EvaluatedTcValue 0))
+       , ADD
+       , SLOAD
+         -- Stack = [ tc_value, tc_id ]
+
+         -- If value[tc_id] < 0, don't perform PT0 payout.
+       , DUP1
+       , push 0x00
+       , SGT
+         -- Stack = [ 0 > tc_value, tc_value, tc_id ]
+       , JUMPITO pt0_no_pay
+
+         -- Stack = [ tc_value, tc_id ]
+         -- Load accumulated payback value onto Stack
+
+         -- ERROR HAPPENS BELOW HERE
+       , DUP2 -- HERE IS ERROR! We confuse tc_id with sa_id!! We **should** use sa_id but we use tc_id instead!!
+         -- Stack = [ tc_id, tc_value, tc_id ]
+       , FUNCALL "transferCallToSettlementAsset_subroutine" -- <-- ERROR IS HERE NOW. THIS THROWS
+      --    -- Stack = [ saId, tc_value, tc_id ]
+       , push 0x20
+       , MUL
+       , DUP1
+       , MLOAD
+         -- Stack = [ M[0x20 * saId], 0x20 * saId, tc_value, tc_id ]
+
+       , DUP3
+       , SWAP1
+         -- Stack = [ M[0x20 * saId], tc_value, 0x20 * saId, tc_value, tc_id ]
+
+         -- Update and store accumulated payback value in memory
+       , FUNCALL "safeSub_subroutine"
+         -- Stack = [ M[0x20 * saId] - tc_value, 0x20 * saId, tc_value, tc_id ]
+       , SWAP1
+         -- Stack = [ 0x20 * saId, M[0x20 * saId] - tc_value, tc_value, tc_id ]
+       , MSTORE
+       , POP
+         --  Stack = [ tc_id ]
+
+      --    -- Loop condition check: if (--tc_id >= 0) goto begin0
+       , push 0x01
+       , SWAP1
+       , SUB
+       , DUP1
+       , push 0x00
+       , SGT
+       , ISZERO
+       , JUMPITO begin0
+
+       , POP ] -- tc_id removed ]
   loadActivateAmounts <- loadActivateMapIntoMemory <$> reader getActivateMap
   performPayoutPT0 <- payBackCalculatedValueToPT0 <$> reader getActivateMap
   return $
-    skipIfPt0BalanceIsZero ++
-    loadActivateAmounts ++
-    [ -- Stack = [ ... ]
-      push maxPTId
-      -- loop (tc_id from maxPTId to 0)
-      -- do ... while (tc_id != 0)
-    , JUMPDESTFROM begin0
-        -- Stack = [ tc_id ]
-
-        -- Hack: Dynamically calculate storage address.
-      , DUP1
-      , push (storageAddress (EvaluatedTcValue 0))
-      , ADD
-      , SLOAD
-        -- Stack = [ tc_value, tc_id ]
-
-        -- If value[tc_id] < 0, don't perform PT0 payout.
-      , DUP1
-      , push 0x00
-      , SGT
-        -- Stack = [ 0 > tc_value, tc_value, tc_id ]
-      , JUMPITO pt0_no_pay
-        -- TODO: value is thrown out; maybe make copy later.
-
-        -- Stack = [ tc_value, tc_id ]
-        -- Load accumulated payback value onto Stack
-      , DUP2 -- HERE IS ERROR! We confuse tc_id with sa_id!! We **should** use sa_id but we use tc_id instead!!
-      , push 0x20
-      , MUL
-      , DUP1
-      , MLOAD
-        -- Stack = [ M[0x20 * tc_id], 0x20 * tc_id, tc_value, tc_id ]
-
-      , DUP3
-      , SWAP1
-        -- Stack = [ M[0x20 * tc_id], tc_value, 0x20 * tc_id, tc_value, tc_id ]
-
-        -- Update and store accumulated payback value in memory
-      , FUNCALL "safeSub_subroutine"
-        -- Stack = [ M[0x20 * tc_id] - tc_value, 0x20 * tc_id, tc_value, tc_id ]
-      , SWAP1
-        -- Stack = [ 0x20 * tc_id, M[0x20 * tc_id] - tc_value, tc_value, tc_id ]
-      , MSTORE
-      , POP
-        --  Stack = [ tc_id ]
-
-        -- Loop condition check: if (--tc_id > 0) goto begin0
-      , push 0x01
-      , SWAP1
-      , SUB
-      , DUP1
-      , JUMPITO begin0
-
-    , POP -- tc_id removed
-    ]
+       skipIfPt0BalanceIsZero
+    ++ loadActivateAmounts
+    ++ subtractEvaluatedPTValuesFromSaAmounts
     ++ performPayoutPT0
     ++ [ JUMPDESTFROM pt0_no_pay ]
 
