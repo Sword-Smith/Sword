@@ -450,39 +450,38 @@ payBackCalculatedValueToPT0 activateMap =
       , FUNCALL "getBalance_subroutine"
       ]
 
-    -- FIXME: tcId is not an saId!
     paybackElement :: ActivateMapElement -> [EvmOpcode]
-    paybackElement (SettlementAssetId tcId, (_tcAmount, saAddress)) =
+    paybackElement (SettlementAssetId saId, (_saAmount, saAddress)) =
       let
-        begin      = [ JUMPTO $ "pay_back_element_start" ++ show tcId ]
-        popAndSkip = [ JUMPDESTFROM $ "pay_back_pop_and_skip" ++ show tcId, POP, POP, POP, JUMPTO $ "skip_pt0_payout_for_sa" ++ show tcId ]
+        begin      = [ JUMPTO $ "pay_back_element_start" ++ show saId ]
+        popAndSkip = [ JUMPDESTFROM $ "pay_back_pop_and_skip" ++ show saId, POP, POP, POP, JUMPTO $ "skip_pt0_payout_for_sa" ++ show saId ]
       in
         begin ++
         popAndSkip ++
       [ -- Stack = [ pt0_balance_CALLER ]
-        JUMPDESTFROM $ "pay_back_element_start" ++ show tcId
+        JUMPDESTFROM $ "pay_back_element_start" ++ show saId
       , CALLER
       , PUSH32 (address2w256 saAddress)
-      , push (0x20 * tcId)
+      , push (0x20 * saId)
 
-        -- Stack = [ 0x20 * tcId, saAddress, CALLER, pt0_balance_CALLER ]
+        -- Stack = [ 0x20 * saId, saAddress, CALLER, pt0_balance_CALLER ]
       , MLOAD
-        -- Stack = [ payBackValue = M[0x20 * tcId], saAddress, CALLER, pt0_balance_CALLER ]
+        -- Stack = [ payBackValue = M[0x20 * saId], saAddress, CALLER, pt0_balance_CALLER ]
 
       -- skip if payBackValue == 0
       , DUP1
       , ISZERO
-      , JUMPITO $ "pay_back_pop_and_skip" ++ show tcId
+      , JUMPITO $ "pay_back_pop_and_skip" ++ show saId
 
       , DUP4
-        -- payBackValue := M[0x20 * tcId]
+        -- payBackValue := M[0x20 * saId]
         -- Stack = [ pt0_balance_CALLER, paybackValue, saAddress, CALLER, pt0_balance_CALLER ]
       , FUNCALL "safeMul_subroutine"
         -- Stack = [ pt0_balance_CALLER * payBackValue, saAddress, CALLER, pt0_balance_CALLER ]
       , FUNCALL "transfer_subroutine"
       , ISZERO
       , JUMPITO "global_throw"
-      , JUMPDESTFROM $ "skip_pt0_payout_for_sa" ++ show tcId
+      , JUMPDESTFROM $ "skip_pt0_payout_for_sa" ++ show saId
         -- Stack = [ pt0_balance_CALLER ]
       ]
 
