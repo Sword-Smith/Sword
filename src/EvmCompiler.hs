@@ -354,7 +354,7 @@ payToPartyToken0 = do
   pt0_not_yet_evaluated <- newLabel "pt0_not_yet_evaluated"
   PartyTokenID maxPTId <- reader getMaxPartyTokenID
   calculatePayoutAmountPT0 <- loadActivateMapIntoMemory <$> reader getActivateMap
-  performPayoutPT0 <- paybackRefundsToPartyToken0 <$> reader getActivateMap
+  performPayoutPT0 <- payBackCalculatedValueToPT0 <$> reader getActivateMap
   return $
     calculatePayoutAmountPT0 ++
     [ -- Stack = [ ... ]
@@ -419,8 +419,8 @@ loadActivateMapIntoMemory = concatMap loadElement . Map.assocs
       , MSTORE
       ]
 
-paybackRefundsToPartyToken0 :: ActivateMap -> [EvmOpcode]
-paybackRefundsToPartyToken0 activateMap =
+payBackCalculatedValueToPT0 :: ActivateMap -> [EvmOpcode]
+payBackCalculatedValueToPT0 activateMap =
      callerBalancePartyToken0
   ++ concatMap paybackElement (Map.assocs activateMap)
   ++ [POP]
