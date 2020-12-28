@@ -416,6 +416,7 @@ payToPartyToken0 = do
     ++ performPayoutPT0
     ++ [ JUMPDESTFROM pt0_no_pay ]
 
+-- stores activateAmount (for each SA asset) in memory so we can use it in later calculations
 loadActivateMapIntoMemory :: ActivateMap -> [EvmOpcode]
 loadActivateMapIntoMemory = concatMap loadElement . Map.assocs
   where
@@ -431,8 +432,11 @@ payBackCalculatedValueToPT0 activateMap =
      callerBalancePartyToken0
   ++ concatMap paybackElement (Map.assocs activateMap)
   ++ [POP]
-  ++ [ push 0x00, DUP1, CALLER, FUNCALL "setBalance_subroutine" ]
+  ++ setPt0BalanceToZero
   where
+    setPt0BalanceToZero :: [EvmOpcode]
+    setPt0BalanceToZero = [ push 0x00, DUP1, CALLER, FUNCALL "setBalance_subroutine" ]
+
     callerBalancePartyToken0 :: [EvmOpcode]
     callerBalancePartyToken0 =
       [ CALLER
