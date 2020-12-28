@@ -127,11 +127,12 @@ intermediateCompileM (Transfer saAddress to) = do
   let transferCall = TransferCall { _maxAmount     = maxFactor
                                   , _amount        = scaleFactor (Lit (IntVal 1))
                                   , _delay         = delayTerm
-                                  , _tokenAddress  = saAddress
+                                  , _saAddress     = saAddress
                                   , _to            = to
                                   , _memExpPath    = memExpPath
                                   , _tcId          = transferCallId
                                   }
+
   settlementAssetId <- getSettlemenAssetId saAddress
   let activateMap = Map.fromList [(settlementAssetId, (maxFactor, saAddress))]
 

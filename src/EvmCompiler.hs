@@ -349,7 +349,7 @@ payABI = do
 
 -- For hver Transfer Call ID:
 --   value := Storage[TCID];
---   j := TCs[TCID]._tokenAddress;
+--   j := TCs[TCID]._saAddress;
 --   if (value == -1) goto end;
 --   PT0_udbetaling_j += value;
 --
@@ -781,7 +781,7 @@ executeTransferCallsHH tc =
       -- ++ safemul
       -- ++ [ MUL ] -- replace with safeMul!
       ++ [ FUNCALL "safeMul_subroutine" ]
-      ++ [ PUSH32 $ address2w256 (_tokenAddress tc)
+      ++ [ PUSH32 $ address2w256 (_saAddress tc)
          , CALLER
          , SWAP2
          , FUNCALL "transfer_subroutine" ]

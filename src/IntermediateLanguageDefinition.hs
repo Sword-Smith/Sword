@@ -49,7 +49,7 @@ data TransferCall =
      TransferCall { _maxAmount    :: Integer
                   , _amount       :: Expr
                   , _delay        :: Integer
-                  , _tokenAddress :: Address -- SA
+                  , _saAddress    :: Address -- SA
                   , _to           :: PartyTokenID
                   , _memExpPath   :: MemExpPath
                   , _tcId         :: TransferCallId
