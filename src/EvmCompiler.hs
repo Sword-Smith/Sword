@@ -353,25 +353,50 @@ payToPartyToken0 = do
   begin0 <- newLabel "pt0_loop_"
   pt0_not_yet_evaluated <- newLabel "pt0_not_yet_evaluated"
   PartyTokenID maxPTId <- reader getMaxPartyTokenID
-  return
-    [ push maxPTId
+  calculatePayoutAmountPT0 <- loadActivateMapIntoMemory <$> reader getActivateMap
+  performPayoutPT0 <- paybackRefundsToPartyToken0 <$> reader getActivateMap
+  return $
+    calculatePayoutAmountPT0 ++
+    [ -- Stack = [ ... ]
+      push maxPTId
       -- loop (tc_id from maxPTId to 0)
       -- do ... while (tc_id != 0)
     , JUMPDESTFROM begin0
+        -- Stack = [ tc_id ]
 
         -- Hack: Dynamically calculate storage address.
       , DUP1
       , push (storageAddress (EvaluatedTcValue 0))
       , ADD
       , SLOAD
+        -- Stack = [ tc_value, tc_id ]
 
         -- If value[tc_id] < 0, don't perform PT0 payout.
+      , DUP1
       , push 0x00
       , SGT
+        -- Stack = [ 0 > tc_value, tc_value, tc_id ]
       , JUMPITO pt0_not_yet_evaluated
         -- TODO: value is thrown out; maybe make copy later.
 
-        -- if (--tc_id > 0) goto begin0
+        -- Stack = [ tc_value, tc_id ]
+        -- Load accumulated payback value onto Stack
+      , DUP2
+      , push 0x20
+      , MUL
+      , DUP1
+      , MLOAD
+        -- Stack = [ M[0x20 * tc_id], 0x20 * tc_id, tc_value, tc_id ]
+
+        -- Update and store accumulated payback value in memory
+      , FUNCALL "safeSub_subroutine"
+        -- Stack = [ M[0x20 * tc_id] - tc_value, 0x20 * tc_id, tc_id ]
+      , SWAP1
+        -- Stack = [ 0x20 * tc_id, M[0x20 * tc_id] - tc_value, tc_id ]
+      , MSTORE
+        -- Stack = [ tc_id ]
+
+        -- Loop condition check: if (--tc_id > 0) goto begin0
       , push 0x01
       , DUP2
       , SUB
@@ -379,9 +404,56 @@ payToPartyToken0 = do
 
       -- TODO: Manage payout of PT0
     , POP -- tc_id removed
-
-    , JUMPDESTFROM pt0_not_yet_evaluated
     ]
+    ++ performPayoutPT0
+    ++ [ JUMPDESTFROM pt0_not_yet_evaluated ]
+
+
+loadActivateMapIntoMemory :: ActivateMap -> [EvmOpcode]
+loadActivateMapIntoMemory = concatMap loadElement . Map.assocs
+  where
+    loadElement :: ActivateMapElement -> [EvmOpcode]
+    loadElement (tcId, (tcAmount, _tcAddress)) =
+      [ push tcAmount
+      , push (0x20 * tcId)
+      , MSTORE
+      ]
+
+paybackRefundsToPartyToken0 :: ActivateMap -> [EvmOpcode]
+paybackRefundsToPartyToken0 activateMap =
+     callerBalancePartyToken0
+  ++ concatMap paybackElement (Map.assocs activateMap)
+  ++ [POP]
+  ++ [ push 0x00, DUP1, CALLER, FUNCALL "setBalance_subroutine" ]
+  where
+    callerBalancePartyToken0 :: [EvmOpcode]
+    callerBalancePartyToken0 =
+      [ CALLER
+      , push 0x00
+      , FUNCALL "getBalance_subroutine"
+      ]
+
+    paybackElement :: ActivateMapElement -> [EvmOpcode]
+    paybackElement (tcId, (_tcAmount, saAddress)) =
+      [ -- Stack = [ pt0_balance_CALLER ]
+        CALLER
+      , PUSH32 (address2w256 saAddress)
+      , push (0x20 * tcId)
+
+        -- Stack = [ 0x20 * tcId, saAddress, CALLER, pt0_balance_CALLER ]
+      , MLOAD
+        -- Stack = [ payBackValue = M[0x20 * tcId], saAddress, CALLER, pt0_balance_CALLER ]
+
+      , DUP4
+        -- payBackValue := M[0x20 * tcId]
+        -- Stack = [ pt0_balance_CALLER, paybackValue, saAddress, CALLER, pt0_balance_CALLER ]
+      , FUNCALL "safeMul_subroutine"
+        -- Stack = [ pt0_balance_CALLER * payBackValue, saAddress, CALLER, pt0_balance_CALLER ]
+      , FUNCALL "transfer_subroutine"
+      , ISZERO
+      , JUMPITO "global_throw"
+        -- Stack = [ pt0_balance_CALLER ]
+      ]
 
 -- This sets the relevant bits in the memory expression word in storage
 -- Here the IMemExp should be evaluated. But only iff it is NOT true atm.
@@ -789,6 +861,8 @@ burn = do
         , push amount
         , FUNCALL "safeMul_subroutine"
         , FUNCALL "transfer_subroutine"
+        , ISZERO
+        , JUMPITO "global_throw"
         ]
 
   return $

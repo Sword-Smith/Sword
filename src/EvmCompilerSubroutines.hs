@@ -105,6 +105,11 @@ transferFromSubroutine =
             ]
         pushInSizeTF             = [ push 0x64 ]
 
+-- | Perform an ERC20 transfer call to an external contract.
+--
+-- Stack before FUNSTART: [ return address, amount, saAddr, _to, ... ]
+-- Stack after FUNSTART: [ _to, amount, saAddr, return address, ... ]
+-- Stack after: [ ... ]
 transferSubroutine :: [EvmOpcode]
 transferSubroutine =
   funStartT
