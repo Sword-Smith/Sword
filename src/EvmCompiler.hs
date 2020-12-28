@@ -391,21 +391,26 @@ payToPartyToken0 = do
       , MLOAD
         -- Stack = [ M[0x20 * tc_id], 0x20 * tc_id, tc_value, tc_id ]
 
+      , DUP3
+      , SWAP1
+        -- Stack = [ M[0x20 * tc_id], tc_value, 0x20 * tc_id, tc_value, tc_id ]
+
         -- Update and store accumulated payback value in memory
       , FUNCALL "safeSub_subroutine"
-        -- Stack = [ M[0x20 * tc_id] - tc_value, 0x20 * tc_id, tc_id ]
+        -- Stack = [ M[0x20 * tc_id] - tc_value, 0x20 * tc_id, tc_value, tc_id ]
       , SWAP1
-        -- Stack = [ 0x20 * tc_id, M[0x20 * tc_id] - tc_value, tc_id ]
+        -- Stack = [ 0x20 * tc_id, M[0x20 * tc_id] - tc_value, tc_value, tc_id ]
       , MSTORE
-        -- Stack = [ tc_id ]
+      , POP
+        --  Stack = [ tc_id ]
 
         -- Loop condition check: if (--tc_id > 0) goto begin0
       , push 0x01
-      , DUP2
+      , SWAP1
       , SUB
+      , DUP1
       , JUMPITO begin0
 
-      -- TODO: Manage payout of PT0
     , POP -- tc_id removed
     ]
     ++ performPayoutPT0
