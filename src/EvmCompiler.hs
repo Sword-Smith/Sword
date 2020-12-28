@@ -355,11 +355,11 @@ payToPartyToken0 = do
   -- TODO: The PT0 balance read here can be reused below, so we don't have to load it again
   let skipIfPt0BalanceIsZero = [CALLER, push 0x00, FUNCALL "getBalance_subroutine", ISZERO, JUMPITO pt0_no_pay]
   PartyTokenID maxPTId <- reader getMaxPartyTokenID
-  calculatePayoutAmountPT0 <- loadActivateMapIntoMemory <$> reader getActivateMap
+  loadActivateAmounts <- loadActivateMapIntoMemory <$> reader getActivateMap
   performPayoutPT0 <- payBackCalculatedValueToPT0 <$> reader getActivateMap
   return $
     skipIfPt0BalanceIsZero ++
-    calculatePayoutAmountPT0 ++
+    loadActivateAmounts ++
     [ -- Stack = [ ... ]
       push maxPTId
       -- loop (tc_id from maxPTId to 0)
