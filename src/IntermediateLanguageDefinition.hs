@@ -58,9 +58,12 @@ getPartyTokenIDs :: IntermediateContract -> [PartyTokenID]
 getPartyTokenIDs IntermediateContract{..} =
   map _to getTransferCalls
 
--- | Needs token ID 0.
-getMaxPartyTokenID :: IntermediateContract -> PartyTokenID
-getMaxPartyTokenID = maximum . getPartyTokenIDs
+getTransferCallIDs :: IntermediateContract -> [TransferCallId]
+getTransferCallIDs IntermediateContract{..} =
+  map _tcId getTransferCalls
+
+getMaxTcId :: IntermediateContract -> TransferCallId
+getMaxTcId = maximum . getTransferCallIDs
 
 -- DEVNOTE:
 -- We start by attempting to implement the evaluation of IMemExp values.
