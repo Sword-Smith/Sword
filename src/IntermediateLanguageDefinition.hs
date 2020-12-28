@@ -41,7 +41,6 @@ data IntermediateContract =
                           , getMemExps         :: [IMemExp]
                           , getActivateMap     :: ActivateMap
                           , getRequiresPT0     :: Bool
---                          , getMarginRefundMap :: MarginRefundMap
                           } deriving (Show, Eq)
 
 data TransferCall =
@@ -78,15 +77,6 @@ newtype SettlementAssetId = SettlementAssetId { getSettlementAssetId :: Integer 
   deriving (Eq, Ord, Show)
 
 type ActivateMap = Map.Map SettlementAssetId (SettlementAssetAmount, Address)
--- type ActivateMap = Map.Map Address (SettlementAssetAmount, SettlementAssetId)
 
 -- This is the type for elements in Map.assocs
 type ActivateMapElement = (SettlementAssetId, (SettlementAssetAmount, Address))
-
-
-type MarginRefundMap = Map.Map [(Integer, Bool)] [(Address, PartyIndex, Integer)]
-
--- (path, marginRefundValue) = ([(memExpRef, branch (true or false))], (token address, recipient, amount))
-type MarginRefundMapElement = ([(Integer, Bool)], [(Address, PartyIndex, Integer)])
-
-type MarginRefundPath = [(Integer, Bool)]

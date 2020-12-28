@@ -172,9 +172,6 @@ intermediateCompileM (Translate time contract) =
 intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
   memExpId <- newMemExpId
 
-  -- adjustMarginRefundPath sets the environment up for the recursive call.
-  -- In the two monads, only the marginRefundPath and the memExpID is changed in
-  -- this recursive call.
   delay <- reader _delayTerm
   let delayEnd = toSeconds time + delay
 
