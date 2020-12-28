@@ -179,7 +179,7 @@ getAbiDefinition =
       , {- ERC1155 -} balanceOf, balanceOfBatch, safeTransferFrom, safeBatchTransferFrom, setApprovalForAll, isApprovedForAll
       ]
       [ activatedE, mintedE, burntE, paidE
-      , {- ERC1155 -} transferSingleEvent
+      , {- ERC1155 -} transferSingleEvent, transferBatchEvent
       ]
 
 transferSingleEvent :: AbiEventDefinition
@@ -189,4 +189,13 @@ transferSingleEvent = AbiEventDefinition "TransferSingle" "event" False
   , AbiEventParam "_to"       "address" True
   , AbiEventParam "_id"       "uint256" False
   , AbiEventParam "_value"    "uint256" False
+  ]
+
+transferBatchEvent :: AbiEventDefinition
+transferBatchEvent = AbiEventDefinition "TransferBatch" "event" False
+  [ AbiEventParam "_operator" "address"   True
+  , AbiEventParam "_from"     "address"   True
+  , AbiEventParam "_to"       "address"   True
+  , AbiEventParam "_ids"      "uint256[]" False
+  , AbiEventParam "_values"   "uint256[]" False
   ]

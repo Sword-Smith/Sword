@@ -1236,6 +1236,11 @@ safeBatchTransferFromABI = return
     , JUMPTO "safeBatchTransferFrom_loop_start"
 
   , JUMPDESTFROM "safeBatchTransferFrom_loop_end"
+
+    -- TODO: Put _ids from CALLDATA into MEMORY
+    -- TODO: Put _values from CALLDATA into MEMORY
+    -- TODO: Emit TransferBatch(...) signal
+
   , STOP
   ]
 
