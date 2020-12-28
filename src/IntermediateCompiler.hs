@@ -29,6 +29,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 
 import qualified Data.Map.Strict as Map
+import Data.List (genericLength)
 
 -- State monad definitions
 -- The intermediate compilation happens in a monad since we need to ascribe
@@ -71,18 +72,15 @@ emptyContract = IntermediateContract [] [] Map.empty True
 
 getSettlemenAssetId :: Address -> ICompiler SettlementAssetId
 getSettlemenAssetId saAddress = do
-  idMaybe <- lookup saAddress . _encounteredSettlementAssets <$> get
-  case idMaybe of
+  settlementAssets <- gets _encounteredSettlementAssets
+  case lookup saAddress settlementAssets of
     Just saId ->
       return saId
+
     Nothing -> do
-      newId <- toInteger . length . _encounteredSettlementAssets <$> get
-      modify (\x -> x{ _encounteredSettlementAssets = (saAddress, newId): (_encounteredSettlementAssets x) } )
+      let newId = SettlementAssetId (genericLength settlementAssets)
+      modify (\env -> env { _encounteredSettlementAssets = (saAddress, newId) : settlementAssets })
       return newId
-      
-      -- new ID = length of _encounteredSettlementAssets
-      -- add (saAddress, new ID) to _encounteredSettlementAssets
-      -- return new ID
 
 newMemExpId :: ICompiler MemExpId
 newMemExpId = do

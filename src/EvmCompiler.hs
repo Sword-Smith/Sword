@@ -427,7 +427,7 @@ loadActivateMapIntoMemory :: ActivateMap -> [EvmOpcode]
 loadActivateMapIntoMemory = concatMap loadElement . Map.assocs
   where
     loadElement :: ActivateMapElement -> [EvmOpcode]
-    loadElement (saId, (saAmount, _saAddress)) =
+    loadElement (SettlementAssetId saId, (saAmount, _saAddress)) =
       [ push saAmount
       , push (0x20 * saId)
       , MSTORE
@@ -450,8 +450,9 @@ payBackCalculatedValueToPT0 activateMap =
       , FUNCALL "getBalance_subroutine"
       ]
 
+    -- FIXME: tcId is not an saId!
     paybackElement :: ActivateMapElement -> [EvmOpcode]
-    paybackElement (tcId, (_tcAmount, saAddress)) =
+    paybackElement (SettlementAssetId tcId, (_tcAmount, saAddress)) =
       let
         begin      = [ JUMPTO $ "pay_back_element_start" ++ show tcId ]
         popAndSkip = [ JUMPDESTFROM $ "pay_back_pop_and_skip" ++ show tcId, POP, POP, POP, JUMPTO $ "skip_pt0_payout_for_sa" ++ show tcId ]
