@@ -69,12 +69,13 @@ runArgsHandler Args{..} = do
         writeFile binPath binaryBlob
 
         when debug $ do
-          let debugPath = (outputDir </> baseName) `addExtension` ".intermediate"
-          putStrLn ("Writing debug data to " <> debugPath <> "...")
-          writeFile debugPath (show intermediateContract)
+          let icPath = (outputDir </> baseName) `addExtension` ".intermediate"
+          putStrLn ("Writing IntermediateContract to " <> icPath <> "...")
+          writeFile icPath (show intermediateContract)
 
-
-
+          let disPath = (outputDir </> baseName) `addExtension` ".evm"
+          putStrLn ("Writing EVM opcodes (with pseudo-instructions) to " <> disPath <> "...")
+          writeFile disPath (disassemble intermediateContract)
 
 critical :: String -> IO ()
 critical err = do

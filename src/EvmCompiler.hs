@@ -35,7 +35,8 @@ import Abi (transferSingleEvent)
 import Control.Monad.State
 import Control.Monad.Reader
 
-import Data.List
+import Data.Char (toLower)
+import Data.List (genericLength)
 import qualified Data.Map.Strict as Map
 
 -- State monad definitions
@@ -101,11 +102,16 @@ sizeOfOpcode _               = 1
 -- Check that there are not more than 2^8 transfercalls
 assemble :: IntermediateContract -> String
 assemble = concatMap ppEvm . transformPseudoInstructions . evmCompile . check
+
+disassemble :: IntermediateContract -> String
+disassemble = concatMap showOpcode . evmCompile . check
   where
-    check :: IntermediateContract -> IntermediateContract
-    check contract | length (getTransferCalls contract) > 256 = error "Too many Transfer Calls"
-    check contract | length (getMemExps contract) > 128 = error "Too many Memory Expressions"
-    check contract = contract
+    showOpcode = (++ "\n") . map toLower . show
+
+check :: IntermediateContract -> IntermediateContract
+check contract | length (getTransferCalls contract) > 256 = error "Too many Transfer Calls"
+check contract | length (getMemExps contract) > 128 = error "Too many Memory Expressions"
+check contract = contract
 
 -- Given an IntermediateContract, returns the EvmOpcodes representing the contract
 evmCompile :: IntermediateContract -> [EvmOpcode]
