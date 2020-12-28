@@ -1028,7 +1028,7 @@ balanceOfBatchABI = return
 --
 safeTransferFromABI :: Compiler [EvmOpcode]
 safeTransferFromABI =
-  return
+  return $
     [ JUMPDESTFROM "safeTransferFrom_method"
 
     , push 0x64  -- _value
@@ -1071,26 +1071,32 @@ safeTransferFromABI =
     , DUP4
     , FUNCALL "safeTransferFrom_subroutine"
 
-      -- Emit TransferSingle(address,address,address,uint256,uint256).
+      -- event TransferSingle(indexed _operator, indexed _from, indexed _to, _id, _value);
 
       -- Place non-indexed event parameters (_id, _value) in memory:
-      -- Stack: [ _id, _to, _from, _value, ... ]
+      -- Stack: [ _id, _to, _from, _value ]
+    , DUP1   -- _id
     , push 0x00
-    , MSTORE    -- Stack: [ _to, _from, _value, ... ]
-    , SWAP2     -- Stack: [ _value, _from, _to, ... ]
+    , MSTORE
+
+    , DUP4   -- _value
     , push 0x20
-    , MSTORE    -- Stack: [ _from, _to, ... ]
+    , MSTORE
 
-      -- Place indexed event parameters on stack: event signature, _operator, _from, _to
-
-    , CALLER    -- Stack: [ _operator, _from, _to, ... ]
+      -- Place indexed event parameters on stack
+      -- Stack: [ _id, _to, _from, _value ]
+    , DUP2   -- _to
+    , DUP4   -- _from
+    , CALLER -- _operator
     , PUSH32 (eventSignatureHash transferSingleEvent)
-                -- Stack: [ SHA3("TransferSingle(...)", _operator, _from, _to, ... ]
+      -- Stack: [ SHA3("TransferSingle(...)"), _operator, _from, _to ] + [ _id, _to, _from, _value ]
 
       -- Place memory range of non-indexed parameters on top
     , push 0x40
     , push 0x00
+      -- Stack: [ 0x00, 0x40, SHA3("TransferSingle(...)"), _operator, _from, _to ] + [ _id, _to, _from, _value ]
     , logEvent transferSingleEvent
+    , POP, POP, POP, POP
 
     , STOP
     ]

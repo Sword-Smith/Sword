@@ -19,14 +19,16 @@
 -- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
---
+
+{-# LANGUAGE RecordWildCards #-}
+
 module EvmCompilerSubroutines
   ( subroutines
   ) where
 
 import EvmCompilerHelper
 import EvmLanguageDefinition
-
+import Abi
 
 
 {- These procedures are pasted as a _single_ chunk in the contract code. If we
