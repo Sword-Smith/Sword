@@ -1,1 +1,4 @@
 resolver: lts-16.18
+packages:
+  - .
+extra-deps: []
