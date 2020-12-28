@@ -671,8 +671,17 @@ compileLit lit mo _label = case lit of
 executeTransferCallsHH :: TransferCall -> [EvmOpcode]
 executeTransferCallsHH tc =
   let
+    begin = [ JUMPTO $ "begin_tc_evaluation" ++ show (_id tc)]
+    setTCEvaluatedValueToZero =
+      [ JUMPDESTFROM $ "set_evaluated_value_to_zero" ++ show (_id tc)
+      , push 0x00
+      , push (storageAddress (EvaluatedTcValue (_id tc)))
+      , SSTORE
+      , JUMPTO $ "tc_SKIP" ++ show (_id tc) ]
+
     checkIfTCAlreadyEvaluated =
-      [ push (storageAddress (EvaluatedTcValue (_id tc)))
+      [ JUMPDESTFROM $ "begin_tc_evaluation" ++ show (_id tc)
+      , push (storageAddress (EvaluatedTcValue (_id tc)))
       , SLOAD
       , DUP1
       , push 0x0
@@ -711,11 +720,13 @@ executeTransferCallsHH tc =
                   , AND
                   , ISZERO
                   , JUMPITO $ "method_end" ++ show (_id tc) ] -- GOTO YIELD
+
+                -- if branch is dead set evaluated TC value to zero and jump to tc_skip
                 passAndSkipStatement =
                   [ push $ 2 ^ (2 * memExpId + if branch then 1 else 0) -- bitmask
                   , AND
                   , ISZERO
-                  , JUMPITO $ "tc_SKIP" ++ show (_id tc) ]
+                  , JUMPITO $ "set_evaluated_value_to_zero" ++ show (_id tc) ]
                   -- The fall-through case represents the "PASS" case.
               in
                 yieldStatement ++ passAndSkipStatement
@@ -741,7 +752,7 @@ executeTransferCallsHH tc =
          , JUMPITO $ "use_exp_res" ++ show (_id tc)
          , SWAP1
          , JUMPDESTFROM $ "use_exp_res" ++ show (_id tc)
-         , POP ] -- Top of stack now has value `a`
+         , POP ] -- Top of stack now has value `a` (evaluated TC value)
 
       -- Store evaluated value in storage
       ++ [ DUP1
@@ -777,6 +788,8 @@ executeTransferCallsHH tc =
         [ JUMPDESTFROM $ "method_end" ++ show (_id tc) ]
 
   in
+    begin ++
+    setTCEvaluatedValueToZero ++
     checkIfTCAlreadyEvaluated ++
     checkIfCallShouldBeMade ++
     callTransferToTcRecipient ++
