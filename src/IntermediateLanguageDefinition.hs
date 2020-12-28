@@ -52,7 +52,7 @@ data TransferCall =
                   , _tokenAddress :: Address -- SA
                   , _to           :: PartyTokenID
                   , _memExpPath   :: MemExpPath
-                  , _id           :: TransferCallId
+                  , _tcId         :: TransferCallId
                   } deriving (Show, Eq)
 
 getPartyTokenIDs :: IntermediateContract -> [PartyTokenID]

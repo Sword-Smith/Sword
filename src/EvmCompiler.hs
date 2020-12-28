@@ -216,7 +216,7 @@ initializeEvaluatedTcValues ic =
     setToMinusOne :: TransferCall -> [EvmOpcode]
     setToMinusOne tc =
       [ DUP1
-      , push (storageAddress (EvaluatedTcValue (_id tc)))
+      , push (storageAddress (EvaluatedTcValue (_tcId tc)))
       , SSTORE
       ]
 
@@ -684,23 +684,23 @@ compileLit lit mo _label = case lit of
 executeTransferCallsHH :: TransferCall -> [EvmOpcode]
 executeTransferCallsHH tc =
   let
-    begin = [ JUMPTO $ "begin_tc_evaluation" ++ show (_id tc)]
+    begin = [ JUMPTO $ "begin_tc_evaluation" ++ show (_tcId tc)]
     setTCEvaluatedValueToZero =
-      [ JUMPDESTFROM $ "set_evaluated_value_to_zero" ++ show (_id tc)
+      [ JUMPDESTFROM $ "set_evaluated_value_to_zero" ++ show (_tcId tc)
       , push 0x00
-      , push (storageAddress (EvaluatedTcValue (_id tc)))
+      , push (storageAddress (EvaluatedTcValue (_tcId tc)))
       , SSTORE
-      , JUMPTO $ "tc_SKIP" ++ show (_id tc) ]
+      , JUMPTO $ "tc_SKIP" ++ show (_tcId tc) ]
 
     checkIfTCAlreadyEvaluated =
-      [ JUMPDESTFROM $ "begin_tc_evaluation" ++ show (_id tc)
-      , push (storageAddress (EvaluatedTcValue (_id tc)))
+      [ JUMPDESTFROM $ "begin_tc_evaluation" ++ show (_tcId tc)
+      , push (storageAddress (EvaluatedTcValue (_tcId tc)))
       , SLOAD
       , DUP1
       , push 0x0
       , SGT
       , ISZERO
-      , JUMPITO $ "tc_value_already_evaluated" ++ show (_id tc)
+      , JUMPITO $ "tc_value_already_evaluated" ++ show (_tcId tc)
       , POP ]
 
     checkIfCallShouldBeMade =
@@ -711,7 +711,7 @@ executeTransferCallsHH tc =
                                  SUB,
                                  push $ _delay tc,
                                  EVM_GT,
-                                 JUMPITO $ "method_end" ++ show (_id tc) ]
+                                 JUMPITO $ "method_end" ++ show (_tcId tc) ]
 
 
             -- This code can be represented with the following C-like code:
@@ -732,14 +732,14 @@ executeTransferCallsHH tc =
                   , push $ 0x3 * 2 ^ (2 * memExpId) -- bitmask
                   , AND
                   , ISZERO
-                  , JUMPITO $ "method_end" ++ show (_id tc) ] -- GOTO YIELD
+                  , JUMPITO $ "method_end" ++ show (_tcId tc) ] -- GOTO YIELD
 
                 -- if branch is dead set evaluated TC value to zero and jump to tc_skip
                 passAndSkipStatement =
                   [ push $ 2 ^ (2 * memExpId + if branch then 1 else 0) -- bitmask
                   , AND
                   , ISZERO
-                  , JUMPITO $ "set_evaluated_value_to_zero" ++ show (_id tc) ]
+                  , JUMPITO $ "set_evaluated_value_to_zero" ++ show (_tcId tc) ]
                   -- The fall-through case represents the "PASS" case.
               in
                 yieldStatement ++ passAndSkipStatement
@@ -757,22 +757,22 @@ executeTransferCallsHH tc =
         --   >= 0 means that it has been evaluated.
         --
         -- If a TC value has been evaluated, return this value. Otherwise, calculate, store and return it.
-      runExprCompiler (CompileEnv 0 (_id tc) 0x44 "amount_exp") (_amount tc)
+      runExprCompiler (CompileEnv 0 (_tcId tc) 0x44 "amount_exp") (_amount tc)
       ++ [ push (_maxAmount tc)
          , DUP2
          , DUP2
          , SGT -- Security check needed
-         , JUMPITO $ "use_exp_res" ++ show (_id tc)
+         , JUMPITO $ "use_exp_res" ++ show (_tcId tc)
          , SWAP1
-         , JUMPDESTFROM $ "use_exp_res" ++ show (_id tc)
+         , JUMPDESTFROM $ "use_exp_res" ++ show (_tcId tc)
          , POP ] -- Top of stack now has value `a` (evaluated TC value)
 
       -- Store evaluated value in storage
       ++ [ DUP1
-         , push (storageAddress (EvaluatedTcValue (_id tc)))
+         , push (storageAddress (EvaluatedTcValue (_tcId tc)))
          , SSTORE ]
 
-      ++ [ JUMPDESTFROM $ "tc_value_already_evaluated" ++ show (_id tc)
+      ++ [ JUMPDESTFROM $ "tc_value_already_evaluated" ++ show (_tcId tc)
          , CALLER
          , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
          , FUNCALL "getBalance_subroutine" ]  -- pops 1, pushes 1:  b is on the stack
@@ -791,14 +791,14 @@ executeTransferCallsHH tc =
          , JUMPITO "global_throw" ] -- error happens in this block
 
     setPTBalanceToZero = [
-      JUMPDESTFROM $ "tc_SKIP" ++ show (_id tc)
+      JUMPDESTFROM $ "tc_SKIP" ++ show (_tcId tc)
       , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
       , push 0
       , CALLER
       , FUNCALL "setBalance_subroutine" ]
 
     functionEndLabel =
-        [ JUMPDESTFROM $ "method_end" ++ show (_id tc) ]
+        [ JUMPDESTFROM $ "method_end" ++ show (_tcId tc) ]
 
   in
     begin ++
