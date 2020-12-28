@@ -390,7 +390,7 @@ payToPartyToken0 = do
 
         -- Stack = [ tc_value, tc_id ]
         -- Load accumulated payback value onto Stack
-      , DUP2
+      , DUP2 -- HERE IS ERROR! We confuse tc_id with sa_id!! We **should** use sa_id but we use tc_id instead!!
       , push 0x20
       , MUL
       , DUP1
@@ -427,15 +427,15 @@ loadActivateMapIntoMemory :: ActivateMap -> [EvmOpcode]
 loadActivateMapIntoMemory = concatMap loadElement . Map.assocs
   where
     loadElement :: ActivateMapElement -> [EvmOpcode]
-    loadElement (tcId, (tcAmount, _tcAddress)) =
-      [ push tcAmount
-      , push (0x20 * tcId)
+    loadElement (saId, (saAmount, _saAddress)) =
+      [ push saAmount
+      , push (0x20 * saId)
       , MSTORE
       ]
 
 payBackCalculatedValueToPT0 :: ActivateMap -> [EvmOpcode]
 payBackCalculatedValueToPT0 activateMap =
-     callerBalancePartyToken0
+      pushCallerBalancePT0
   ++ concatMap paybackElement (Map.assocs activateMap)
   ++ [POP]
   ++ setPt0BalanceToZero
@@ -443,8 +443,8 @@ payBackCalculatedValueToPT0 activateMap =
     setPt0BalanceToZero :: [EvmOpcode]
     setPt0BalanceToZero = [ push 0x00, DUP1, CALLER, FUNCALL "setBalance_subroutine" ]
 
-    callerBalancePartyToken0 :: [EvmOpcode]
-    callerBalancePartyToken0 =
+    pushCallerBalancePT0 :: [EvmOpcode]
+    pushCallerBalancePT0 =
       [ CALLER
       , push 0x00
       , FUNCALL "getBalance_subroutine"
@@ -452,8 +452,15 @@ payBackCalculatedValueToPT0 activateMap =
 
     paybackElement :: ActivateMapElement -> [EvmOpcode]
     paybackElement (tcId, (_tcAmount, saAddress)) =
+      let
+        begin      = [ JUMPTO $ "pay_back_element_start" ++ show tcId ]
+        popAndSkip = [ JUMPDESTFROM $ "pay_back_pop_and_skip" ++ show tcId, POP, POP, POP, JUMPTO $ "skip_pt0_payout_for_sa" ++ show tcId ]
+      in
+        begin ++
+        popAndSkip ++
       [ -- Stack = [ pt0_balance_CALLER ]
-        CALLER
+        JUMPDESTFROM $ "pay_back_element_start" ++ show tcId
+      , CALLER
       , PUSH32 (address2w256 saAddress)
       , push (0x20 * tcId)
 
@@ -461,14 +468,20 @@ payBackCalculatedValueToPT0 activateMap =
       , MLOAD
         -- Stack = [ payBackValue = M[0x20 * tcId], saAddress, CALLER, pt0_balance_CALLER ]
 
+      -- skip if payBackValue == 0
+      , DUP1
+      , ISZERO
+      , JUMPITO $ "pay_back_pop_and_skip" ++ show tcId
+
       , DUP4
         -- payBackValue := M[0x20 * tcId]
         -- Stack = [ pt0_balance_CALLER, paybackValue, saAddress, CALLER, pt0_balance_CALLER ]
       , FUNCALL "safeMul_subroutine"
         -- Stack = [ pt0_balance_CALLER * payBackValue, saAddress, CALLER, pt0_balance_CALLER ]
       , FUNCALL "transfer_subroutine"
-      , ISZERO
-      , JUMPITO "global_throw"
+      -- , ISZERO
+      -- , JUMPITO "global_throw"
+      , JUMPDESTFROM $ "skip_pt0_payout_for_sa" ++ show tcId
         -- Stack = [ pt0_balance_CALLER ]
       ]
 
