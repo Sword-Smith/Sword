@@ -26,7 +26,7 @@ module EvmCompiler where
 
 import EvmCompilerHelper
 import EvmLanguageDefinition
-import EvmCompilerSubroutines (subroutines)
+import EvmCompilerSubroutines (subroutines, transferCallToSettlementAsset)
 import IntermediateLanguageDefinition
 import DaggerLanguageDefinition hiding (Transfer)
 import IntermediateCompiler (emptyContract)
@@ -118,16 +118,11 @@ evmCompile :: IntermediateContract -> [EvmOpcode]
 evmCompile intermediateContract =
   linker (constructor' ++ codecopy') ++ linker body
   where
-    constructor' = constructor intermediateContract
-    codecopy'    = codecopy constructor' body
-    body         = jumpTable ++ subroutines ++ methods
+    constructor'       = constructor intermediateContract
+    codecopy'          = codecopy constructor' body
+    dynamicSubroutines = transferCallToSettlementAsset (getTransferCalls intermediateContract)
+    body               = jumpTable ++ subroutines ++ dynamicSubroutines ++ methods
 
-    -- [ activateABI, burnABI, ... ]          :: [Compiler [EvmOpcode]]
-    -- sequence                               :: Monad m => [m a] -> m [a]
-    -- sequence [ activateABI, burnABI, ... ] :: Compiler [[EvmOpcode]]
-    -- runCompiler'                           :: Compiler a -> a
-    -- runCompiler' . sequence                :: [Compiler [EvmOpcode]] -> [[EvmOpcode]]
-    -- concat . runCompiler ... . sequence    :: [Compiler [EvmOpcode]] -> [EvmOpcode]
     methods :: [EvmOpcode]
     methods = concat . runCompiler' . sequence $
       [ activateABI

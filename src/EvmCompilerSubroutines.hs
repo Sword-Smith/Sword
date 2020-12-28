@@ -24,11 +24,12 @@
 
 module EvmCompilerSubroutines
   ( subroutines
+  , transferCallToSettlementAsset
   ) where
 
 import EvmCompilerHelper
 import EvmLanguageDefinition
-import Abi
+import IntermediateLanguageDefinition (TransferCall(..), SettlementAssetId(..))
 
 
 {- These procedures are pasted as a _single_ chunk in the contract code. If we
@@ -413,3 +414,38 @@ safeSubSubroutine =
   , SUB
   , FUNRETURN
   ]
+
+-- | Convert a list of 'TransferCall' to a subroutine that converts
+-- a 'TransferCallId' into a 'SettlementAssetId'.
+--
+-- Stack before FUNSTART: [ return address, tcId, ... ]
+-- Stack after FUNSTART: [ tcId, return address, ... ]
+-- Stack after returning: [ saId, ... ]
+--
+transferCallToSettlementAsset :: [TransferCall] -> [EvmOpcode]
+transferCallToSettlementAsset transferCalls =
+  [ FUNSTART "transferCallToSettlementAsset_subroutine" 1 ]
+  ++ concatMap derp transferCalls
+  ++ [ JUMPITO "global_throw" -- code path should be unreachable
+     , JUMPDESTFROM "transferCallToSettlementAsset_result"
+       -- Stack = [ _saId, inputTcId, RA ]
+     , SWAP1
+     , POP
+       -- Stack = [ _saId, RA ]
+     , FUNRETURN
+     ]
+  where
+    derp :: TransferCall -> [EvmOpcode]
+    derp TransferCall{..} =
+      [ -- Stack = [ inputTcId, RA ]
+        push (getSettlementAssetId _saId)
+        -- Stack = [ _saId, inputTcId, RA ]
+      , DUP2
+      , push _tcId
+      , EVM_EQ
+        -- Stack = [ _tcId == inputTcId, _saId, inputTcId, RA ]
+      , JUMPITO "transferCallToSettlementAsset_result"
+        -- Stack = [ _saId, inputTcId, RA ]
+      , POP
+        -- Stack = [ inputTcId, RA ]
+      ]
