@@ -479,8 +479,8 @@ payBackCalculatedValueToPT0 activateMap =
       , FUNCALL "safeMul_subroutine"
         -- Stack = [ pt0_balance_CALLER * payBackValue, saAddress, CALLER, pt0_balance_CALLER ]
       , FUNCALL "transfer_subroutine"
-      -- , ISZERO
-      -- , JUMPITO "global_throw"
+      , ISZERO
+      , JUMPITO "global_throw"
       , JUMPDESTFROM $ "skip_pt0_payout_for_sa" ++ show tcId
         -- Stack = [ pt0_balance_CALLER ]
       ]
