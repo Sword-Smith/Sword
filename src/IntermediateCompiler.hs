@@ -122,16 +122,17 @@ intermediateCompileM :: Contract -> ICompiler IntermediateContract
 intermediateCompileM (Transfer saAddress to) = do
   ScopeEnv maxFactor scaleFactor delayTerm memExpPath <- ask
   transferCallId <- newTransferCallId
+  settlementAssetId <- getSettlemenAssetId saAddress
   let transferCall = TransferCall { _maxAmount     = maxFactor
                                   , _amount        = scaleFactor (Lit (IntVal 1))
                                   , _delay         = delayTerm
                                   , _saAddress     = saAddress
+                                  , _saId          = settlementAssetId
                                   , _to            = to
                                   , _memExpPath    = memExpPath
                                   , _tcId          = transferCallId
                                   }
 
-  settlementAssetId <- getSettlemenAssetId saAddress
   let activateMap = Map.fromList [(settlementAssetId, (maxFactor, saAddress))]
 
   -- TODO: Calculate 'requiresPT0' correctly instead of assuming True.

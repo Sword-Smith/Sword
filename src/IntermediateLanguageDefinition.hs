@@ -49,7 +49,7 @@ data TransferCall =
                   , _amount       :: Expr
                   , _delay        :: Integer
                   , _saAddress    :: Address -- SA
---                  , _saId         :: SettlementAssetId
+                  , _saId         :: SettlementAssetId
                   , _to           :: PartyTokenID
                   , _memExpPath   :: MemExpPath
                   , _tcId         :: TransferCallId
@@ -71,7 +71,6 @@ data IMemExp = IMemExp { _IMemExpBegin  :: Integer
                        , _IMemExpIdent  :: Integer
                        , _IMemExp       :: Expr
                        } deriving (Show, Eq)
-
 
 -- TODO: Change ActivateMap to: type ActivateMap = Map.Map SettlementAssetId (SettlementAssetAmount, Address)
 type SettlementAssetAmount = Integer
