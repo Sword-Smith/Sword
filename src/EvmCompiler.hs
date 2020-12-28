@@ -351,11 +351,14 @@ payABI = do
 payToPartyToken0 :: Compiler [EvmOpcode]
 payToPartyToken0 = do
   begin0 <- newLabel "pt0_loop_"
-  pt0_not_yet_evaluated <- newLabel "pt0_not_yet_evaluated"
+  pt0_no_pay <- newLabel "pt0_no_pay"
+  -- TODO: The PT0 balance read here can be reused below, so we don't have to load it again
+  let skipIfPt0BalanceIsZero = [CALLER, push 0x00, FUNCALL "getBalance_subroutine", ISZERO, JUMPITO pt0_no_pay]
   PartyTokenID maxPTId <- reader getMaxPartyTokenID
   calculatePayoutAmountPT0 <- loadActivateMapIntoMemory <$> reader getActivateMap
   performPayoutPT0 <- payBackCalculatedValueToPT0 <$> reader getActivateMap
   return $
+    skipIfPt0BalanceIsZero ++
     calculatePayoutAmountPT0 ++
     [ -- Stack = [ ... ]
       push maxPTId
@@ -376,7 +379,7 @@ payToPartyToken0 = do
       , push 0x00
       , SGT
         -- Stack = [ 0 > tc_value, tc_value, tc_id ]
-      , JUMPITO pt0_not_yet_evaluated
+      , JUMPITO pt0_no_pay
         -- TODO: value is thrown out; maybe make copy later.
 
         -- Stack = [ tc_value, tc_id ]
@@ -406,8 +409,7 @@ payToPartyToken0 = do
     , POP -- tc_id removed
     ]
     ++ performPayoutPT0
-    ++ [ JUMPDESTFROM pt0_not_yet_evaluated ]
-
+    ++ [ JUMPDESTFROM pt0_no_pay ]
 
 loadActivateMapIntoMemory :: ActivateMap -> [EvmOpcode]
 loadActivateMapIntoMemory = concatMap loadElement . Map.assocs
