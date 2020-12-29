@@ -381,7 +381,6 @@ payToPartyToken0 = do
          -- Stack = [ tc_value, tc_id ]
          -- Load accumulated payback value onto Stack
 
-         -- ERROR HAPPENS BELOW HERE
        , DUP2
          -- Stack = [ tc_id, tc_value, tc_id ]
        , FUNCALL "transferCallToSettlementAsset_subroutine"
@@ -698,7 +697,7 @@ executeTransferCallsHH tc =
       , JUMPTO $ "tc_SKIP" ++ show (_tcId tc) ]
     skipToSetBalanceToZeroIfEvaluatedPayoutIsZero = [
       JUMPDESTFROM $ "skip_to_set_balance_to_zero" ++ show (_tcId tc)
-      , POP
+      , POP -- pop evaluated TC-value
       , JUMPTO $ "tc_SKIP" ++ show (_tcId tc) ]
     skipToMethodEndIfBalanceIsZero = [
       JUMPDESTFROM $ "skip_to_method_end" ++ show (_tcId tc)
@@ -788,32 +787,30 @@ executeTransferCallsHH tc =
 
       ++ [ JUMPDESTFROM $ "tc_value_already_evaluated" ++ show (_tcId tc)]
 
-      -- clear stack first, then jump to tc_skip (set PT balance = 0) if evaluated payout value was 0
+      -- if evaluated payout value was 0: clear stack first, then jump to tc_skip (set PT balance = 0)
       ++ [ DUP1
          , ISZERO
          , JUMPITO $ "skip_to_set_balance_to_zero" ++ show (_tcId tc)  ]
 
       ++ [ CALLER
          , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
-         , FUNCALL "getBalance_subroutine" ]  -- pops 1, pushes 1:  b is on the stack
+         , FUNCALL "getBalance_subroutine" ]  -- pops 2, pushes 1:  balance is on the stack
 
-      -- jump to method_end (go to next TC evaluation) if PT balance is zero
+      -- if PT balance is zero: clear stack, then jump to method_end (go to next TC evaluation)
       ++ [ DUP1
          , ISZERO
          , JUMPITO $ "skip_to_method_end" ++ show (_tcId tc)  ]
 
       -- Prepare stack and call transfer subroutine
-      -- ++ safemul
-      -- ++ [ MUL ] -- replace with safeMul!
       ++ [ FUNCALL "safeMul_subroutine" ]
       ++ [ PUSH32 $ address2w256 (_saAddress tc)
          , CALLER
          , SWAP2
          , FUNCALL "transfer_subroutine" ]
 
-      -- Care about the return value
+      -- Care about the return value as specified in ERC20
       ++ [ ISZERO
-         , JUMPITO "global_throw" ] -- error happens in this block
+         , JUMPITO "global_throw" ]
 
     setPTBalanceToZero = [
       JUMPDESTFROM $ "tc_SKIP" ++ show (_tcId tc)
@@ -1341,12 +1338,6 @@ isApprovedForAllABI = return
   , push 0x00
   , RETURN
   ]
-
-  -- , DUP1
-  -- , PUSH32 (functionSignature "setApprovalForAll(address,bool)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-  -- , EVM_EQ
-  -- , JUMPITO "setApprovalForAll_method"
-
 
 getMemExpById :: MemExpId -> [IMemExp] -> IMemExp
 getMemExpById memExpId [] = error $ "Could not find IMemExp with ID " ++ show memExpId
