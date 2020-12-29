@@ -23,7 +23,7 @@
 module IntermediateCompiler where
 
 import IntermediateLanguageDefinition
-import DaggerLanguageDefinition
+import SwordLanguageDefinition
 
 import Control.Monad.Reader
 import Control.Monad.State

@@ -22,7 +22,7 @@
 
 module EvmCompilerTest (tests) where
 
-import DaggerLanguageDefinition
+import SwordLanguageDefinition
 import EvmLanguageDefinition
 import EvmCompiler
 import EvmCompilerHelper

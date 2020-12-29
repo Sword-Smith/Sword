@@ -23,12 +23,12 @@
 module IntermediateCompilerTest (tests) where
 
 import qualified Data.Map.Strict as Map
-import DaggerLanguageDefinition
+import SwordLanguageDefinition
 
-import DaggerParser
+import SwordParser
 
-import DaggerParserTest hiding (tests)
-import DaggerTestHelpers
+import SwordParserTest hiding (tests)
+import SwordTestHelpers
 import IntermediateCompiler
 import IntermediateLanguageDefinition
 

@@ -20,13 +20,13 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
-module DaggerTestHelpers ( makeContract
+module SwordTestHelpers ( makeContract
                       , defaultAddressMap
                       , obsAddr, tokAddr, oneAddr, twoAddr
                       ) where
 
-import DaggerLanguageDefinition
-import DaggerParser (parse')
+import SwordLanguageDefinition
+import SwordParser (parse')
 import Data.Map as Map
 
 obsAddr, tokAddr, oneAddr, twoAddr :: Address

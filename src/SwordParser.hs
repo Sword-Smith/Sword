@@ -22,10 +22,10 @@
 
 {-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
 {-# LANGUAGE OverloadedStrings #-}
-module DaggerParser where
+module SwordParser where
 
 -- file: Parser.hs
-import DaggerLanguageDefinition
+import SwordLanguageDefinition
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Combinator as ParSecCom
 

@@ -22,7 +22,7 @@
 
 module TypeChecker where
 
-import DaggerLanguageDefinition
+import SwordLanguageDefinition
 import Data.List (sort)
 import Control.Monad (unless)
 

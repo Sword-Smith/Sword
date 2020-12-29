@@ -20,9 +20,9 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
-module DaggerPP where
+module SwordPP where
 
-import DaggerLanguageDefinition
+import SwordLanguageDefinition
 
 etlPP :: Contract -> String
 etlPP c = etlPPH c 1

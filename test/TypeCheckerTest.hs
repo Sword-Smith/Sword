@@ -22,7 +22,7 @@
 
 module TypeCheckerTest where
 
-import DaggerLanguageDefinition
+import SwordLanguageDefinition
 
 import Data.Either
 

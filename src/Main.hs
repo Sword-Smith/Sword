@@ -27,7 +27,7 @@ module Main where
 
 import EvmCompiler as EVMC
 import IntermediateCompiler as IMC
-import DaggerParser as BP
+import SwordParser as BP
 import TypeChecker as TC
 import Abi
 

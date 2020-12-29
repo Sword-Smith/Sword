@@ -25,7 +25,7 @@
 
 module EvmCompilerHelper where
 
-import DaggerLanguageDefinition
+import SwordLanguageDefinition
 import EvmLanguageDefinition
 import Abi (AbiEventDefinition(..), AbiEventParam(..))
 

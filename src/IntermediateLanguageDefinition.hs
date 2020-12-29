@@ -24,7 +24,7 @@
 
 module IntermediateLanguageDefinition where
 
-import DaggerLanguageDefinition
+import SwordLanguageDefinition
 
 import qualified Data.Map.Strict as Map
 

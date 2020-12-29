@@ -20,10 +20,10 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
-module DaggerParserTest (tests, canonical_iw_source) where
+module SwordParserTest (tests, canonical_iw_source) where
 
-import DaggerParser
-import DaggerLanguageDefinition
+import SwordParser
+import SwordLanguageDefinition
 
 import Test.Hspec
 

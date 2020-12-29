@@ -28,7 +28,7 @@ import EvmCompilerHelper
 import EvmLanguageDefinition
 import EvmCompilerSubroutines (subroutines, transferCallToSettlementAsset)
 import IntermediateLanguageDefinition
-import DaggerLanguageDefinition hiding (Transfer)
+import SwordLanguageDefinition hiding (Transfer)
 import IntermediateCompiler (emptyContract)
 import Abi (transferSingleEvent)
 

@@ -27,7 +27,7 @@ library:
     - filepath
 
 executables:
-  daggerc: &daggerc
+  swordc: &swordc
     main: src/Main.hs
     dependencies:
       - Sword
