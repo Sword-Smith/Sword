@@ -382,25 +382,27 @@ payToPartyToken0 = do
          -- Load accumulated payback value onto Stack
 
          -- ERROR HAPPENS BELOW HERE
-       , DUP2 -- HERE IS ERROR! We confuse tc_id with sa_id!! We **should** use sa_id but we use tc_id instead!!
+       , DUP2
          -- Stack = [ tc_id, tc_value, tc_id ]
-       , FUNCALL "transferCallToSettlementAsset_subroutine" -- <-- ERROR IS HERE NOW. THIS THROWS
+       , FUNCALL "transferCallToSettlementAsset_subroutine"
       --    -- Stack = [ saId, tc_value, tc_id ]
        , push 0x20
        , MUL
+       , push 0x100 -- TODO: Name this constant.
+       , ADD
        , DUP1
        , MLOAD
-         -- Stack = [ M[0x20 * saId], 0x20 * saId, tc_value, tc_id ]
+         -- Stack = [ M[0x100 + 0x20 * saId], 0x100 + 0x20 * saId, tc_value, tc_id ]
 
        , DUP3
        , SWAP1
-         -- Stack = [ M[0x20 * saId], tc_value, 0x20 * saId, tc_value, tc_id ]
+         -- Stack = [ M[0x100 +0x20 * saId], tc_value, 0x100 + 0x20 * saId, tc_value, tc_id ]
 
          -- Update and store accumulated payback value in memory
        , FUNCALL "safeSub_subroutine"
-         -- Stack = [ M[0x20 * saId] - tc_value, 0x20 * saId, tc_value, tc_id ]
+         -- Stack = [ M[0x100 + 0x20 * saId] - tc_value, 0x100 + 0x20 * saId, tc_value, tc_id ]
        , SWAP1
-         -- Stack = [ 0x20 * saId, M[0x20 * saId] - tc_value, tc_value, tc_id ]
+         -- Stack = [ 0x100 + 0x20 * saId, M[0x100 + 0x20 * saId] - tc_value, tc_value, tc_id ]
        , MSTORE
        , POP
          --  Stack = [ tc_id ]
@@ -432,7 +434,7 @@ loadActivateMapIntoMemory = concatMap loadElement . Map.assocs
     loadElement :: ActivateMapElement -> [EvmOpcode]
     loadElement (SettlementAssetId saId, (saAmount, _saAddress)) =
       [ push saAmount
-      , push (0x20 * saId)
+      , push (0x100 + 0x20 * saId) -- magic value since memory addresses below 0x80 (or so) are not safe from being overwritten by subroutines
       , MSTORE
       ]
 
@@ -465,9 +467,9 @@ payBackCalculatedValueToPT0 activateMap =
         JUMPDESTFROM $ "pay_back_element_start" ++ show saId
       , CALLER
       , PUSH32 (address2w256 saAddress)
-      , push (0x20 * saId)
+      , push (0x100 + 0x20 * saId) -- TODO: Name this constant.
 
-        -- Stack = [ 0x20 * saId, saAddress, CALLER, pt0_balance_CALLER ]
+        -- Stack = [ 0x100 + 0x20 * saId, saAddress, CALLER, pt0_balance_CALLER ]
       , MLOAD
         -- Stack = [ payBackValue = M[0x20 * saId], saAddress, CALLER, pt0_balance_CALLER ]
 
