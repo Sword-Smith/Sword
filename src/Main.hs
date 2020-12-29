@@ -61,7 +61,7 @@ runArgsHandler Args{..} = do
       Right astTC -> do
         let baseName = takeBaseName srcFile
             binPath = (outputDir </> baseName) `addExtension` ".bin"
-            intermediateContract = intermediateCompile astTC
+            intermediateContract = intermediateCompileOptimize astTC
             binaryBlob = assemble intermediateContract
 
         putStrLn ("Writing to file " ++ binPath)
