@@ -700,6 +700,11 @@ executeTransferCallsHH tc =
       JUMPDESTFROM $ "skip_to_set_balance_to_zero" ++ show (_tcId tc)
       , POP
       , JUMPTO $ "tc_SKIP" ++ show (_tcId tc) ]
+    skipToMethodEndIfBalanceIsZero = [
+      JUMPDESTFROM $ "skip_to_method_end" ++ show (_tcId tc)
+      , POP -- pop balance (which has a value of 0)
+      , POP -- pop evaluated TC-value
+      , JUMPTO $ "method_end" ++ show (_tcId tc) ]
 
     checkIfTCAlreadyEvaluated =
       [ JUMPDESTFROM $ "begin_tc_evaluation" ++ show (_tcId tc)
@@ -792,6 +797,11 @@ executeTransferCallsHH tc =
          , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
          , FUNCALL "getBalance_subroutine" ]  -- pops 1, pushes 1:  b is on the stack
 
+      -- jump to method_end (go to next TC evaluation) if PT balance is zero
+      ++ [ DUP1
+         , ISZERO
+         , JUMPITO $ "skip_to_method_end" ++ show (_tcId tc)  ]
+
       -- Prepare stack and call transfer subroutine
       -- ++ safemul
       -- ++ [ MUL ] -- replace with safeMul!
@@ -819,6 +829,7 @@ executeTransferCallsHH tc =
     begin ++
     setTCEvaluatedValueToZero ++
     skipToSetBalanceToZeroIfEvaluatedPayoutIsZero ++
+    skipToMethodEndIfBalanceIsZero ++
     checkIfTCAlreadyEvaluated ++
     checkIfCallShouldBeMade ++
     callTransferToTcRecipient ++
