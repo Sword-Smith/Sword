@@ -696,6 +696,10 @@ executeTransferCallsHH tc =
       , push (storageAddress (EvaluatedTcValue (_tcId tc)))
       , SSTORE
       , JUMPTO $ "tc_SKIP" ++ show (_tcId tc) ]
+    skipToSetBalanceToZeroIfEvaluatedPayoutIsZero = [
+      JUMPDESTFROM $ "skip_to_set_balance_to_zero" ++ show (_tcId tc)
+      , POP
+      , JUMPTO $ "tc_SKIP" ++ show (_tcId tc) ]
 
     checkIfTCAlreadyEvaluated =
       [ JUMPDESTFROM $ "begin_tc_evaluation" ++ show (_tcId tc)
@@ -777,8 +781,14 @@ executeTransferCallsHH tc =
          , push (storageAddress (EvaluatedTcValue (_tcId tc)))
          , SSTORE ]
 
-      ++ [ JUMPDESTFROM $ "tc_value_already_evaluated" ++ show (_tcId tc)
-         , CALLER
+      ++ [ JUMPDESTFROM $ "tc_value_already_evaluated" ++ show (_tcId tc)]
+
+      -- clear stack first, then jump to tc_skip (set PT balance = 0) if evaluated payout value was 0
+      ++ [ DUP1
+         , ISZERO
+         , JUMPITO $ "skip_to_set_balance_to_zero" ++ show (_tcId tc)  ]
+
+      ++ [ CALLER
          , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
          , FUNCALL "getBalance_subroutine" ]  -- pops 1, pushes 1:  b is on the stack
 
@@ -808,6 +818,7 @@ executeTransferCallsHH tc =
   in
     begin ++
     setTCEvaluatedValueToZero ++
+    skipToSetBalanceToZeroIfEvaluatedPayoutIsZero ++
     checkIfTCAlreadyEvaluated ++
     checkIfCallShouldBeMade ++
     callTransferToTcRecipient ++
