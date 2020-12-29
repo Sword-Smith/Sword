@@ -53,44 +53,44 @@ canonicalNestedIfWithinTest = do
 
         transfers
           = [TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0,
-                          _tokenAddress =
+                          _saAddress =
                             "0x1234567890123456789012345678901234567891",
                           _to = PartyTokenID 1,
                           _memExpPath = [(0, True), (1, True), (2, True)]},
              TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0,
-                          _tokenAddress =
+                          _saAddress =
                             "0x1234567890123456789012345678901234567892",
                           _to = PartyTokenID 2,
                           _memExpPath = [(0, True), (1, True), (2, False)]},
              TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0,
-                          _tokenAddress =
+                          _saAddress =
                             "0x1234567890123456789012345678901234567893",
                           _to = PartyTokenID 3,
                           _memExpPath =
                             [(0, True), (1, False), (3, True), (4, True)]},
              TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0,
-                          _tokenAddress =
+                          _saAddress =
                             "0x1234567890123456789012345678901234567894",
                           _to = PartyTokenID 4,
                           _memExpPath =
                             [(0, True), (1, False), (3, True), (4, False)]},
              TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0,
-                          _tokenAddress =
+                          _saAddress =
                             "0x1234567890123456789012345678901234567895",
                           _to = PartyTokenID 5,
                           _memExpPath = [(0, True), (1, False), (3, False)]},
              TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0,
-                          _tokenAddress =
+                          _saAddress =
                             "0x1234567890123456789012345678901234567896",
                           _to = PartyTokenID 6,
                           _memExpPath = [(0, False), (5, True)]},
              TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0,
-                          _tokenAddress =
+                          _saAddress =
                             "0x1234567890123456789012345678901234567897",
                           _to = PartyTokenID 7,
                           _memExpPath = [(0, False), (5, False), (6, True)]},
              TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0,
-                          _tokenAddress =
+                          _saAddress =
                             "0x1234567890123456789012345678901234567898",
                           _to = PartyTokenID 8,
                           _memExpPath = [(0, False), (5, False), (6, False)]}]
@@ -127,14 +127,14 @@ canonicalNestedIfWithinTest = do
 
         activateMap
           = Map.fromList
-              [(0, (1, "0x1234567890123456789012345678901234567891")),
-               (1, (1, "0x1234567890123456789012345678901234567892")),
-               (2, (1, "0x1234567890123456789012345678901234567893")),
-               (3, (1, "0x1234567890123456789012345678901234567894")),
-               (4, (1, "0x1234567890123456789012345678901234567895")),
-               (5, (1, "0x1234567890123456789012345678901234567896")),
-               (6, (1, "0x1234567890123456789012345678901234567897")),
-               (7, (1, "0x1234567890123456789012345678901234567898"))]
+              [(SettlementAssetId 0, (1, "0x1234567890123456789012345678901234567891")),
+               (SettlementAssetId 1, (1, "0x1234567890123456789012345678901234567892")),
+               (SettlementAssetId 2, (1, "0x1234567890123456789012345678901234567893")),
+               (SettlementAssetId 3, (1, "0x1234567890123456789012345678901234567894")),
+               (SettlementAssetId 4, (1, "0x1234567890123456789012345678901234567895")),
+               (SettlementAssetId 5, (1, "0x1234567890123456789012345678901234567896")),
+               (SettlementAssetId 6, (1, "0x1234567890123456789012345678901234567897")),
+               (SettlementAssetId 7, (1, "0x1234567890123456789012345678901234567898"))]
 
 -- Test that the getActivateMap function returns a correct map given a function
 activateMapSimple :: Spec
@@ -145,8 +145,8 @@ activateMapSimple
   where
     src = "both( if true within seconds(1) then scale(1, 1, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) else scale(7, 7, transfer(0xdddddddddddddddddddddddddddddddddddddddd,0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee,0xffffffffffffffffffffffffffffffffffffffff)),  if true within seconds(2) then scale(17, 17, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) else if true within seconds(3) then scale(53, 53, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) else scale(101, 101, transfer(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,0xcccccccccccccccccccccccccccccccccccccccc)) )"
     activateMap = Map.fromList
-               [(0, (102, "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")),
-                (1, (7, "0xdddddddddddddddddddddddddddddddddddddddd"))]
+               [(SettlementAssetId 0, (102, "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")),
+                (SettlementAssetId 1, (7, "0xdddddddddddddddddddddddddddddddddddddddd"))]
 
 -- Test that the getActivateMap works for the canonical IW source code
 activateMapCanonicalIw :: Spec
@@ -155,14 +155,14 @@ activateMapCanonicalIw = do
     getActivateMap (intermediateCompile (parse' canonical_iw_source)) `shouldBe` activateMap
   where
     activateMap = Map.fromList
-          [(0, (1, "0x1234567890123456789012345678901234567891")),
-            (1, (1, "0x1234567890123456789012345678901234567892")),
-            (2, (1, "0x1234567890123456789012345678901234567893")),
-            (3, (1, "0x1234567890123456789012345678901234567894")),
-            (4, (1, "0x1234567890123456789012345678901234567895")),
-            (5, (1, "0x1234567890123456789012345678901234567896")),
-            (6, (1, "0x1234567890123456789012345678901234567897")),
-            (7, (1, "0x1234567890123456789012345678901234567898"))]
+          [(SettlementAssetId 0, (1, "0x1234567890123456789012345678901234567891")),
+           (SettlementAssetId 1, (1, "0x1234567890123456789012345678901234567892")),
+           (SettlementAssetId 2, (1, "0x1234567890123456789012345678901234567893")),
+           (SettlementAssetId 3, (1, "0x1234567890123456789012345678901234567894")),
+           (SettlementAssetId 4, (1, "0x1234567890123456789012345678901234567895")),
+           (SettlementAssetId 5, (1, "0x1234567890123456789012345678901234567896")),
+           (SettlementAssetId 6, (1, "0x1234567890123456789012345678901234567897")),
+           (SettlementAssetId 7, (1, "0x1234567890123456789012345678901234567898"))]
 
 timeTranslationIMemExpTest :: Spec
 timeTranslationIMemExpTest
@@ -183,16 +183,16 @@ timeTranslationIMemExpTest
 
         transfers
           = [TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1),
-                          _delay = 120, _tokenAddress = tokAddr,
+                          _delay = 120, _saAddress = tokAddr,
                           _to = PartyTokenID 1, _memExpPath = [(0, True)]},
              TransferCall{_maxAmount = 2,
                           _amount = MultExp (Lit (IntVal 1)) (Lit (IntVal 2)),
-                          _delay = 120, _tokenAddress = tokAddr,
+                          _delay = 120, _saAddress = tokAddr,
                           _to = PartyTokenID 1, _memExpPath = [(0, False)]}]
 
         memExps = [IMemExp 120 240 0 (Lit (Observable OBool obsAddr "0"))]
 
-        activateMap = Map.fromList [(0, (2, tokAddr))]
+        activateMap = Map.fromList [(SettlementAssetId 0, (2, tokAddr))]
 
 zeroContractCodeTest :: Spec
 zeroContractCodeTest
@@ -215,14 +215,14 @@ zeroContractCodeTest
 
         transfers
           = [TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0,
-                          _tokenAddress = tokAddr, _to = PartyTokenID 1,
+                          _saAddress = tokAddr, _to = PartyTokenID 1,
                           _memExpPath = [(0, True)]}]
 
         memExps
           = [IMemExp{_IMemExpBegin = 0, _IMemExpEnd = 10, _IMemExpIdent = 0,
                      _IMemExp = Lit (Observable OBool obsAddr "0")}]
 
-        activateMap = Map.fromList [(0, (1, tokAddr))]
+        activateMap = Map.fromList [(SettlementAssetId 0, (1, tokAddr))]
 
 basicTransferTest :: Spec
 basicTransferTest
@@ -233,13 +233,13 @@ basicTransferTest
         transfer = Transfer{tokenAddress_ = tokAddr, to_ = PartyTokenID 1}
 
         requiresPartyToken0 = True
-        activateMap = Map.fromList [(0, (1, tokAddr))]
+        activateMap = Map.fromList [(SettlementAssetId 0, (1, tokAddr))]
 
         transferIC :: IntermediateContract
         transferIC = IntermediateContract
 
               [TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1),
-                            _delay = 0, _tokenAddress = tokAddr, _to = PartyTokenID 1,
+                            _delay = 0, _saAddress = tokAddr, _to = PartyTokenID 1,
                             _memExpPath = []}]
 
               []
