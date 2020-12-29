@@ -1,6 +1,0 @@
-scale(8,8,
-if obs(bool, _address_DataFeed0_, 0) within seconds(1) then
-    transfer(_address_Erc20_DAI, _address_Erc20PartyToken_pos0)
-else
-    transfer(_address_Erc20_DAI, _address_Erc20PartyToken_pos1)
-    )

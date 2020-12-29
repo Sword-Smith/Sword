@@ -1,8 +1,0 @@
-translate(
-    now,
-    scale(
-        100,
-        max(obs(int, _address_DataFeed0_, 0) - 10, 0),
-        transfer( _address_Tmc4_DKK, _address_my_0, _address_my_1)
-    )
-)
