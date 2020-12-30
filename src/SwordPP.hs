@@ -20,9 +20,9 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
-module DaggerPP where
+module SwordPP where
 
-import DaggerLanguageDefinition
+import SwordLanguageDefinition
 
 etlPP :: Contract -> String
 etlPP c = etlPPH c 1
@@ -34,6 +34,7 @@ etlPPH contract indent = case contract of
   Both c1 c2 -> concat [ "both(\n",indentSpace, etlPPH c1 (indent + 1), ",\n", indentSpace, etlPPH c2 (indent + 1), ")"]
   Translate time c -> concat [ "translate(\n", indentSpace, ppTime time, ",\n", indentSpace, etlPPH c (indent + 1), ")" ]
   IfWithin (MemExp time e) c1 c2 -> concat [ "if ", ppExpr e, " within ", ppTime time, "\n", indentSpace, "then ", etlPPH c1 (indent + 1), "\n", indentSpace, "else ", etlPPH c2 (indent + 1) ]
+  Zero -> "zero"
   where
     indentSpace = replicate (2*indent) ' '
 
@@ -73,7 +74,7 @@ ppBinOp parentE leftE rightE = concat [ ppBinOp' leftE, op, ppBinOp' rightE ]
     ppBinOp' :: Expr -> String
     ppBinOp' e | prec e < prec parentE = ppExpr e
     ppBinOp' e | prec e == prec parentE && isAssoc e && isAssoc parentE = ppExpr e
-    ppBinOp' e | otherwise = parens (ppExpr e)
+    ppBinOp' e = parens (ppExpr e)
 
     op :: String
     op = case parentE of
@@ -88,6 +89,7 @@ ppBinOp parentE leftE rightE = concat [ ppBinOp' leftE, op, ppBinOp' rightE ]
       LtOrEqExp _ _ -> " <= "
       AndExp    _ _ -> " and "
       OrExp     _ _ -> " or "
+      err           -> error ("Not an operator: " <> show err)
 
 ppExpr :: Expr -> String
 ppExpr e = case e of

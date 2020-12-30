@@ -22,36 +22,59 @@
 
 module TypeChecker where
 
-import DaggerLanguageDefinition
+import SwordLanguageDefinition
+import Data.List (sort)
+import Control.Monad (unless)
 
 data ExpType = BoolType
              | IntType deriving (Show, Eq)
 
 typeChecker :: Contract -> Either String Contract
-typeChecker (Transfer tokenAddress to) =
+typeChecker c = do
+  unless (hasSequentialPartyIDs c) (Left "Parties must be named sequentially from 1 to N.")
+  typeCheckerContract c
+
+hasSequentialPartyIDs :: Contract -> Bool
+hasSequentialPartyIDs c = verifySequence 1 $ sort $ getAllParties c
+  where
+    getAllParties :: Contract -> [PartyTokenID]
+    getAllParties (Transfer _ to) = [to]
+    getAllParties (Both contractA contractB) = getAllParties contractA ++ getAllParties contractB
+    getAllParties (Translate _ contract) = getAllParties contract
+    getAllParties (IfWithin _ contractA contractB) = getAllParties contractA ++ getAllParties contractB
+    getAllParties (Scale _ _ contract) = getAllParties contract
+    getAllParties Zero = []
+
+    verifySequence :: Integer -> [PartyTokenID] -> Bool
+    verifySequence _ [] = True
+    verifySequence n (x:xs) = n == getPartyTokenID x && verifySequence (n + 1) xs
+
+typeCheckerContract :: Contract -> Either String Contract
+typeCheckerContract (Transfer tokenAddress to) =
   return $ Transfer tokenAddress to
-typeChecker (Both contractA contractB) = do
-  cA <- typeChecker contractA
-  cB <- typeChecker contractB
+typeCheckerContract (Both contractA contractB) = do
+  cA <- typeCheckerContract contractA
+  cB <- typeCheckerContract contractB
   return $ Both cA cB
-typeChecker (Translate delay contract) = do
-  c <- typeChecker contract
+typeCheckerContract (Translate delay contract) = do
+  c <- typeCheckerContract contract
   return $ Translate delay c
-typeChecker (IfWithin (MemExp time e) contractA contractB) = do
+typeCheckerContract (IfWithin (MemExp time e) contractA contractB) = do
   t0 <- getType e
   if t0 == BoolType then do
-    cA <- typeChecker contractA
-    cB <- typeChecker contractB
+    cA <- typeCheckerContract contractA
+    cB <- typeCheckerContract contractB
     return $ IfWithin (MemExp time e) cA cB
   else
     Left $ "First argument in If-Within must be of type Boolean, got " ++ show t0
-typeChecker (Scale maxFac scaleFac contract) = do
+typeCheckerContract (Scale maxFac scaleFac contract) = do
   t0 <- getType scaleFac
   if t0 /= BoolType then do
-    c <- typeChecker contract
+    c <- typeCheckerContract contract
     return $ Scale maxFac scaleFac c
     else
     Left $ "2nd argument to scale must be of type int, got: " ++ show t0
+typeCheckerContract Zero = Right Zero
 
 getType :: Expr -> Either String ExpType
 getType (Lit literal) =

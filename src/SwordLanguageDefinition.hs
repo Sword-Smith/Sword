@@ -20,7 +20,7 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
-module DaggerLanguageDefinition where
+module SwordLanguageDefinition where
 
 data Contract = Transfer { tokenAddress_ :: Address,
                            to_           :: PartyTokenID
@@ -79,10 +79,6 @@ data Literal = IntVal Integer
              | Observable ObservableType Address String deriving (Show, Eq)
 
 data ObservableType = OBool | OInteger deriving (Show, Eq)
-
--- DEVFIX: Better choice for type is decided later.
-data Party = Bound Address
-           | Free Integer deriving (Show, Eq)
 
 type TokenSymbol = String
 type Address = String

@@ -20,32 +20,18 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
-module DaggerTestHelpers ( makeContract
-                      , defaultAddressMap
-                      , obsAddr, tokAddr, oneAddr, twoAddr
-                      ) where
+module Main (main) where
 
-import DaggerLanguageDefinition
-import DaggerParser (parse')
-import Data.Map as Map
+import qualified SwordParserTest
+import qualified IntermediateCompilerTest
+import qualified TypeCheckerTest
+import qualified EvmCompilerTest
 
-obsAddr, tokAddr, oneAddr, twoAddr :: Address
-obsAddr = "0x1111111111111111111111111111111111111111"
-tokAddr = "0x2222222222222222222222222222222222222222"
-oneAddr = "0x3333333333333333333333333333333333333333"
-twoAddr = "0x4444444444444444444444444444444444444444"
+import Test.Hspec
 
-defaultAddressMap :: Map Char Address
-defaultAddressMap = Map.fromList
-  [ ('O', obsAddr)
-  , ('T', tokAddr)
-  , ('A', oneAddr)
-  , ('B', twoAddr)
-  ]
-
-makeContract :: Map Char Address -> String -> Contract
-makeContract addressMap contract =
-  parse' contract'
-  where
-    contract' :: String
-    contract' = concatMap (\c -> findWithDefault [c] c addressMap) contract
+main :: IO ()
+main = hspec $ do
+  describe "The parser" SwordParserTest.tests
+  describe "The intermediate compiler" IntermediateCompilerTest.tests
+  describe "The type-checker" TypeCheckerTest.tests
+  describe "The EVM compiler" EvmCompilerTest.tests

@@ -19,14 +19,17 @@
 -- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
---
+
+{-# LANGUAGE RecordWildCards #-}
+
 module EvmCompilerSubroutines
   ( subroutines
+  , transferCallToSettlementAsset
   ) where
 
 import EvmCompilerHelper
 import EvmLanguageDefinition
-
+import IntermediateLanguageDefinition (TransferCall(..), SettlementAssetId(..))
 
 
 {- These procedures are pasted as a _single_ chunk in the contract code. If we
@@ -105,6 +108,11 @@ transferFromSubroutine =
             ]
         pushInSizeTF             = [ push 0x64 ]
 
+-- | Perform an ERC20 transfer call to an external contract.
+--
+-- Stack before FUNSTART: [ return address, amount, saAddr, _to, ... ]
+-- Stack after FUNSTART: [ _to, amount, saAddr, return address, ... ]
+-- Stack after: [ ... ]
 transferSubroutine :: [EvmOpcode]
 transferSubroutine =
   funStartT
@@ -302,7 +310,6 @@ safeTransferFromSubroutine =
     , JUMP
   ]
 
-
 -- All four safe arithmetic methods were implemented by Ulrik. They were translated by hand from
 -- https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/math/SignedSafeMath.sol
 
@@ -407,3 +414,38 @@ safeSubSubroutine =
   , SUB
   , FUNRETURN
   ]
+
+-- | Convert a list of 'TransferCall' to a subroutine that converts
+-- a 'TransferCallId' into a 'SettlementAssetId'.
+--
+-- Stack before FUNSTART: [ return address, tcId, ... ]
+-- Stack after FUNSTART: [ tcId, return address, ... ]
+-- Stack after returning: [ saId, ... ]
+--
+transferCallToSettlementAsset :: [TransferCall] -> [EvmOpcode]
+transferCallToSettlementAsset transferCalls =
+  [ FUNSTART "transferCallToSettlementAsset_subroutine" 1 ]
+  ++ concatMap derp transferCalls
+  ++ [ JUMPITO "global_throw" -- code path should be unreachable
+     , JUMPDESTFROM "transferCallToSettlementAsset_result"
+       -- Stack = [ _saId, inputTcId, RA ]
+     , SWAP1
+     , POP
+       -- Stack = [ _saId, RA ]
+     , FUNRETURN
+     ]
+  where
+    derp :: TransferCall -> [EvmOpcode]
+    derp TransferCall{..} =
+      [ -- Stack = [ inputTcId, RA ]
+        push (getSettlementAssetId _saId)
+        -- Stack = [ _saId, inputTcId, RA ]
+      , DUP2
+      , push _tcId
+      , EVM_EQ
+        -- Stack = [ _tcId == inputTcId, _saId, inputTcId, RA ]
+      , JUMPITO "transferCallToSettlementAsset_result"
+        -- Stack = [ _saId, inputTcId, RA ]
+      , POP
+        -- Stack = [ inputTcId, RA ]
+      ]

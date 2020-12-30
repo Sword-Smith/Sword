@@ -23,13 +23,13 @@
 module IntermediateCompiler where
 
 import IntermediateLanguageDefinition
-import DaggerLanguageDefinition
+import SwordLanguageDefinition
 
 import Control.Monad.Reader
 import Control.Monad.State
 
-import Data.List
 import qualified Data.Map.Strict as Map
+import Data.List (genericLength)
 
 -- State monad definitions
 -- The intermediate compilation happens in a monad since we need to ascribe
@@ -42,9 +42,11 @@ data ScopeEnv =
               , _currentMemExpPath :: MemExpPath
               }
 
-data GlobalEnv =
-  GlobalEnv { _memExpId :: Maybe MemExpId
-            }
+data GlobalEnv = GlobalEnv
+  { _memExpId       :: Maybe MemExpId
+  , _transferCallId :: TransferCallId
+  , _encounteredSettlementAssets :: [(Address, SettlementAssetId)]
+  }
 
 type ICompiler a = ReaderT ScopeEnv (State GlobalEnv) a
 
@@ -58,22 +60,44 @@ initialScope = ScopeEnv { _maxFactor   = 1
                         }
 
 initialGlobal :: GlobalEnv
-initialGlobal = GlobalEnv { _memExpId = Nothing
-                          }
+initialGlobal = GlobalEnv
+  { _memExpId       = Nothing
+  , _transferCallId = 0
+  , _encounteredSettlementAssets = []
+  }
 
+-- TODO: Change default 'getRequiresPT0' to False once we calculate this correctly.
 emptyContract :: IntermediateContract
-emptyContract = IntermediateContract [] [] [] Map.empty
+emptyContract = IntermediateContract [] [] Map.empty True
+
+getSettlemenAssetId :: Address -> ICompiler SettlementAssetId
+getSettlemenAssetId saAddress = do
+  settlementAssets <- gets _encounteredSettlementAssets
+  case lookup saAddress settlementAssets of
+    Just saId ->
+      return saId
+
+    Nothing -> do
+      let newId = SettlementAssetId (genericLength settlementAssets)
+      modify (\env -> env { _encounteredSettlementAssets = (saAddress, newId) : settlementAssets })
+      return newId
 
 newMemExpId :: ICompiler MemExpId
 newMemExpId = do
-  g @ (GlobalEnv _memExpId) <- get
-  let _memExpId' = increment _memExpId
+  g <- get
+  let _memExpId' = increment (_memExpId g)
   put $ g { _memExpId = Just _memExpId' }
   return _memExpId'
   where
     increment :: Maybe MemExpId -> MemExpId
-    increment (Just id) = id + 1
+    increment (Just memExpId) = memExpId + 1
     increment _         = 0
+
+newTransferCallId :: ICompiler TransferCallId
+newTransferCallId = do
+  tcId <- gets _transferCallId
+  modify $ \env -> env { _transferCallId = tcId + 1 }
+  return tcId
 
 toSeconds :: Time -> Integer
 toSeconds t = case t of
@@ -95,19 +119,25 @@ intermediateCompileOptimize :: Contract -> IntermediateContract
 intermediateCompileOptimize = foldExprs . intermediateCompile
 
 intermediateCompileM :: Contract -> ICompiler IntermediateContract
-intermediateCompileM (Transfer token to) = do
+intermediateCompileM (Transfer saAddress to) = do
   ScopeEnv maxFactor scaleFactor delayTerm memExpPath <- ask
-  --toPartyId   <- insertIfMissing to
+  transferCallId <- newTransferCallId
+  settlementAssetId <- getSettlemenAssetId saAddress
   let transferCall = TransferCall { _maxAmount     = maxFactor
                                   , _amount        = scaleFactor (Lit (IntVal 1))
                                   , _delay         = delayTerm
-                                  , _tokenAddress  = token
+                                  , _saAddress     = saAddress
+                                  , _saId          = settlementAssetId
                                   , _to            = to
                                   , _memExpPath    = memExpPath
+                                  , _tcId          = transferCallId
                                   }
 
-  let activateMap = Map.fromList [(token, maxFactor)]
-  return (IntermediateContract [] [transferCall] [] activateMap)
+  let activateMap = Map.fromList [(settlementAssetId, (maxFactor, saAddress))]
+
+  -- TODO: Calculate 'requiresPT0' correctly instead of assuming True.
+  let requiresPT0 = True
+  return (IntermediateContract [transferCall] [] activateMap requiresPT0)
 
 intermediateCompileM (Scale maxFactor factorExp contract) =
   local adjustScale $ intermediateCompileM contract
@@ -119,11 +149,18 @@ intermediateCompileM (Scale maxFactor factorExp contract) =
                }
 
 intermediateCompileM (Both contractA contractB) = do
-  IntermediateContract _ tcs1 mes1 am1 <- intermediateCompileM contractA
-  IntermediateContract _ tcs2 mes2 am2 <- intermediateCompileM contractB
-  return $ IntermediateContract [] (tcs1 ++ tcs2)
+  IntermediateContract tcs1 mes1 am1 rpt0a <- intermediateCompileM contractA
+  IntermediateContract tcs2 mes2 am2 rpt0b <- intermediateCompileM contractB
+  let unionActivateMap :: (SettlementAssetAmount, Address) -> (SettlementAssetAmount, Address) -> (SettlementAssetAmount, Address)
+      unionActivateMap (amount1, address1) (amount2, address2) = 
+        if address1 == address2 then
+          (amount1 + amount2, address1)
+        else
+          error "Bad Activatemap constructed"
+  return $ IntermediateContract (tcs1 ++ tcs2)
                                 (mes1 ++ mes2)
-                                (Map.unionWith (+) am1 am2)
+                                (Map.unionWith unionActivateMap am1 am2)
+                                (rpt0a || rpt0b)
 
 intermediateCompileM (Translate time contract) =
   local adjustDelay $ intermediateCompileM contract
@@ -135,17 +172,14 @@ intermediateCompileM (Translate time contract) =
 intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
   memExpId <- newMemExpId
 
-  -- adjustMarginRefundPath sets the environment up for the recursive call.
-  -- In the two monads, only the marginRefundPath and the memExpID is changed in
-  -- this recursive call.
   delay <- reader _delayTerm
   let delayEnd = toSeconds time + delay
 
   icA <- local (extendMemExpPath (memExpId, True)) $ intermediateCompileM contractA
-  let IntermediateContract _ tcs1 mes1 am1 = icA
+  let IntermediateContract tcs1 mes1 am1 rpt0a = icA
 
   icB <- local (extendMemExpPath (memExpId, False)) $ intermediateCompileM contractB
-  let IntermediateContract _ tcs2 mes2 am2 = icB
+  let IntermediateContract tcs2 mes2 am2 rpt0b = icB
 
   let me0 = IMemExp { _IMemExpBegin = delay
                     , _IMemExpEnd   = delayEnd
@@ -153,27 +187,22 @@ intermediateCompileM (IfWithin (MemExp time memExp) contractA contractB) = do
                     , _IMemExp      = memExp
                     }
 
-  -- MarginRefundMap
-  memExpPath <- reader _currentMemExpPath
+  let unionActivateMap :: (SettlementAssetAmount, Address) -> (SettlementAssetAmount, Address) -> (SettlementAssetAmount, Address)
+      unionActivateMap (amount1, address1) (amount2, address2) = 
+        if address1 == address2 then
+          (max amount1 amount2, address1)
+        else
+          error "Bad Activatemap constructed"
 
-  return $ IntermediateContract [] (tcs1 ++ tcs2)
+  return $ IntermediateContract (tcs1 ++ tcs2)
                                 (me0 : mes1 ++ mes2)
-                                (Map.unionWith max am1 am2)
+                                (Map.unionWith unionActivateMap am1 am2)
+                                (rpt0a || rpt0b)
 
   where
     extendMemExpPath :: (MemExpId, Branch) -> ScopeEnv -> ScopeEnv
     extendMemExpPath node scopeEnv =
       scopeEnv { _currentMemExpPath = _currentMemExpPath scopeEnv ++ [node] }
-
-    -- A boolean condition of True (left child) having a req. margin of
-    -- 10 and the right child having a margin of 7 will mean that 3 may
-    -- be released if right child is chosen.
-    -- Hence the subtraction. If no margin is present in the
-    -- RC and margin is present in the LC, the entire margin can be
-    -- returned, hence the Map.differenceWith.
-    iw :: ActivateMap -> ActivateMap -> [(Address, Integer)]
-    iw am1 am2 = Map.toList
-      $ Map.differenceWith (\x y -> if x - y > 0 then Just (x - y) else Nothing) am1 am2
 
 intermediateCompileM Zero = return emptyContract
 
@@ -188,6 +217,7 @@ foldExprs contract =
     foldME :: IMemExp -> IMemExp
     foldME memExp = memExp { _IMemExp = foldExpr (_IMemExp memExp) }
 
+-- TODO: Add constant folding exprs for: `1 * expr1 = expr1` and `expr1 * 1 = expr1`
 foldExpr :: Expr -> Expr
 foldExpr expr = case expr of
   Lit _        -> expr

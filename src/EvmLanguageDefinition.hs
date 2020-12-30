@@ -101,7 +101,7 @@ data EvmOpcode = STOP
                | FUNSTARTA Integer -- post-linker pseudo instruction: JUMPDEST + SWAP logic
                | FUNCALL Label -- pre-linker pseudo instruction: PC, JUMPTO Label (push PC on stack, jump). This is in effect: PC, PUSH Addr(Label), JUMP.
                | FUNCALLA Integer -- post-linker pseudo instruction: PC, JUMPTOA i
-               | FUNRETURN -- post-linker pseudo instruction: a synonyme for JUMP;
+               | FUNRETURN -- post-linker pseudo instruction: a synonyme for SWAP1, JUMP;
                | JUMPTO Label -- pre-linker pseudo instruction: PUSH Addr(label); JUMP;
                | JUMPITO Label -- pre-linker pseudo instruction: PUSH Addr(label); JUMPI;
                | JUMPTOA Integer -- (after linker) pseudo instruction
@@ -122,6 +122,7 @@ data EvmOpcode = STOP
                | DUP5
                | DUP6
                | DUP7
+               | DUP8
                | SWAP1
                | SWAP2
                | SWAP3

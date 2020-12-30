@@ -20,9 +20,11 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 
+{-# LANGUAGE RecordWildCards #-}
+
 module IntermediateLanguageDefinition where
 
-import DaggerLanguageDefinition
+import SwordLanguageDefinition
 
 import qualified Data.Map.Strict as Map
 
@@ -30,25 +32,38 @@ type PartyIndex = Integer
 type PartyIdentifier = Integer
 
 type MemExpId = Integer
+type TransferCallId = Integer
 type Branch = Bool
 type MemExpPath = [(MemExpId, Branch)]
 
 data IntermediateContract =
-     IntermediateContract { getParties         :: [Party]
-                          , getTransferCalls   :: [TransferCall]
+     IntermediateContract { getTransferCalls   :: [TransferCall]
                           , getMemExps         :: [IMemExp]
                           , getActivateMap     :: ActivateMap
---                          , getMarginRefundMap :: MarginRefundMap
+                          , getRequiresPT0     :: Bool
                           } deriving (Show, Eq)
 
 data TransferCall =
      TransferCall { _maxAmount    :: Integer
                   , _amount       :: Expr
                   , _delay        :: Integer
-                  , _tokenAddress :: Address -- SA
+                  , _saAddress    :: Address -- SA
+                  , _saId         :: SettlementAssetId
                   , _to           :: PartyTokenID
                   , _memExpPath   :: MemExpPath
+                  , _tcId         :: TransferCallId
                   } deriving (Show, Eq)
+
+getPartyTokenIDs :: IntermediateContract -> [PartyTokenID]
+getPartyTokenIDs IntermediateContract{..} =
+  map _to getTransferCalls
+
+getTransferCallIDs :: IntermediateContract -> [TransferCallId]
+getTransferCallIDs IntermediateContract{..} =
+  map _tcId getTransferCalls
+
+getMaxTcId :: IntermediateContract -> TransferCallId
+getMaxTcId = maximum . getTransferCallIDs
 
 -- DEVNOTE:
 -- We start by attempting to implement the evaluation of IMemExp values.
@@ -59,15 +74,12 @@ data IMemExp = IMemExp { _IMemExpBegin  :: Integer
                        , _IMemExp       :: Expr
                        } deriving (Show, Eq)
 
-type ActivateMap = Map.Map Address Integer
+-- TODO: Change ActivateMap to: type ActivateMap = Map.Map SettlementAssetId (SettlementAssetAmount, Address)
+type SettlementAssetAmount = Integer
+newtype SettlementAssetId = SettlementAssetId { getSettlementAssetId :: Integer }
+  deriving (Eq, Ord, Show)
+
+type ActivateMap = Map.Map SettlementAssetId (SettlementAssetAmount, Address)
 
 -- This is the type for elements in Map.assocs
-type ActivateMapElement = (Address, Integer)
-
-
-type MarginRefundMap = Map.Map [(Integer, Bool)] [(Address, PartyIndex, Integer)]
-
--- (path, marginRefundValue) = ([(memExpRef, branch (true or false))], (token address, recipient, amount))
-type MarginRefundMapElement = ([(Integer, Bool)], [(Address, PartyIndex, Integer)])
-
-type MarginRefundPath = [(Integer, Bool)]
+type ActivateMapElement = (SettlementAssetId, (SettlementAssetAmount, Address))

@@ -25,7 +25,7 @@
 
 module EvmCompilerHelper where
 
-import DaggerLanguageDefinition
+import SwordLanguageDefinition
 import EvmLanguageDefinition
 import Abi (AbiEventDefinition(..), AbiEventParam(..))
 
@@ -214,6 +214,7 @@ ppEvm instruction = case instruction of
     DUP5         -> "84"
     DUP6         -> "85"
     DUP7         -> "86"
+    DUP8         -> "87"
     SWAP1        -> "90"
     SWAP2        -> "91"
     SWAP3        -> "92"

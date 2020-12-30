@@ -26,16 +26,17 @@ module EvmCompiler where
 
 import EvmCompilerHelper
 import EvmLanguageDefinition
-import EvmCompilerSubroutines (subroutines)
+import EvmCompilerSubroutines (subroutines, transferCallToSettlementAsset)
 import IntermediateLanguageDefinition
-import DaggerLanguageDefinition hiding (Transfer)
+import SwordLanguageDefinition hiding (Transfer)
 import IntermediateCompiler (emptyContract)
 import Abi (transferSingleEvent)
 
 import Control.Monad.State
 import Control.Monad.Reader
 
-import Data.List
+import Data.Char (toLower)
+import Data.List (genericLength)
 import qualified Data.Map.Strict as Map
 
 -- State monad definitions
@@ -62,10 +63,10 @@ runCompiler intermediateContract compileEnv m =
 runExprCompiler :: CompileEnv -> Expr -> [EvmOpcode]
 runExprCompiler env expr = runCompiler emptyContract env (compileExp expr)
 
--- ATM, "Executed" does not have an integer. If it should be able to handle more
--- than 256 tcalls, it must take an integer also.
+-- position value that a contract position evaluates to
 data StorageType = CreationTimestamp
                  | MemoryExpressionRefs
+                 | EvaluatedTcValue TransferCallId
 
 -- For each storage index we pay 20000 GAS. Reusing one is only 5000 GAS.
 -- It would therefore make sense to pack as much as possible into the same index.
@@ -73,6 +74,7 @@ data StorageType = CreationTimestamp
 storageAddress :: Integral i => StorageType -> i
 storageAddress CreationTimestamp      = 0x0
 storageAddress MemoryExpressionRefs   = 0x1
+storageAddress (EvaluatedTcValue n)   = fromIntegral n + 0x2
 
 sizeOfOpcodes :: [EvmOpcode] -> Integer
 sizeOfOpcodes = sum . map sizeOfOpcode
@@ -100,27 +102,27 @@ sizeOfOpcode _               = 1
 -- Check that there are not more than 2^8 transfercalls
 assemble :: IntermediateContract -> String
 assemble = concatMap ppEvm . transformPseudoInstructions . evmCompile . check
+
+disassemble :: IntermediateContract -> String
+disassemble = concatMap showOpcode . evmCompile . check
   where
-    check :: IntermediateContract -> IntermediateContract
-    check contract | length (getTransferCalls contract) > 256 = error "Too many Transfer Calls"
-    check contract | length (getMemExps contract) > 128 = error "Too many Memory Expressions"
-    check contract = contract
+    showOpcode = (++ "\n") . map toLower . show
+
+check :: IntermediateContract -> IntermediateContract
+check contract | length (getTransferCalls contract) > 256 = error "Too many Transfer Calls"
+check contract | length (getMemExps contract) > 128 = error "Too many Memory Expressions"
+check contract = contract
 
 -- Given an IntermediateContract, returns the EvmOpcodes representing the contract
 evmCompile :: IntermediateContract -> [EvmOpcode]
 evmCompile intermediateContract =
   linker (constructor' ++ codecopy') ++ linker body
   where
-    constructor' = constructor intermediateContract
-    codecopy'    = codecopy constructor' body
-    body         = jumpTable ++ subroutines ++ methods
+    constructor'       = constructor intermediateContract
+    codecopy'          = codecopy constructor' body
+    dynamicSubroutines = transferCallToSettlementAsset (getTransferCalls intermediateContract)
+    body               = jumpTable ++ subroutines ++ dynamicSubroutines ++ methods
 
-    -- [ activateABI, burnABI, ... ]          :: [Compiler [EvmOpcode]]
-    -- sequence                               :: Monad m => [m a] -> m [a]
-    -- sequence [ activateABI, burnABI, ... ] :: Compiler [[EvmOpcode]]
-    -- runCompiler'                           :: Compiler a -> a
-    -- runCompiler' . sequence                :: [Compiler [EvmOpcode]] -> [[EvmOpcode]]
-    -- concat . runCompiler ... . sequence    :: [Compiler [EvmOpcode]] -> [EvmOpcode]
     methods :: [EvmOpcode]
     methods = concat . runCompiler' . sequence $
       [ activateABI
@@ -184,8 +186,8 @@ transformPseudoInstructions = concatMap transformH
 -- Once the values have been placed in storage, the CODECOPY opcode should
 -- probably be called.
 constructor :: IntermediateContract -> [EvmOpcode]
-constructor IntermediateContract{..} =
-  checkNoValue "Constructor_Header"
+constructor ic =
+  checkNoValue "Constructor_Header" ++ initializeEvaluatedTcValues ic
 
 -- Checks that no value (ether) is sent when executing contract method
 -- Used in both contract header and in constructor
@@ -197,6 +199,21 @@ checkNoValue target = [ CALLVALUE
                       , push 0
                       , REVERT
                       , JUMPDESTFROM target ]
+
+-- | Set value in storage for each TransferCall to -1 to indicate
+-- that we have not yet evaluated the value of the TransferCall.
+initializeEvaluatedTcValues :: IntermediateContract -> [EvmOpcode]
+initializeEvaluatedTcValues ic =
+  [ push 0x01, push 0x00, SUB ] -- add -1 to stack
+  ++ concatMap setToMinusOne (getTransferCalls ic)
+  ++ [ POP ] -- remove -1 from stack again
+  where
+    setToMinusOne :: TransferCall -> [EvmOpcode]
+    setToMinusOne tc =
+      [ DUP1
+      , push (storageAddress (EvaluatedTcValue (_tcId tc)))
+      , SSTORE
+      ]
 
 -- Stores timestamp of creation of contract in storage
 saveTimestampToStorage :: [EvmOpcode]
@@ -314,13 +331,163 @@ payABI :: Compiler [EvmOpcode]
 payABI = do
     memExpCode <- concatMap executeMemExp <$> reader getMemExps
     transferCallCode <- executeTransferCalls
+    doPayToPT0 <- reader getRequiresPT0
+    payToPT0 <- if doPayToPT0 then payToPartyToken0 else return []
     return $
         [ JUMPDESTFROM "pay_method" ]
         ++ throwIfNotActivated
         ++ memExpCode
         ++ transferCallCode
+        ++ payToPT0
         ++ emitEvent "Paid"
         ++ [ STOP ]
+
+-- For hver Transfer Call ID:
+--   value := Storage[TCID];
+--   j := TCs[TCID]._saAddress;
+--   if (value == -1) goto end;
+--   PT0_udbetaling_j += value;
+--
+-- PT0_udbetaling_j = ActivateMap_j - 
+payToPartyToken0 :: Compiler [EvmOpcode]
+payToPartyToken0 = do
+  begin0 <- newLabel "pt0_loop_"
+  pt0_no_pay <- newLabel "pt0_no_pay"
+  -- TODO: The PT0 balance read here can be reused below, so we don't have to load it again
+  let skipIfPt0BalanceIsZero = [CALLER, push 0x00, FUNCALL "getBalance_subroutine", ISZERO, JUMPITO pt0_no_pay]
+  maxTcId <- reader getMaxTcId
+  let subtractEvaluatedPTValuesFromSaAmounts = [
+     -- Stack = [ ... ]
+          push maxTcId
+       -- loop (tc_id from maxTcId to 0)
+       -- do ... while (tc_id != 0)
+       , JUMPDESTFROM begin0
+         -- Stack = [ tc_id ]
+
+         -- Hack: Dynamically calculate storage address.
+       , DUP1
+       , push (storageAddress (EvaluatedTcValue 0))
+       , ADD
+       , SLOAD
+         -- Stack = [ tc_value, tc_id ]
+
+         -- If value[tc_id] < 0, don't perform PT0 payout.
+       , DUP1
+       , push 0x00
+       , SGT
+         -- Stack = [ 0 > tc_value, tc_value, tc_id ]
+       , JUMPITO pt0_no_pay
+
+         -- Stack = [ tc_value, tc_id ]
+         -- Load accumulated payback value onto Stack
+
+       , DUP2
+         -- Stack = [ tc_id, tc_value, tc_id ]
+       , FUNCALL "transferCallToSettlementAsset_subroutine"
+      --    -- Stack = [ saId, tc_value, tc_id ]
+       , push 0x20
+       , MUL
+       , push 0x100 -- TODO: Name this constant.
+       , ADD
+       , DUP1
+       , MLOAD
+         -- Stack = [ M[0x100 + 0x20 * saId], 0x100 + 0x20 * saId, tc_value, tc_id ]
+
+       , DUP3
+       , SWAP1
+         -- Stack = [ M[0x100 +0x20 * saId], tc_value, 0x100 + 0x20 * saId, tc_value, tc_id ]
+
+         -- Update and store accumulated payback value in memory
+       , FUNCALL "safeSub_subroutine"
+         -- Stack = [ M[0x100 + 0x20 * saId] - tc_value, 0x100 + 0x20 * saId, tc_value, tc_id ]
+       , SWAP1
+         -- Stack = [ 0x100 + 0x20 * saId, M[0x100 + 0x20 * saId] - tc_value, tc_value, tc_id ]
+       , MSTORE
+       , POP
+         --  Stack = [ tc_id ]
+
+      --    -- Loop condition check: if (--tc_id >= 0) goto begin0
+       , push 0x01
+       , SWAP1
+       , SUB
+       , DUP1
+       , push 0x00
+       , SGT
+       , ISZERO
+       , JUMPITO begin0
+
+       , POP ] -- tc_id removed ]
+  loadActivateAmounts <- loadActivateMapIntoMemory <$> reader getActivateMap
+  performPayoutPT0 <- payBackCalculatedValueToPT0 <$> reader getActivateMap
+  return $
+       skipIfPt0BalanceIsZero
+    ++ loadActivateAmounts
+    ++ subtractEvaluatedPTValuesFromSaAmounts
+    ++ performPayoutPT0
+    ++ [ JUMPDESTFROM pt0_no_pay ]
+
+-- stores activateAmount (for each SA asset) in memory so we can use it in later calculations
+loadActivateMapIntoMemory :: ActivateMap -> [EvmOpcode]
+loadActivateMapIntoMemory = concatMap loadElement . Map.assocs
+  where
+    loadElement :: ActivateMapElement -> [EvmOpcode]
+    loadElement (SettlementAssetId saId, (saAmount, _saAddress)) =
+      [ push saAmount
+      , push (0x100 + 0x20 * saId) -- magic value since memory addresses below 0x80 (or so) are not safe from being overwritten by subroutines
+      , MSTORE
+      ]
+
+payBackCalculatedValueToPT0 :: ActivateMap -> [EvmOpcode]
+payBackCalculatedValueToPT0 activateMap =
+      pushCallerBalancePT0
+  ++ concatMap paybackElement (Map.assocs activateMap)
+  ++ [POP]
+  ++ setPt0BalanceToZero
+  where
+    setPt0BalanceToZero :: [EvmOpcode]
+    setPt0BalanceToZero = [ push 0x00, DUP1, CALLER, FUNCALL "setBalance_subroutine" ]
+
+    pushCallerBalancePT0 :: [EvmOpcode]
+    pushCallerBalancePT0 =
+      [ CALLER
+      , push 0x00
+      , FUNCALL "getBalance_subroutine"
+      ]
+
+    paybackElement :: ActivateMapElement -> [EvmOpcode]
+    paybackElement (SettlementAssetId saId, (_saAmount, saAddress)) =
+      let
+        begin      = [ JUMPTO $ "pay_back_element_start" ++ show saId ]
+        popAndSkip = [ JUMPDESTFROM $ "pay_back_pop_and_skip" ++ show saId, POP, POP, POP, JUMPTO $ "skip_pt0_payout_for_sa" ++ show saId ]
+      in
+        begin ++
+        popAndSkip ++
+      [ -- Stack = [ pt0_balance_CALLER ]
+        JUMPDESTFROM $ "pay_back_element_start" ++ show saId
+      , CALLER
+      , PUSH32 (address2w256 saAddress)
+      , push (0x100 + 0x20 * saId) -- TODO: Name this constant.
+
+        -- Stack = [ 0x100 + 0x20 * saId, saAddress, CALLER, pt0_balance_CALLER ]
+      , MLOAD
+        -- Stack = [ payBackValue = M[0x20 * saId], saAddress, CALLER, pt0_balance_CALLER ]
+
+      -- skip if payBackValue == 0
+      , DUP1
+      , ISZERO
+      , JUMPITO $ "pay_back_pop_and_skip" ++ show saId
+
+      , DUP4
+        -- payBackValue := M[0x20 * saId]
+        -- Stack = [ pt0_balance_CALLER, paybackValue, saAddress, CALLER, pt0_balance_CALLER ]
+      , FUNCALL "safeMul_subroutine"
+        -- Stack = [ pt0_balance_CALLER * payBackValue, saAddress, CALLER, pt0_balance_CALLER ]
+      , FUNCALL "transfer_subroutine"
+      , ISZERO
+      , JUMPITO "global_throw"
+      , JUMPDESTFROM $ "skip_pt0_payout_for_sa" ++ show saId
+        -- Stack = [ pt0_balance_CALLER ]
+      ]
 
 -- This sets the relevant bits in the memory expression word in storage
 -- Here the IMemExp should be evaluated. But only iff it is NOT true atm.
@@ -431,24 +598,7 @@ path2highestIndexValue ((_i, _branch):ls) = path2highestIndexValue ls
 executeTransferCalls :: Compiler [EvmOpcode]
 executeTransferCalls = do
   transferCalls <- reader getTransferCalls
-  opcodes <- loop 0 transferCalls
-
-  -- Prevent selfdestruct from running after each call
-  return $ opcodes ++ [STOP] ++ selfdestruct
-
-  where
-    loop :: Integer -> [TransferCall] -> Compiler [EvmOpcode]
-    loop _ [] = return []
-    loop i (tc:tcs) = do
-      opcodes1 <- executeTransferCallsHH tc i
-      opcodes2 <- loop (i + 1) tcs
-      return (opcodes1 ++ opcodes2)
-
-    selfdestruct = [ JUMPDESTFROM "selfdestruct"
-                   , CALLER
-                   , SELFDESTRUCT
-                   , STOP
-                   ]
+  return $ concatMap executeTransferCallsHH transferCalls
 
 -- Return a new, unique label. Argument can be anything but should be
 -- descriptive since this will ease debugging.
@@ -535,9 +685,37 @@ compileLit lit mo _label = case lit of
 
     in functionCall ++ moveResToStack
 
-executeTransferCallsHH :: TransferCall -> Integer -> Compiler [EvmOpcode]
-executeTransferCallsHH tc transferCounter =
+executeTransferCallsHH :: TransferCall -> [EvmOpcode]
+executeTransferCallsHH tc =
   let
+    begin = [ JUMPTO $ "begin_tc_evaluation" ++ show (_tcId tc)]
+    setTCEvaluatedValueToZero =
+      [ JUMPDESTFROM $ "set_evaluated_value_to_zero" ++ show (_tcId tc)
+      , push 0x00
+      , push (storageAddress (EvaluatedTcValue (_tcId tc)))
+      , SSTORE
+      , JUMPTO $ "tc_SKIP" ++ show (_tcId tc) ]
+    skipToSetBalanceToZeroIfEvaluatedPayoutIsZero = [
+      JUMPDESTFROM $ "skip_to_set_balance_to_zero" ++ show (_tcId tc)
+      , POP -- pop evaluated TC-value
+      , JUMPTO $ "tc_SKIP" ++ show (_tcId tc) ]
+    skipToMethodEndIfBalanceIsZero = [
+      JUMPDESTFROM $ "skip_to_method_end" ++ show (_tcId tc)
+      , POP -- pop balance (which has a value of 0)
+      , POP -- pop evaluated TC-value
+      , JUMPTO $ "method_end" ++ show (_tcId tc) ]
+
+    checkIfTCAlreadyEvaluated =
+      [ JUMPDESTFROM $ "begin_tc_evaluation" ++ show (_tcId tc)
+      , push (storageAddress (EvaluatedTcValue (_tcId tc)))
+      , SLOAD
+      , DUP1
+      , push 0x0
+      , SGT
+      , ISZERO
+      , JUMPITO $ "tc_value_already_evaluated" ++ show (_tcId tc)
+      , POP ]
+
     checkIfCallShouldBeMade =
       let
         checkIfTimeHasPassed = [ push $ storageAddress CreationTimestamp,
@@ -546,12 +724,12 @@ executeTransferCallsHH tc transferCounter =
                                  SUB,
                                  push $ _delay tc,
                                  EVM_GT,
-                                 JUMPITO $ "method_end" ++ show transferCounter ]
+                                 JUMPITO $ "method_end" ++ show (_tcId tc) ]
 
 
             -- This code can be represented with the following C-like code:
-            -- if (memdibit == 00b) { GOTO YIELD } // Don't execute and don't set executed bit to zero.
-            -- if (memdibit == 10b && !branch || memdibit == 01b && branch ) { GOTO SKIP } // TC should not execute. Update executed bit
+            -- if (memdibit == 00b) { GOTO YIELD } // Don't execute as memExp hasn't evaluated yet
+            -- if (memdibit == 10b && !branch || memdibit == 01b && branch ) { GOTO SKIP } // TC should not execute. Set balance to zero.
             -- if (memdibit == 10b && branch || memdibit == 01b && !branch ) { GOTO PASS } // Check next memExp. If all PASS, then execute.
             -- TODO: the three above code blocks should be placed in an order which optimizes the gas cost over some ensemble of contracts
             -- Obviously, 3! possible orders exist.
@@ -567,12 +745,14 @@ executeTransferCallsHH tc transferCounter =
                   , push $ 0x3 * 2 ^ (2 * memExpId) -- bitmask
                   , AND
                   , ISZERO
-                  , JUMPITO $ "method_end" ++ show transferCounter ] -- GOTO YIELD
+                  , JUMPITO $ "method_end" ++ show (_tcId tc) ] -- GOTO YIELD
+
+                -- if branch is dead set evaluated TC value to zero and jump to tc_skip
                 passAndSkipStatement =
                   [ push $ 2 ^ (2 * memExpId + if branch then 1 else 0) -- bitmask
                   , AND
                   , ISZERO
-                  , JUMPITO $ "tc_SKIP" ++ show transferCounter ]
+                  , JUMPITO $ "set_evaluated_value_to_zero" ++ show (_tcId tc) ]
                   -- The fall-through case represents the "PASS" case.
               in
                 yieldStatement ++ passAndSkipStatement
@@ -583,44 +763,71 @@ executeTransferCallsHH tc transferCounter =
     callTransferToTcRecipient =
         -- Contains the code to calculate the SA ammount paid for each party
         -- token in this transfercall.
-      runExprCompiler (CompileEnv 0 transferCounter 0x44 "amount_exp") (_amount tc)
+        --   if (transferCall.HasKnownValue) { return knownValue; } else { var val = calculate(); transferCall.setKnownValue(val); return val; }
+        --
+        -- Read TC value from storage.
+        --   -1   means that it has not yet been evaluated.
+        --   >= 0 means that it has been evaluated.
+        --
+        -- If a TC value has been evaluated, return this value. Otherwise, calculate, store and return it.
+      runExprCompiler (CompileEnv 0 (_tcId tc) 0x44 "amount_exp") (_amount tc)
       ++ [ push (_maxAmount tc)
          , DUP2
          , DUP2
          , SGT -- Security check needed
-         , JUMPITO $ "use_exp_res" ++ show transferCounter
+         , JUMPITO $ "use_exp_res" ++ show (_tcId tc)
          , SWAP1
-         , JUMPDESTFROM $ "use_exp_res" ++ show transferCounter
-         , POP ] -- Top of stack now has value `a`
+         , JUMPDESTFROM $ "use_exp_res" ++ show (_tcId tc)
+         , POP ] -- Top of stack now has value `a` (evaluated TC value)
+
+      -- Store evaluated value in storage
+      ++ [ DUP1
+         , push (storageAddress (EvaluatedTcValue (_tcId tc)))
+         , SSTORE ]
+
+      ++ [ JUMPDESTFROM $ "tc_value_already_evaluated" ++ show (_tcId tc)]
+
+      -- if evaluated payout value was 0: clear stack first, then jump to tc_skip (set PT balance = 0)
+      ++ [ DUP1
+         , ISZERO
+         , JUMPITO $ "skip_to_set_balance_to_zero" ++ show (_tcId tc)  ]
 
       ++ [ CALLER
          , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
-         , FUNCALL "getBalance_subroutine" ]  -- pops 1, pushes 1:  b is on the stack
+         , FUNCALL "getBalance_subroutine" ]  -- pops 2, pushes 1:  balance is on the stack
+
+      -- if PT balance is zero: clear stack, then jump to method_end (go to next TC evaluation)
+      ++ [ DUP1
+         , ISZERO
+         , JUMPITO $ "skip_to_method_end" ++ show (_tcId tc)  ]
 
       -- Prepare stack and call transfer subroutine
-      -- ++ safemul
-      -- ++ [ MUL ] -- replace with safeMul!
       ++ [ FUNCALL "safeMul_subroutine" ]
-      ++ [ PUSH32 $ address2w256 (_tokenAddress tc)
+      ++ [ PUSH32 $ address2w256 (_saAddress tc)
          , CALLER
          , SWAP2
          , FUNCALL "transfer_subroutine" ]
 
-      -- Care about the return value
+      -- Care about the return value as specified in ERC20
       ++ [ ISZERO
-         , JUMPITO "global_throw" ] -- error happens in this block
+         , JUMPITO "global_throw" ]
 
     setPTBalanceToZero = [
-      JUMPDESTFROM $ "tc_SKIP" ++ show transferCounter
+      JUMPDESTFROM $ "tc_SKIP" ++ show (_tcId tc)
       , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
       , push 0
       , CALLER
       , FUNCALL "setBalance_subroutine" ]
 
     functionEndLabel =
-        [ JUMPDESTFROM $ "method_end" ++ show transferCounter ]
+        [ JUMPDESTFROM $ "method_end" ++ show (_tcId tc) ]
 
-  in return $
+  in
+    begin ++
+    setTCEvaluatedValueToZero ++
+    skipToSetBalanceToZeroIfEvaluatedPayoutIsZero ++
+    skipToMethodEndIfBalanceIsZero ++
+    checkIfTCAlreadyEvaluated ++
     checkIfCallShouldBeMade ++
     callTransferToTcRecipient ++
     setPTBalanceToZero ++
@@ -646,12 +853,12 @@ activateABI = do
     ++ [ STOP ]
 
 activateMapElementToTransferFromCall :: ActivateMapElement -> Compiler [EvmOpcode]
-activateMapElementToTransferFromCall (tokenAddress, amount) =
+activateMapElementToTransferFromCall (_, (settlementAssetAmount, tokenAddress)) =
   return $
       -- Prepare stack for `transferFrom`
       [ CALLER  -- CALLER is the originator of the currently executing call-chain, aka User.
       , PUSH32 $ address2w256 tokenAddress
-      , push amount
+      , push settlementAssetAmount
       -- push the only argument given to "activate_method".
       , PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY
       , FUNCALL "safeMul_subroutine"
@@ -663,13 +870,15 @@ activateMapElementToTransferFromCall (tokenAddress, amount) =
 mint :: Compiler [EvmOpcode]
 mint = do
     am <- reader getActivateMap
-    partyTokenIDs <- reader $ map _to . getTransferCalls
+    partyTokenIDs <- reader getPartyTokenIDs
     thing <- concatMapM activateMapElementToTransferFromCall (Map.assocs am)
+    requiresPT0 <- reader getRequiresPT0
+    let alsoMintPT0 = if requiresPT0 then (PartyTokenID 0 :) else id
     return $
         -- SA.transferFrom
         thing
         -- PT.mint
-        ++ concatMap mintExt (nub partyTokenIDs)
+        ++ concatMap mintExt (alsoMintPT0 partyTokenIDs)
         ++ emitEvent "Minted" -- TODO: Change to ERC1155 minted event
 
 mintExt :: PartyTokenID -> [EvmOpcode]
@@ -698,19 +907,25 @@ burnABI = do
 
 burn :: Compiler [EvmOpcode]
 burn = do
-  partyTokenIDs <- reader $ map _to . getTransferCalls
-  -- TODO: I think this will only pay back one settlement asset.
-  -- if multiple SAs are used, maybe only one will be paid back? -Thorkil
-  (addrOfSA, amount) <- reader $  head . Map.assocs . getActivateMap
+  partyTokenIDs <- reader getPartyTokenIDs
+  requiresPT0 <- reader getRequiresPT0
+  let alsoBurnPT0 = if requiresPT0 then (PartyTokenID 0 :) else id
+  let burnPartyTokensCode = concatMap burnExt (alsoBurnPT0 partyTokenIDs)
+
+  pairs <- reader $ Map.assocs . getActivateMap
+  let transferSettlementAssetsCode = flip concatMap pairs $ \(_, (amount, addrOfSA)) ->
+        [ CALLER
+        , PUSH32 $ address2w256 addrOfSA
+        , PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY -- amount uint256
+        , push amount
+        , FUNCALL "safeMul_subroutine"
+        , FUNCALL "transfer_subroutine"
+        , ISZERO
+        , JUMPITO "global_throw"
+        ]
+
   return $
-    concatMap burnExt (nub partyTokenIDs) ++
-    [ CALLER
-    , PUSH32 $ address2w256 addrOfSA
-    , PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY -- amount uint256
-    , push amount
-    , FUNCALL "safeMul_subroutine"
-    , FUNCALL "transfer_subroutine"
-    ]
+    burnPartyTokensCode ++ transferSettlementAssetsCode
 
 burnExt :: PartyTokenID -> [EvmOpcode]
 burnExt (PartyTokenID partyTokenID) =
@@ -863,7 +1078,7 @@ balanceOfBatchABI = return
 --
 safeTransferFromABI :: Compiler [EvmOpcode]
 safeTransferFromABI =
-  return
+  return $
     [ JUMPDESTFROM "safeTransferFrom_method"
 
     , push 0x64  -- _value
@@ -906,26 +1121,32 @@ safeTransferFromABI =
     , DUP4
     , FUNCALL "safeTransferFrom_subroutine"
 
-      -- Emit TransferSingle(address,address,address,uint256,uint256).
+      -- event TransferSingle(indexed _operator, indexed _from, indexed _to, _id, _value);
 
       -- Place non-indexed event parameters (_id, _value) in memory:
-      -- Stack: [ _id, _to, _from, _value, ... ]
+      -- Stack: [ _id, _to, _from, _value ]
+    , DUP1   -- _id
     , push 0x00
-    , MSTORE    -- Stack: [ _to, _from, _value, ... ]
-    , SWAP2     -- Stack: [ _value, _from, _to, ... ]
+    , MSTORE
+
+    , DUP4   -- _value
     , push 0x20
-    , MSTORE    -- Stack: [ _from, _to, ... ]
+    , MSTORE
 
-      -- Place indexed event parameters on stack: event signature, _operator, _from, _to
-
-    , CALLER    -- Stack: [ _operator, _from, _to, ... ]
+      -- Place indexed event parameters on stack
+      -- Stack: [ _id, _to, _from, _value ]
+    , DUP2   -- _to
+    , DUP4   -- _from
+    , CALLER -- _operator
     , PUSH32 (eventSignatureHash transferSingleEvent)
-                -- Stack: [ SHA3("TransferSingle(...)", _operator, _from, _to, ... ]
+      -- Stack: [ SHA3("TransferSingle(...)"), _operator, _from, _to ] + [ _id, _to, _from, _value ]
 
       -- Place memory range of non-indexed parameters on top
     , push 0x40
     , push 0x00
+      -- Stack: [ 0x00, 0x40, SHA3("TransferSingle(...)"), _operator, _from, _to ] + [ _id, _to, _from, _value ]
     , logEvent transferSingleEvent
+    , POP, POP, POP, POP
 
     , STOP
     ]
@@ -1052,6 +1273,11 @@ safeBatchTransferFromABI = return
     , JUMPTO "safeBatchTransferFrom_loop_start"
 
   , JUMPDESTFROM "safeBatchTransferFrom_loop_end"
+
+    -- TODO: Put _ids from CALLDATA into MEMORY
+    -- TODO: Put _values from CALLDATA into MEMORY
+    -- TODO: Emit TransferBatch(...) signal
+
   , STOP
   ]
 
@@ -1112,12 +1338,6 @@ isApprovedForAllABI = return
   , push 0x00
   , RETURN
   ]
-
-  -- , DUP1
-  -- , PUSH32 (functionSignature "setApprovalForAll(address,bool)", 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-  -- , EVM_EQ
-  -- , JUMPITO "setApprovalForAll_method"
-
 
 getMemExpById :: MemExpId -> [IMemExp] -> IMemExp
 getMemExpById memExpId [] = error $ "Could not find IMemExp with ID " ++ show memExpId
