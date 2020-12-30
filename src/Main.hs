@@ -38,6 +38,7 @@ import Options.Applicative
 import System.FilePath
 import System.IO
 import Control.Monad (when)
+import Text.Pretty.Simple (pHPrint)
 
 data Args = Args
   { srcFile    :: FilePath
@@ -71,7 +72,7 @@ runArgsHandler Args{..} = do
         when debug $ do
           let icPath = (outputDir </> baseName) `addExtension` ".intermediate"
           putStrLn ("Writing IntermediateContract to " <> icPath <> "...")
-          writeFile icPath (show intermediateContract)
+          withFile icPath WriteMode (`pHPrint` intermediateContract)
 
           let disPath = (outputDir </> baseName) `addExtension` ".evm"
           putStrLn ("Writing EVM opcodes (with pseudo-instructions) to " <> disPath <> "...")
