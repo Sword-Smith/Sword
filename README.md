@@ -192,6 +192,9 @@ enforcement to deal with the potential of negative balances and breach of
 contract. A successful financial DSL for the blockchain must abandon these
 implicit premises.
 
+## Tests
+A decent set of integration tests for this compiler is included in [geth_tools](https://github.com/Sword-Smith/geth_tools/).
+
 
 ## References
 
