@@ -217,7 +217,6 @@ foldExprs contract =
     foldME :: IMemExp -> IMemExp
     foldME memExp = memExp { _IMemExp = foldExpr (_IMemExp memExp) }
 
--- TODO: Add constant folding exprs for: `1 * expr1 = expr1` and `expr1 * 1 = expr1`
 foldExpr :: Expr -> Expr
 foldExpr expr = case expr of
   Lit _        -> expr
