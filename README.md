@@ -2,6 +2,8 @@
 
 Sword is a declarative language for expressing fully-collateralized financial contracts. It distinguishes itself from other financial contract languages by being adapted to the blockchain.
 
+**WARNING:** *This is highly experimental software. Use at your own risk.*
+
 ## Nomenclature
 - **Derivative Contract (DC)** The smart contract containing the conditions of the derivative
 - **Party Tokens (PT)** Tokens that represent positions in the derivative contract
