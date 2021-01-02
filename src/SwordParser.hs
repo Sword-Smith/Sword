@@ -67,7 +67,7 @@ transferParser = do
   parens $ do
     ta <- getAddress
     symbol ","
-    to <- PartyTokenID <$> getInt
+    to <- PartyTokenID <$> getIntBasic
     return $ Transfer ta to
 
 scaleParser :: Parser Contract
@@ -410,9 +410,19 @@ getAddress = do
 
 getInt :: Parser Integer
 getInt = do
-  int <- read <$> many1 digit
+  int <- getIntBasic
+  foo <- getIntScientific int <|> return int
   spaces
-  return int
+  return foo
+
+getIntScientific :: Integer -> Parser Integer
+getIntScientific factor = do
+  char 'e' <|> char 'E'
+  baseTenExponent <- getIntBasic
+  return $ factor*10^baseTenExponent
+
+getIntBasic :: Parser Integer
+getIntBasic = read <$> many1 digit
 
 symbol :: String -> Parser String
 symbol s = do
