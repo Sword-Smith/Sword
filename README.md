@@ -21,7 +21,7 @@ In this contract, holders of party token 1 will receive 1 DAI unit (1e-18 DAI) p
 ```
 scale(1e18, 1e18,
     if obs(bool, <oracle-address>, <oracle-index>) within days(1) then
-        transfer(<dai-address>, 1),
+        transfer(<dai-address>, 1)
     else
         transfer(<dai-address>, 2)
 )
