@@ -13,7 +13,7 @@ Sword is a declarative language for expressing fully-collateralized financial co
 A bet based on the value of an oracle can be formulated as
 ```
 if obs(bool, <oracle-address>, <oracle-index>) within days(1) then
-    transfer(<dai-address>, 1),
+    transfer(<dai-address>, 1)
 else
     transfer(<dai-address>, 2)
 ```
