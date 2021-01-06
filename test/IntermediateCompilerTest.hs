@@ -71,11 +71,11 @@ timeTranslationIMemExpTest = do
         transfers
           = [TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1),
                           _delay = 120, _saAddress = tokAddr,
-                          _to = PartyTokenID 1, _memExpPath = [(0, True)]},
+                          _to = 1, _memExpPath = [(0, True)]},
              TransferCall{_maxAmount = 2,
                           _amount = MultExp (Lit (IntVal 1)) (Lit (IntVal 2)),
                           _delay = 120, _saAddress = tokAddr,
-                          _to = PartyTokenID 1, _memExpPath = [(0, False)]}]
+                          _to = 2, _memExpPath = [(0, False)]}]
 
         memExps = [IMemExp 120 240 0 (Lit (Observable OBool obsAddr "0"))]
         activateMap = Map.fromList [(SettlementAssetId 0, (2, tokAddr))]
@@ -102,7 +102,7 @@ zeroContractCodeTest = do
 
         transfers
           = [TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0,
-                          _saAddress = tokAddr, _to = PartyTokenID 1,
+                          _saAddress = tokAddr, _to = 1,
                           _memExpPath = [(0, True)]}]
 
         memExps
