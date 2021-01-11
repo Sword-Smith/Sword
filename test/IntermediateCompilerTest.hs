@@ -36,46 +36,48 @@ import Test.Hspec
 
 tests :: Spec
 tests = do
-  activateMapTest
   timeTranslationIMemExpTest
   zeroContractCodeTest
 
--- Test that the getActivateMap function returns a correct map given a function
-activateMapTest :: Spec
-activateMapTest =
-  describe "getActivateMap" $ do
-    it "returns a correct map given a function" $
-      pendingWith "not updated for latest AST"
-
-    it "works for the canonical IW source code" $
-      pendingWith "not updated for latest AST"
-
 timeTranslationIMemExpTest :: Spec
 timeTranslationIMemExpTest = do
-  it "translates time properly" $
-    pendingWith "Test time more thoroughly"
-    -- intermediateCompile contract `shouldBe` intermediateContract
+  it "translates time properly, not optimized" $ do
+    intermediateCompile contract `shouldBe` intermediateContractNotOptimized
+
+  it "translates time properly, optimized" $ do
+    intermediateCompileOptimize contract `shouldBe` intermediateContractOptimized
 
   where contract :: Contract
         contract
           = makeContract defaultAddressMap $
-              "translate(minutes(2), if (obs(bool, O, 0)) within minutes(2) " ++
-                "then transfer(T, A, B) " ++
-                  "else scale(2, 2, transfer(T, A, B)))"
+              "translate(minutes(2), if (obs(bool, 0x1111111111111111111111111111111111111111, 0)) within minutes(2) " ++
+                "then transfer(0x0123456789abcdef0123456789abcdef01234567, 1) " ++
+                  "else scale(2, 2, transfer(0x0123456789abcdef0123456789abcdef01234567, 2)))"
 
         requiresPartyToken0 = True
 
-        intermediateContract :: IntermediateContract
-        intermediateContract = IntermediateContract transfers memExps activateMap requiresPartyToken0
+        intermediateContractNotOptimized :: IntermediateContract
+        intermediateContractNotOptimized = IntermediateContract transfersNotOptimized memExps activateMap requiresPartyToken0
 
-        transfers
-          = [TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1),
+        intermediateContractOptimized :: IntermediateContract
+        intermediateContractOptimized = IntermediateContract transfersOptimized memExps activateMap requiresPartyToken0
+
+        transferOne = TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1),
                           _delay = 120, _saAddress = tokAddr,
-                          _to = 1, _memExpPath = [(0, True)]},
-             TransferCall{_maxAmount = 2,
+                          _to = 1, _saId = SettlementAssetId 0, _memExpPath = [(0, True)]}
+
+        transferTwoNotOptimized = TransferCall{_maxAmount = 2,
                           _amount = MultExp (Lit (IntVal 1)) (Lit (IntVal 2)),
                           _delay = 120, _saAddress = tokAddr,
-                          _to = 2, _memExpPath = [(0, False)]}]
+                          _to = 2, _saId = SettlementAssetId 0, _memExpPath = [(0, False)]}
+
+        transferTwoOptimized = TransferCall{_maxAmount = 2,
+                          _amount = Lit (IntVal 2),
+                          _delay = 120, _saAddress = tokAddr,
+                          _to = 2, _saId = SettlementAssetId 0, _memExpPath = [(0, False)]}
+
+        transfersNotOptimized = [transferOne, transferTwoNotOptimized]
+        transfersOptimized = [transferOne, transferTwoOptimized]
 
         memExps = [IMemExp 120 240 0 (Lit (Observable OBool obsAddr "0"))]
         activateMap = Map.fromList [(SettlementAssetId 0, (2, tokAddr))]
@@ -86,14 +88,13 @@ zeroContractCodeTest = do
     intermediateCompile Zero `shouldBe` emptyContract
 
   it "translates an if-within that contains a zero contract" $ do
-    pendingWith "We're not certain we want Zero contracts"
-
+    intermediateCompile contract `shouldBe` intermediateContract
 
   where contract :: Contract
         contract
           = makeContract defaultAddressMap $
-              "if obs(bool, O, 0) within seconds(10) " ++
-                "then transfer(T, A, B) else zero"
+              "if obs(bool, 0x1111111111111111111111111111111111111111, 0) within seconds(10) " ++
+                "then transfer(0x0123456789abcdef0123456789abcdef01234567, 1) else zero"
 
         requiresPartyToken0 = True
 
@@ -102,7 +103,7 @@ zeroContractCodeTest = do
 
         transfers
           = [TransferCall{_maxAmount = 1, _amount = Lit (IntVal 1), _delay = 0,
-                          _saAddress = tokAddr, _to = 1,
+                          _saAddress = tokAddr, _to = 1, _saId = SettlementAssetId 0,
                           _memExpPath = [(0, True)]}]
 
         memExps
