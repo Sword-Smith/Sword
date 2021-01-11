@@ -220,12 +220,10 @@ compileDivisionExpressions :: Spec
 compileDivisionExpressions =
   describe "Compile divsion expression" $ do
     it "Divide two one byte values" $
-      pendingWith "Adjust tests to also handle safe arithmetic"
-      -- concatMap ppEvm (runCompiler emptyContract initialEnv (compileExp (DiviExp (Lit (IntVal 10)) (Lit (IntVal 5))))) `shouldBe` "6005600a04"
+      runCompiler emptyContract initialEnv (compileExp (DiviExp (Lit (IntVal 10)) (Lit (IntVal 5)))) `shouldBe` [PUSHN [5],PUSHN [10],DUP2,ISZERO,JUMPITO "global_throw",DUP1,PUSH32 (2147483648,0,0,0,0,0,0,0),SUB,JUMPITO "divi_skip_2_0_\"mem_exp\"",DUP2,PUSH32 (4294967295,4294967295,4294967295,4294967295,4294967295,4294967295,4294967295,4294967295),EVM_EQ,JUMPITO "global_throw",JUMPDESTFROM "divi_skip_2_0_\"mem_exp\"",SDIV]
 
 compileAdditionExpressions :: Spec
 compileAdditionExpressions =
   describe "Compile addition expression" $ do
     it "Add two one byte values" $
-      pendingWith "Adjust tests to also handle safe arithmetic"
-      -- concatMap ppEvm (runCompiler emptyContract initialEnv (compileExp (AddiExp (Lit (IntVal 10)) (Lit (IntVal 5))))) `shouldBe` "600a600501"
+      runCompiler emptyContract initialEnv (compileExp (AddiExp (Lit (IntVal 10)) (Lit (IntVal 5)))) `shouldBe` [PUSHN [10],PUSHN [5],FUNCALL "safeAdd_subroutine"]
