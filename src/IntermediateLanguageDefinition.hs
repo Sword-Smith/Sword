@@ -28,11 +28,7 @@ import SwordLanguageDefinition
 
 import qualified Data.Map.Strict as Map
 
-type PartyIndex = Integer
-type PartyIdentifier = Integer
-
 type MemExpId = Integer
-type TransferCallId = Integer
 type Branch = Bool
 type MemExpPath = [(MemExpId, Branch)]
 
@@ -49,21 +45,16 @@ data TransferCall =
                   , _delay        :: Integer
                   , _saAddress    :: Address -- SA
                   , _saId         :: SettlementAssetId
-                  , _to           :: PartyTokenID
+                  , _to           :: PartyIndex
                   , _memExpPath   :: MemExpPath
-                  , _tcId         :: TransferCallId
                   } deriving (Show, Eq)
 
-getPartyTokenIDs :: IntermediateContract -> [PartyTokenID]
-getPartyTokenIDs IntermediateContract{..} =
+getPartyIndices :: IntermediateContract -> [PartyIndex]
+getPartyIndices IntermediateContract{..} =
   map _to getTransferCalls
 
-getTransferCallIDs :: IntermediateContract -> [TransferCallId]
-getTransferCallIDs IntermediateContract{..} =
-  map _tcId getTransferCalls
-
-getMaxTcId :: IntermediateContract -> TransferCallId
-getMaxTcId = maximum . getTransferCallIDs
+getMaxPartyIndex :: IntermediateContract -> PartyIndex
+getMaxPartyIndex = maximum . getPartyIndices
 
 -- DEVNOTE:
 -- We start by attempting to implement the evaluation of IMemExp values.

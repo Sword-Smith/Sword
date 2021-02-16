@@ -26,7 +26,7 @@ module EvmCompiler where
 
 import EvmCompilerHelper
 import EvmLanguageDefinition
-import EvmCompilerSubroutines (subroutines, transferCallToSettlementAsset)
+import EvmCompilerSubroutines (subroutines, partyIndexToSettlementAssetId)
 import IntermediateLanguageDefinition
 import SwordLanguageDefinition hiding (Transfer)
 import IntermediateCompiler (emptyContract)
@@ -66,7 +66,7 @@ runExprCompiler env expr = runCompiler emptyContract env (compileExp expr)
 -- position value that a contract position evaluates to
 data StorageType = CreationTimestamp
                  | MemoryExpressionRefs
-                 | EvaluatedTcValue TransferCallId
+                 | EvaluatedTcValue PartyIndex
 
 -- For each storage index we pay 20000 GAS. Reusing one is only 5000 GAS.
 -- It would therefore make sense to pack as much as possible into the same index.
@@ -120,7 +120,7 @@ evmCompile intermediateContract =
   where
     constructor'       = constructor intermediateContract
     codecopy'          = codecopy constructor' body
-    dynamicSubroutines = transferCallToSettlementAsset (getTransferCalls intermediateContract)
+    dynamicSubroutines = partyIndexToSettlementAssetId (getTransferCalls intermediateContract)
     body               = jumpTable ++ subroutines ++ dynamicSubroutines ++ methods
 
     methods :: [EvmOpcode]
@@ -211,7 +211,7 @@ initializeEvaluatedTcValues ic =
     setToMinusOne :: TransferCall -> [EvmOpcode]
     setToMinusOne tc =
       [ DUP1
-      , push (storageAddress (EvaluatedTcValue (_tcId tc)))
+      , push (storageAddress (EvaluatedTcValue (_to tc)))
       , SSTORE
       ]
 
@@ -342,10 +342,10 @@ payABI = do
         ++ emitEvent "Paid"
         ++ [ STOP ]
 
--- For hver Transfer Call ID:
---   value := Storage[TCID];
---   j := TCs[TCID]._saAddress;
---   if (value == -1) goto end;
+-- For hver Party Token ID:
+--   value := Storage[PTID];
+--   j := TCs[PTID]._saAddress;
+--   if (value == 0) goto end;
 --   PT0_udbetaling_j += value;
 --
 -- PT0_udbetaling_j = ActivateMap_j - 
@@ -355,68 +355,65 @@ payToPartyToken0 = do
   pt0_no_pay <- newLabel "pt0_no_pay"
   -- TODO: The PT0 balance read here can be reused below, so we don't have to load it again
   let skipIfPt0BalanceIsZero = [CALLER, push 0x00, FUNCALL "getBalance_subroutine", ISZERO, JUMPITO pt0_no_pay]
-  maxTcId <- reader getMaxTcId
+  maxPtId <- reader getMaxPartyIndex
   let subtractEvaluatedPTValuesFromSaAmounts = [
      -- Stack = [ ... ]
-          push maxTcId
-       -- loop (tc_id from maxTcId to 0)
-       -- do ... while (tc_id != 0)
+          push maxPtId
+       -- loop (ptid from maxPtId to 1), as party token IDs are 1-indexed
+       -- do ... while (ptid != 0)
        , JUMPDESTFROM begin0
-         -- Stack = [ tc_id ]
+         -- Stack = [ ptid ]
 
          -- Hack: Dynamically calculate storage address.
        , DUP1
        , push (storageAddress (EvaluatedTcValue 0))
        , ADD
        , SLOAD
-         -- Stack = [ tc_value, tc_id ]
+         -- Stack = [ tc_value, ptid ]
 
-         -- If value[tc_id] < 0, don't perform PT0 payout.
+         -- If value[ptid] < 0, don't perform PT0 payout.
        , DUP1
        , push 0x00
        , SGT
-         -- Stack = [ 0 > tc_value, tc_value, tc_id ]
+         -- Stack = [ 0 > tc_value, tc_value, ptid ]
        , JUMPITO pt0_no_pay
 
-         -- Stack = [ tc_value, tc_id ]
+         -- Stack = [ tc_value, ptid ]
          -- Load accumulated payback value onto Stack
 
        , DUP2
-         -- Stack = [ tc_id, tc_value, tc_id ]
-       , FUNCALL "transferCallToSettlementAsset_subroutine"
-      --    -- Stack = [ saId, tc_value, tc_id ]
+         -- Stack = [ ptid, tc_value, ptid ]
+       , FUNCALL "partyIndexToSettlementAssetId_subroutine"
+      --    -- Stack = [ saId, tc_value, ptid ]
        , push 0x20
        , MUL
        , push 0x100 -- TODO: Name this constant.
        , ADD
        , DUP1
        , MLOAD
-         -- Stack = [ M[0x100 + 0x20 * saId], 0x100 + 0x20 * saId, tc_value, tc_id ]
+         -- Stack = [ M[0x100 + 0x20 * saId], 0x100 + 0x20 * saId, tc_value, ptid ]
 
        , DUP3
        , SWAP1
-         -- Stack = [ M[0x100 +0x20 * saId], tc_value, 0x100 + 0x20 * saId, tc_value, tc_id ]
+         -- Stack = [ M[0x100 +0x20 * saId], tc_value, 0x100 + 0x20 * saId, tc_value, ptid ]
 
          -- Update and store accumulated payback value in memory
        , FUNCALL "safeSub_subroutine"
-         -- Stack = [ M[0x100 + 0x20 * saId] - tc_value, 0x100 + 0x20 * saId, tc_value, tc_id ]
+         -- Stack = [ M[0x100 + 0x20 * saId] - tc_value, 0x100 + 0x20 * saId, tc_value, ptid ]
        , SWAP1
-         -- Stack = [ 0x100 + 0x20 * saId, M[0x100 + 0x20 * saId] - tc_value, tc_value, tc_id ]
+         -- Stack = [ 0x100 + 0x20 * saId, M[0x100 + 0x20 * saId] - tc_value, tc_value, ptid ]
        , MSTORE
        , POP
-         --  Stack = [ tc_id ]
+         --  Stack = [ ptid ]
 
-      --    -- Loop condition check: if (--tc_id >= 0) goto begin0
+      --    -- Loop condition check: if (--ptid != 0) goto begin0
        , push 0x01
        , SWAP1
        , SUB
        , DUP1
-       , push 0x00
-       , SGT
-       , ISZERO
        , JUMPITO begin0
 
-       , POP ] -- tc_id removed ]
+       , POP ] -- ptid removed ]
   loadActivateAmounts <- loadActivateMapIntoMemory <$> reader getActivateMap
   performPayoutPT0 <- payBackCalculatedValueToPT0 <$> reader getActivateMap
   return $
@@ -688,32 +685,32 @@ compileLit lit mo _label = case lit of
 executeTransferCallsHH :: TransferCall -> [EvmOpcode]
 executeTransferCallsHH tc =
   let
-    begin = [ JUMPTO $ "begin_tc_evaluation" ++ show (_tcId tc)]
+    begin = [ JUMPTO $ "begin_tc_evaluation" ++ show (_to tc)]
     setTCEvaluatedValueToZero =
-      [ JUMPDESTFROM $ "set_evaluated_value_to_zero" ++ show (_tcId tc)
+      [ JUMPDESTFROM $ "set_evaluated_value_to_zero" ++ show (_to tc)
       , push 0x00
-      , push (storageAddress (EvaluatedTcValue (_tcId tc)))
+      , push (storageAddress (EvaluatedTcValue (_to tc)))
       , SSTORE
-      , JUMPTO $ "tc_SKIP" ++ show (_tcId tc) ]
+      , JUMPTO $ "tc_SKIP" ++ show (_to tc) ]
     skipToSetBalanceToZeroIfEvaluatedPayoutIsZero = [
-      JUMPDESTFROM $ "skip_to_set_balance_to_zero" ++ show (_tcId tc)
+      JUMPDESTFROM $ "skip_to_set_balance_to_zero" ++ show (_to tc)
       , POP -- pop evaluated TC-value
-      , JUMPTO $ "tc_SKIP" ++ show (_tcId tc) ]
+      , JUMPTO $ "tc_SKIP" ++ show (_to tc) ]
     skipToMethodEndIfBalanceIsZero = [
-      JUMPDESTFROM $ "skip_to_method_end" ++ show (_tcId tc)
+      JUMPDESTFROM $ "skip_to_method_end" ++ show (_to tc)
       , POP -- pop balance (which has a value of 0)
       , POP -- pop evaluated TC-value
-      , JUMPTO $ "method_end" ++ show (_tcId tc) ]
+      , JUMPTO $ "method_end" ++ show (_to tc) ]
 
     checkIfTCAlreadyEvaluated =
-      [ JUMPDESTFROM $ "begin_tc_evaluation" ++ show (_tcId tc)
-      , push (storageAddress (EvaluatedTcValue (_tcId tc)))
+      [ JUMPDESTFROM $ "begin_tc_evaluation" ++ show (_to tc)
+      , push (storageAddress (EvaluatedTcValue (_to tc)))
       , SLOAD
       , DUP1
       , push 0x0
       , SGT
       , ISZERO
-      , JUMPITO $ "tc_value_already_evaluated" ++ show (_tcId tc)
+      , JUMPITO $ "tc_value_already_evaluated" ++ show (_to tc)
       , POP ]
 
     checkIfCallShouldBeMade =
@@ -724,7 +721,7 @@ executeTransferCallsHH tc =
                                  SUB,
                                  push $ _delay tc,
                                  EVM_GT,
-                                 JUMPITO $ "method_end" ++ show (_tcId tc) ]
+                                 JUMPITO $ "method_end" ++ show (_to tc) ]
 
 
             -- This code can be represented with the following C-like code:
@@ -745,14 +742,14 @@ executeTransferCallsHH tc =
                   , push $ 0x3 * 2 ^ (2 * memExpId) -- bitmask
                   , AND
                   , ISZERO
-                  , JUMPITO $ "method_end" ++ show (_tcId tc) ] -- GOTO YIELD
+                  , JUMPITO $ "method_end" ++ show (_to tc) ] -- GOTO YIELD
 
                 -- if branch is dead set evaluated TC value to zero and jump to tc_skip
                 passAndSkipStatement =
                   [ push $ 2 ^ (2 * memExpId + if branch then 1 else 0) -- bitmask
                   , AND
                   , ISZERO
-                  , JUMPITO $ "set_evaluated_value_to_zero" ++ show (_tcId tc) ]
+                  , JUMPITO $ "set_evaluated_value_to_zero" ++ show (_to tc) ]
                   -- The fall-through case represents the "PASS" case.
               in
                 yieldStatement ++ passAndSkipStatement
@@ -770,36 +767,36 @@ executeTransferCallsHH tc =
         --   >= 0 means that it has been evaluated.
         --
         -- If a TC value has been evaluated, return this value. Otherwise, calculate, store and return it.
-      runExprCompiler (CompileEnv 0 (_tcId tc) 0x44 "amount_exp") (_amount tc)
+      runExprCompiler (CompileEnv 0 (_to tc) 0x44 "amount_exp") (_amount tc)
       ++ [ push (_maxAmount tc)
          , DUP2
          , DUP2
          , SGT -- Security check needed
-         , JUMPITO $ "use_exp_res" ++ show (_tcId tc)
+         , JUMPITO $ "use_exp_res" ++ show (_to tc)
          , SWAP1
-         , JUMPDESTFROM $ "use_exp_res" ++ show (_tcId tc)
+         , JUMPDESTFROM $ "use_exp_res" ++ show (_to tc)
          , POP ] -- Top of stack now has value `a` (evaluated TC value)
 
       -- Store evaluated value in storage
       ++ [ DUP1
-         , push (storageAddress (EvaluatedTcValue (_tcId tc)))
+         , push (storageAddress (EvaluatedTcValue (_to tc)))
          , SSTORE ]
 
-      ++ [ JUMPDESTFROM $ "tc_value_already_evaluated" ++ show (_tcId tc)]
+      ++ [ JUMPDESTFROM $ "tc_value_already_evaluated" ++ show (_to tc)]
 
       -- if evaluated payout value was 0: clear stack first, then jump to tc_skip (set PT balance = 0)
       ++ [ DUP1
          , ISZERO
-         , JUMPITO $ "skip_to_set_balance_to_zero" ++ show (_tcId tc)  ]
+         , JUMPITO $ "skip_to_set_balance_to_zero" ++ show (_to tc)  ]
 
       ++ [ CALLER
-         , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
+         , PUSH32 $ integer2w256 $ _to tc
          , FUNCALL "getBalance_subroutine" ]  -- pops 2, pushes 1:  balance is on the stack
 
       -- if PT balance is zero: clear stack, then jump to method_end (go to next TC evaluation)
       ++ [ DUP1
          , ISZERO
-         , JUMPITO $ "skip_to_method_end" ++ show (_tcId tc)  ]
+         , JUMPITO $ "skip_to_method_end" ++ show (_to tc)  ]
 
       -- Prepare stack and call transfer subroutine
       ++ [ FUNCALL "safeMul_subroutine" ]
@@ -813,14 +810,14 @@ executeTransferCallsHH tc =
          , JUMPITO "global_throw" ]
 
     setPTBalanceToZero = [
-      JUMPDESTFROM $ "tc_SKIP" ++ show (_tcId tc)
-      , PUSH32 $ integer2w256 (getPartyTokenID (_to tc))
+      JUMPDESTFROM $ "tc_SKIP" ++ show (_to tc)
+      , PUSH32 $ integer2w256 $ _to tc
       , push 0
       , CALLER
       , FUNCALL "setBalance_subroutine" ]
 
     functionEndLabel =
-        [ JUMPDESTFROM $ "method_end" ++ show (_tcId tc) ]
+        [ JUMPDESTFROM $ "method_end" ++ show (_to tc) ]
 
   in
     begin ++
@@ -870,20 +867,20 @@ activateMapElementToTransferFromCall (_, (settlementAssetAmount, tokenAddress)) 
 mint :: Compiler [EvmOpcode]
 mint = do
     am <- reader getActivateMap
-    partyTokenIDs <- reader getPartyTokenIDs
+    partyIndices <- reader getPartyIndices
     thing <- concatMapM activateMapElementToTransferFromCall (Map.assocs am)
     requiresPT0 <- reader getRequiresPT0
-    let alsoMintPT0 = if requiresPT0 then (PartyTokenID 0 :) else id
+    let alsoMintPT0 = if requiresPT0 then (0 :) else id
     return $
         -- SA.transferFrom
         thing
         -- PT.mint
-        ++ concatMap mintExt (alsoMintPT0 partyTokenIDs)
+        ++ concatMap mintExt (alsoMintPT0 partyIndices)
         ++ emitEvent "Minted" -- TODO: Change to ERC1155 minted event
 
-mintExt :: PartyTokenID -> [EvmOpcode]
-mintExt (PartyTokenID partyTokenID) =
-  [ push partyTokenID
+mintExt :: PartyIndex -> [EvmOpcode]
+mintExt partyIndex =
+  [ push partyIndex
   , CALLER
   , DUP2
   , FUNCALL "getBalance_subroutine"
@@ -907,10 +904,10 @@ burnABI = do
 
 burn :: Compiler [EvmOpcode]
 burn = do
-  partyTokenIDs <- reader getPartyTokenIDs
+  partyIndices <- reader getPartyIndices
   requiresPT0 <- reader getRequiresPT0
-  let alsoBurnPT0 = if requiresPT0 then (PartyTokenID 0 :) else id
-  let burnPartyTokensCode = concatMap burnExt (alsoBurnPT0 partyTokenIDs)
+  let alsoBurnPT0 = if requiresPT0 then (0 :) else id
+  let burnPartyTokensCode = concatMap burnExt (alsoBurnPT0 partyIndices)
 
   pairs <- reader $ Map.assocs . getActivateMap
   let transferSettlementAssetsCode = flip concatMap pairs $ \(_, (amount, addrOfSA)) ->
@@ -927,9 +924,9 @@ burn = do
   return $
     burnPartyTokensCode ++ transferSettlementAssetsCode
 
-burnExt :: PartyTokenID -> [EvmOpcode]
-burnExt (PartyTokenID partyTokenID) =
-  [ push partyTokenID
+burnExt :: PartyIndex -> [EvmOpcode]
+burnExt partyIndex =
+  [ push partyIndex
   , PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY
   , FUNCALL "burn_subroutine"
   ]

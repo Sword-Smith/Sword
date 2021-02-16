@@ -44,7 +44,6 @@ data ScopeEnv =
 
 data GlobalEnv = GlobalEnv
   { _memExpId       :: Maybe MemExpId
-  , _transferCallId :: TransferCallId
   , _encounteredSettlementAssets :: [(Address, SettlementAssetId)]
   }
 
@@ -62,7 +61,6 @@ initialScope = ScopeEnv { _maxFactor   = 1
 initialGlobal :: GlobalEnv
 initialGlobal = GlobalEnv
   { _memExpId       = Nothing
-  , _transferCallId = 0
   , _encounteredSettlementAssets = []
   }
 
@@ -93,12 +91,6 @@ newMemExpId = do
     increment (Just memExpId) = memExpId + 1
     increment _         = 0
 
-newTransferCallId :: ICompiler TransferCallId
-newTransferCallId = do
-  tcId <- gets _transferCallId
-  modify $ \env -> env { _transferCallId = tcId + 1 }
-  return tcId
-
 toSeconds :: Time -> Integer
 toSeconds t = case t of
   Now       -> 0
@@ -121,7 +113,6 @@ intermediateCompileOptimize = foldExprs . intermediateCompile
 intermediateCompileM :: Contract -> ICompiler IntermediateContract
 intermediateCompileM (Transfer saAddress to) = do
   ScopeEnv maxFactor scaleFactor delayTerm memExpPath <- ask
-  transferCallId <- newTransferCallId
   settlementAssetId <- getSettlemenAssetId saAddress
   let transferCall = TransferCall { _maxAmount     = maxFactor
                                   , _amount        = scaleFactor (Lit (IntVal 1))
@@ -130,7 +121,6 @@ intermediateCompileM (Transfer saAddress to) = do
                                   , _saId          = settlementAssetId
                                   , _to            = to
                                   , _memExpPath    = memExpPath
-                                  , _tcId          = transferCallId
                                   }
 
   let activateMap = Map.fromList [(settlementAssetId, (maxFactor, saAddress))]

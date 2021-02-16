@@ -23,7 +23,7 @@
 module SwordLanguageDefinition where
 
 data Contract = Transfer { tokenAddress_ :: Address,
-                           to_           :: PartyTokenID
+                           to_           :: PartyIndex
                          }
               | Scale { maxFactor_   :: Integer,
                         scaleFactor_ :: Expr,
@@ -82,10 +82,7 @@ data ObservableType = OBool | OInteger deriving (Show, Eq)
 
 type TokenSymbol = String
 type Address = String
-
--- Party Token IDs are ERC1155 index values
-newtype PartyTokenID = PartyTokenID { getPartyTokenID :: Integer }
-  deriving (Eq, Ord, Show)
+type PartyIndex = Integer
 
 getSubExps :: Expr -> [Expr]
 getSubExps e = case e of

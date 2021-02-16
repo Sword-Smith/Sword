@@ -24,7 +24,7 @@
 
 module EvmCompilerSubroutines
   ( subroutines
-  , transferCallToSettlementAsset
+  , partyIndexToSettlementAssetId
   ) where
 
 import EvmCompilerHelper
@@ -416,19 +416,19 @@ safeSubSubroutine =
   ]
 
 -- | Convert a list of 'TransferCall' to a subroutine that converts
--- a 'TransferCallId' into a 'SettlementAssetId'.
+-- a 'PartyIndex' to a 'SettlementAssetId'.
 --
--- Stack before FUNSTART: [ return address, tcId, ... ]
--- Stack after FUNSTART: [ tcId, return address, ... ]
+-- Stack before FUNSTART: [ return address, ptid, ... ]
+-- Stack after FUNSTART: [ ptid, return address, ... ]
 -- Stack after returning: [ saId, ... ]
 --
-transferCallToSettlementAsset :: [TransferCall] -> [EvmOpcode]
-transferCallToSettlementAsset transferCalls =
-  [ FUNSTART "transferCallToSettlementAsset_subroutine" 1 ]
+partyIndexToSettlementAssetId :: [TransferCall] -> [EvmOpcode]
+partyIndexToSettlementAssetId transferCalls =
+  [ FUNSTART "partyIndexToSettlementAssetId_subroutine" 1 ]
   ++ concatMap derp transferCalls
   ++ [ JUMPITO "global_throw" -- code path should be unreachable
-     , JUMPDESTFROM "transferCallToSettlementAsset_result"
-       -- Stack = [ _saId, inputTcId, RA ]
+     , JUMPDESTFROM "partyIndexToSettlementAssetId_result"
+       -- Stack = [ _saId, inputPtId, RA ]
      , SWAP1
      , POP
        -- Stack = [ _saId, RA ]
@@ -437,15 +437,15 @@ transferCallToSettlementAsset transferCalls =
   where
     derp :: TransferCall -> [EvmOpcode]
     derp TransferCall{..} =
-      [ -- Stack = [ inputTcId, RA ]
+      [ -- Stack = [ inputPtId, RA ]
         push (getSettlementAssetId _saId)
-        -- Stack = [ _saId, inputTcId, RA ]
+        -- Stack = [ _saId, inputPtId, RA ]
       , DUP2
-      , push _tcId
+      , push _to
       , EVM_EQ
-        -- Stack = [ _tcId == inputTcId, _saId, inputTcId, RA ]
-      , JUMPITO "transferCallToSettlementAsset_result"
-        -- Stack = [ _saId, inputTcId, RA ]
+        -- Stack = [ _to == inputPtId, _saId, inputTcId, RA ]
+      , JUMPITO "partyIndexToSettlementAssetId_result"
+        -- Stack = [ _saId, inputPtId, RA ]
       , POP
-        -- Stack = [ inputTcId, RA ]
+        -- Stack = [ inputPtId, RA ]
       ]
