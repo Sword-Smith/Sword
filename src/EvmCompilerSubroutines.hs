@@ -24,7 +24,7 @@
 
 module EvmCompilerSubroutines
   ( subroutines
-  , partyTokenIdToSettlementAssetId
+  , partyIndexToSettlementAssetId
   ) where
 
 import EvmCompilerHelper
@@ -416,18 +416,18 @@ safeSubSubroutine =
   ]
 
 -- | Convert a list of 'TransferCall' to a subroutine that converts
--- a 'PartyTokenId' (ptid) to a 'SettlementAssetId'.
+-- a 'PartyIndex' to a 'SettlementAssetId'.
 --
 -- Stack before FUNSTART: [ return address, ptid, ... ]
 -- Stack after FUNSTART: [ ptid, return address, ... ]
 -- Stack after returning: [ saId, ... ]
 --
-partyTokenIdToSettlementAssetId :: [TransferCall] -> [EvmOpcode]
-partyTokenIdToSettlementAssetId transferCalls =
-  [ FUNSTART "partyTokenIdToSettlementAssetId_subroutine" 1 ]
+partyIndexToSettlementAssetId :: [TransferCall] -> [EvmOpcode]
+partyIndexToSettlementAssetId transferCalls =
+  [ FUNSTART "partyIndexToSettlementAssetId_subroutine" 1 ]
   ++ concatMap derp transferCalls
   ++ [ JUMPITO "global_throw" -- code path should be unreachable
-     , JUMPDESTFROM "partyTokenIdToSettlementAssetId_result"
+     , JUMPDESTFROM "partyIndexToSettlementAssetId_result"
        -- Stack = [ _saId, inputPtId, RA ]
      , SWAP1
      , POP
@@ -444,7 +444,7 @@ partyTokenIdToSettlementAssetId transferCalls =
       , push _to
       , EVM_EQ
         -- Stack = [ _to == inputPtId, _saId, inputTcId, RA ]
-      , JUMPITO "partyTokenIdToSettlementAssetId_result"
+      , JUMPITO "partyIndexToSettlementAssetId_result"
         -- Stack = [ _saId, inputPtId, RA ]
       , POP
         -- Stack = [ inputPtId, RA ]

@@ -19,6 +19,7 @@
 -- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
+{-# LANGUAGE LambdaCase #-}
 
 module TypeChecker where
 
@@ -35,19 +36,16 @@ typeChecker c = do
   typeCheckerContract c
 
 hasSequentialPartyIDs :: Contract -> Bool
-hasSequentialPartyIDs c = verifySequence 1 $ sort $ getAllParties c
+hasSequentialPartyIDs = and . zipWith (==) [1..] . sort . extractPartyIndices
   where
-    getAllParties :: Contract -> [PartyTokenID]
-    getAllParties (Transfer _ to) = [to]
-    getAllParties (Both contractA contractB) = getAllParties contractA ++ getAllParties contractB
-    getAllParties (Translate _ contract) = getAllParties contract
-    getAllParties (IfWithin _ contractA contractB) = getAllParties contractA ++ getAllParties contractB
-    getAllParties (Scale _ _ contract) = getAllParties contract
-    getAllParties Zero = []
-
-    verifySequence :: Integer -> [PartyTokenID] -> Bool
-    verifySequence _ [] = True
-    verifySequence n (x:xs) = n == getPartyTokenID x && verifySequence (n + 1) xs
+    extractPartyIndices :: Contract -> [PartyIndex]
+    extractPartyIndices = \case
+      Transfer _ partyIndex -> [partyIndex]
+      Scale _ _ contract -> extractPartyIndices contract
+      Both contract1 contract2 -> extractPartyIndices contract1 ++ extractPartyIndices contract2
+      Translate _ contract -> extractPartyIndices contract
+      IfWithin _ contract1 contract2 -> extractPartyIndices contract1 ++ extractPartyIndices contract2
+      Zero -> []
 
 typeCheckerContract :: Contract -> Either String Contract
 typeCheckerContract (Transfer tokenAddress to) =

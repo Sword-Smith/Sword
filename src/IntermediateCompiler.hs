@@ -119,7 +119,7 @@ intermediateCompileM (Transfer saAddress to) = do
                                   , _delay         = delayTerm
                                   , _saAddress     = saAddress
                                   , _saId          = settlementAssetId
-                                  , _to            = getPartyTokenID to
+                                  , _to            = to
                                   , _memExpPath    = memExpPath
                                   }
 

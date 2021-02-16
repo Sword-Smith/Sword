@@ -26,7 +26,7 @@ module EvmCompiler where
 
 import EvmCompilerHelper
 import EvmLanguageDefinition
-import EvmCompilerSubroutines (subroutines, partyTokenIdToSettlementAssetId)
+import EvmCompilerSubroutines (subroutines, partyIndexToSettlementAssetId)
 import IntermediateLanguageDefinition
 import SwordLanguageDefinition hiding (Transfer)
 import IntermediateCompiler (emptyContract)
@@ -120,7 +120,7 @@ evmCompile intermediateContract =
   where
     constructor'       = constructor intermediateContract
     codecopy'          = codecopy constructor' body
-    dynamicSubroutines = partyTokenIdToSettlementAssetId (getTransferCalls intermediateContract)
+    dynamicSubroutines = partyIndexToSettlementAssetId (getTransferCalls intermediateContract)
     body               = jumpTable ++ subroutines ++ dynamicSubroutines ++ methods
 
     methods :: [EvmOpcode]
@@ -355,7 +355,7 @@ payToPartyToken0 = do
   pt0_no_pay <- newLabel "pt0_no_pay"
   -- TODO: The PT0 balance read here can be reused below, so we don't have to load it again
   let skipIfPt0BalanceIsZero = [CALLER, push 0x00, FUNCALL "getBalance_subroutine", ISZERO, JUMPITO pt0_no_pay]
-  maxPtId <- reader getMaxPartyTokenId
+  maxPtId <- reader getMaxPartyIndex
   let subtractEvaluatedPTValuesFromSaAmounts = [
      -- Stack = [ ... ]
           push maxPtId
@@ -383,7 +383,7 @@ payToPartyToken0 = do
 
        , DUP2
          -- Stack = [ ptid, tc_value, ptid ]
-       , FUNCALL "partyTokenIdToSettlementAssetId_subroutine"
+       , FUNCALL "partyIndexToSettlementAssetId_subroutine"
       --    -- Stack = [ saId, tc_value, ptid ]
        , push 0x20
        , MUL
@@ -867,7 +867,7 @@ activateMapElementToTransferFromCall (_, (settlementAssetAmount, tokenAddress)) 
 mint :: Compiler [EvmOpcode]
 mint = do
     am <- reader getActivateMap
-    partyTokenIDs <- reader getPartyTokenIDs
+    partyIndices <- reader getPartyIndices
     thing <- concatMapM activateMapElementToTransferFromCall (Map.assocs am)
     requiresPT0 <- reader getRequiresPT0
     let alsoMintPT0 = if requiresPT0 then (0 :) else id
@@ -875,12 +875,12 @@ mint = do
         -- SA.transferFrom
         thing
         -- PT.mint
-        ++ concatMap mintExt (alsoMintPT0 partyTokenIDs)
+        ++ concatMap mintExt (alsoMintPT0 partyIndices)
         ++ emitEvent "Minted" -- TODO: Change to ERC1155 minted event
 
 mintExt :: PartyIndex -> [EvmOpcode]
-mintExt partyTokenID =
-  [ push partyTokenID
+mintExt partyIndex =
+  [ push partyIndex
   , CALLER
   , DUP2
   , FUNCALL "getBalance_subroutine"
@@ -904,10 +904,10 @@ burnABI = do
 
 burn :: Compiler [EvmOpcode]
 burn = do
-  partyTokenIDs <- reader getPartyTokenIDs
+  partyIndices <- reader getPartyIndices
   requiresPT0 <- reader getRequiresPT0
   let alsoBurnPT0 = if requiresPT0 then (0 :) else id
-  let burnPartyTokensCode = concatMap burnExt (alsoBurnPT0 partyTokenIDs)
+  let burnPartyTokensCode = concatMap burnExt (alsoBurnPT0 partyIndices)
 
   pairs <- reader $ Map.assocs . getActivateMap
   let transferSettlementAssetsCode = flip concatMap pairs $ \(_, (amount, addrOfSA)) ->
@@ -925,8 +925,8 @@ burn = do
     burnPartyTokensCode ++ transferSettlementAssetsCode
 
 burnExt :: PartyIndex -> [EvmOpcode]
-burnExt partyTokenID =
-  [ push partyTokenID
+burnExt partyIndex =
+  [ push partyIndex
   , PUSH1 0x4, CALLDATALOAD -- Gas saving opportunity: CALLDATACOPY
   , FUNCALL "burn_subroutine"
   ]

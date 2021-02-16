@@ -105,7 +105,7 @@ parser_unittest0 =
     src = "transfer(0x123456789012345678901234567890123456789a, 1)"
     ast :: Contract
     ast =  Transfer { tokenAddress_ = "0x123456789012345678901234567890123456789a"
-                    , to_           = PartyTokenID 1
+                    , to_           = 1
                     }
 
 canonical_iw_source :: String
